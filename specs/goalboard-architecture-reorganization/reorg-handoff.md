@@ -4,6 +4,7 @@
 
 ## 最新可信进度
 
+- **本轮修复已完成（08:21 UTC，优先于下方历史）**：桌面确认框和真实自重启通过实际 App，见 `dv4-restart-repair.md`；新增 Onboarding 重叠/高度对齐修复通过最终 DMG 实机截图与迁移/跳过操作、普通 Web/390px 验证，见 `../onboarding-native-titlebar/spec.md`。08:20:58 UTC 原服务恢复、原配置不变，测试进程已退出。未替换原用户安装，DV4/总重组不因此自动完成；“等待是否修复”已过时，不重复询问。
 - **Goals 父项收口已批准并落地**：`goal-tree-proposal-b7c484f1-c5c2-478f-8077-b67debd222a9` approved，item applied；07:16:45 UTC，cursor1201。父项 accepted/closed_compound、valid/satisfied，GW1–GW6 保持完成。已按 receipt 顺序读完 19 项受影响 Contract，原范围/消费关系仍成立，图检查 0 issues；不需要重做子项或重复问这份提案。下面 pending 记录为历史。
 - **DV4 临时停服已获明确授权，首轮真实 GUI 验证和原服务恢复已完成**：见 `dv4-gui-validation.md`。当前代码重新构建 App/DMG/zip；隔离 Home 自动首装、首启设置/诊断、断线恢复、自有进程退出与重开已验证。07:28:27 UTC 原服务已恢复 running，原 plist/服务收据/安装清单字节未变，本次测试 LaunchAgent 已移除，临时日志/数据保留。
 - **DV4 不能完成**：实际 Native App 诊断页“重启”不出现确认框；当前 `window.confirm` 和 Tauri adapter 相对 HEAD 未改，支持旧 WebView 兼容缺口判断，尚不是迁移前 GUI 对比证明。需决定是否把此既有缺口修复纳入本轮；不能绕过确认或以 CLI 成功代替 GUI 成功。DD 独立提案仍未批准。
@@ -76,3 +77,8 @@ DD2 完成记录见本节顶部，不使用历史检查点租期恢复执行。
 - DMG 已通过真实安装脚本复制到临时 installed-apps，并用复制后的 App 内 Node/CLI 安装临时 dmg-user-home；installed/self_contained 与实际 CLI 启动成功。没有打开 App GUI、没有替换用户 Applications/Home。所有本轮 build/test/install 进程已终止，临时副本与产物保留用于后续验收。当前工作区的 `pnpm` 自动安装问题未通过删除 node_modules 规避；正式干净副本链已实证通过。
 - 最新完整 macOS release 命令两种签名环境都成功：保留 Tauri Local Development、以及未设置身份时默认 `-` 的真实 ad-hoc。DMG/zip/SHA256、解包 App 签名和正式 DMG 临时安装通过；最终产物在干净副本 release/macos，解包/安装在 `/private/tmp/goalboard-dv4-release-check.tmaj5v`。先前 sandbox 证书校验失败已在正常获准环境对同一 App 验证成功，不是包损坏；不可继续误报默认环境没设签名身份。
 - GUI 首启需暂停当前 4173 服务的明确授权：Desktop 和 LaunchAgent 固定端口/label，临时 GOALBOARD_HOME 不足以隔离。已确认用户服务运行中，没有停止它。待允许后只暂停现有服务、临时 Home 测试、清除本次临时服务并恢复原服务，不擅自更新用户 Home/项目/Runtime 配置。未获授权时该验证步骤保持未完成。
+# 2026-09-06 本轮最新补充
+
+用户明确“修”后，桌面重启确认框及 Web 自重启失败已修复，并通过实际 DMG 安装 App：取消保持 PID，确认后 48298→48829，受管服务 healthy/running/owned，退出重开正常。08:09:49 UTC 原服务恢复、配置字节不变。详见 `dv4-restart-repair.md`。旧“等待是否修复”说明已失效。
+
+用户随后明确新增修复：首次引导左上角品牌与红黄绿重叠、未垂直对齐。已修复并完成实际 App 验证，见 `../onboarding-native-titlebar/spec.md`；不改其他标题栏或引导功能。最终合并包为当前工作区 `release/macos/GoalBoard-0.1.14-macos-arm64.dmg`，仅在临时目录安装测试。

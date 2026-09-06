@@ -258,6 +258,7 @@ Promote and Start create or reuse one Draft Goal and bind the Item as its input.
 
 ### Native Window Chrome
 
+- First-run and update Onboarding use a compact 44px native-only topbar with an 88px leading safe area and a 1px optical lift. In the packaged macOS App, the brand and right-side actions align with the visible traffic-light center. Both pages reuse the Desktop bootstrap before styles load; ordinary browser/mobile topbars keep their existing dimensions. Do not move the system buttons to compensate for page layout.
 - macOS Overlay uses a fixed 48px titlebar band. The Goal workspace places compact project controls on the screenshot-calibrated `y=21.5px` line that matches the visible native traffic-light center; there is no second project row. Settings follows the same rule, then begins its scoped heading below the titlebar.
 - The workbench bar contains tabs, one dedicated empty 48px drag slot, and actions. Utility tabs stay on one line.
 - Whole workbench, project-index, and Settings topbars are never drag regions. Only empty spacers or plain-text context may carry window drag behavior.

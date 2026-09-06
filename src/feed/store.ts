@@ -131,6 +131,10 @@ export class FeedStore {
 
   constructor(readonly db: Database.Database) {
     this.sources = new SourcesModule(db);
+    // Pre-reorg projects already applied Feed migrations 22–29, but those
+    // releases did not have Listener storage. Initialize its owner before
+    // recovery or cursor reads; the migration preserves existing checkpoints.
+    migrateListenerHost(db);
     const goals = new GoalsQueryService(new GoalsRepository(db));
     let feedItems!: FeedModule;
     this.attention = new AttentionModule(db, {

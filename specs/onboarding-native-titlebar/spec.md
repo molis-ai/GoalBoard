@@ -20,3 +20,12 @@
 - `pnpm build`；`node --import tsx --test --test-name-pattern='Web first-run onboarding' tests/web.test.ts`；实际 App 与普通 Web 验证；`git diff --check`。
 
 当前只有 macOS App 是此次实际目标，不据此宣称其他系统的原生标题栏均通过。
+
+## 验证结果（2026-09-06）
+
+- 通过：当前源码 `pnpm build`、首次引导 HTTP 定向测试 1/0/0、完整 macOS App/DMG/zip 构建。日志分别为 `/private/tmp/onboarding-titlebar-build.log`、`/private/tmp/onboarding-titlebar-test.log`、`/private/tmp/onboarding-titlebar-macos-build.log`。App 为本地 ad-hoc 签名，不代表公证或公开发布。
+- 通过：正式 DMG 安装脚本将新包安装到 `/private/tmp/goalboard-titlebar.v4rWwL/installed-apps/GoalBoard.app`。实际 Native App 首启、退出重开截图中，品牌从 x≈88px 开始，品牌、右侧操作和红黄绿按钮视觉中心均约 y≈22px，无重叠。迁移入口打开项目设置；品牌回首页在未跳过状态下正常返回引导；跳过进入空项目首页，没有创建项目或 Runtime。
+- 通过：普通浏览器 1024px 下 header 仍为 60px、无 Native 标记；390×844 下品牌保留约 18px 左间距，右侧跳过可见。不是用浏览器截图替代 Native 验证。
+- 通过：08:20:58 UTC 测试 LaunchAgent 已移除、测试 App 已退出，原服务恢复 running/owned。原 plist、服务配置与安装清单逐字节不变；普通网页隔离测试进程也已结束。完整恢复记录在上述临时目录 `session.jsonl`，截图已在本对话呈现。
+
+本修复达到实际 macOS 桌面可用；未替换用户现有 App/Home，也不代表整个重组或 DV4 已验收。升级提示页复用同一 CSS/bootstrap，但此次未独立触发升级提示场景。
