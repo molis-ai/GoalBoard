@@ -138,7 +138,7 @@ export const DESKTOP_TITLEBAR_STYLES = `  /* One Codex-style desktop titlebar co
     html[data-native-desktop="true"] body[data-desktop-shell="true"] .navigator-native-row,
     body[data-desktop-shell="true"][data-native-desktop="true"] .desktop-workbench-bar,
     html[data-native-desktop="true"] body[data-desktop-shell="true"] .desktop-workbench-bar {
-      transform: translateY(var(--desktop-native-titlebar-control-offset-y, -8px));
+      transform: translateY(-2px);
     }
     body.settings-page[data-desktop-shell="true"][data-native-desktop="true"] > .topbar,
     html[data-native-desktop="true"] body.settings-page[data-desktop-shell="true"] > .topbar,
@@ -155,7 +155,7 @@ export const DESKTOP_TITLEBAR_STYLES = `  /* One Codex-style desktop titlebar co
     html[data-native-desktop="true"] body.settings-page[data-desktop-shell="true"] > .topbar > *,
     body.project-index-page[data-desktop-shell="true"][data-native-desktop="true"] > .topbar > *,
     html[data-native-desktop="true"] body.project-index-page[data-desktop-shell="true"] > .topbar > * {
-      transform: translateY(var(--desktop-native-titlebar-control-offset-y, -8px));
+      transform: translateY(-2px);
     }
   }
 
@@ -318,4 +318,3 @@ export const DESKTOP_TITLEBAR_STYLES = `  /* One Codex-style desktop titlebar co
   }
 
 `;
-

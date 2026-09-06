@@ -27,6 +27,7 @@
   "dependencies": {
     "@adeptify/goalboard-contracts": "workspace:*",
     "@adeptify/goalboard-module-evidence-verification": "workspace:*",
+    "@adeptify/goalboard-module-execution": "workspace:*",
     "@adeptify/goalboard-module-goals": "workspace:*"
   },
   "goalboard": {

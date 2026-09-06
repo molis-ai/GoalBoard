@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readPersonalPlanningMethodPacks } from "@adeptify/goalboard-app-local-host";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
@@ -11,15 +12,14 @@ import {
   goalBoardHostProjectReference,
   type GoalBoardLocalHost,
 } from "../local-host/composition.js";
-import { GoalBoardV1Error, type GoalBoardCoordinator } from "../v1/coordinator.js";
+import { GoalBoardV1Error, type GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { seedDemoBoard } from "../v1/demo.js";
-import type { SqliteGoalBoardStore } from "../v1/store.js";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import type { GoalPolicy, GoalRelationRecord, RiskRecord } from "../v1/types.js";
 import {
   GoalBoardProjectCatalog,
   GoalBoardProjectCatalogError,
   normalizeRuntimeWorkContext,
-  readPersonalPlanningMethodPacks,
 } from "../projects/catalog.js";
 import { withGoalBoardProjectCatalog } from "../projects/catalog-session.js";
 import { reconcileLegacySessionCatalog } from "../sessions/compatibility.js";
@@ -108,7 +108,6 @@ import {
   type WebSettingsSection,
 } from "./render.js";
 import {
-  normalizePlanningMethodPack,
   resolvePlanningMethodPacks,
   type PlanningMethodPackInput,
 } from "@adeptify/goalboard-module-goals";
@@ -270,7 +269,7 @@ function uniqueTextArray(value: unknown): string[] {
 function webRiskFacts(
   body: Record<string, unknown>,
   fallbackGoalId?: string,
-): Omit<Parameters<GoalBoardCoordinator["goals"]["commands"]["addRisk"]>[1], "risk_id"> {
+): Omit<Parameters<GoalProjectApplication["goals"]["commands"]["addRisk"]>[1], "risk_id"> {
   const treatment = String(body.treatment ?? "mitigate") as RiskRecord["treatment"];
   const blockingMode = String(body.blocking_mode ?? "none") as RiskRecord["blocking_mode"];
   if (!["accept", "mitigate", "avoid", "defer"].includes(treatment)) {
@@ -350,8 +349,8 @@ function feedDirectorySnapshot(feed: FeedStore, boardId: string): FeedSnapshot {
 }
 
 export function buildGoalBoardWebView(
-  store: SqliteGoalBoardStore,
-  coordinator: GoalBoardCoordinator,
+  store: LocalProjectDatabase,
+  coordinator: GoalProjectApplication,
   options: WebViewOptions,
 ): GoalBoardWebView {
   const snapshot = store.snapshot(options.boardId);
@@ -623,8 +622,8 @@ export function buildGoalBoardWebView(
 
 export function cachedGoalBoardWebView(
   cache: GoalBoardWebViewCache,
-  store: SqliteGoalBoardStore,
-  coordinator: GoalBoardCoordinator,
+  store: LocalProjectDatabase,
+  coordinator: GoalProjectApplication,
   options: WebViewOptions,
 ): GoalBoardWebView {
   const cursor = store.eventCursor(options.boardId);
@@ -838,7 +837,7 @@ async function handleDesktopPanelApi(
   url: URL,
   serverOptions: WebServerOptions,
   projectId: string,
-  coordinator: GoalBoardCoordinator,
+  coordinator: GoalProjectApplication,
   boardId: string,
   ptyHost: GoalBoardPtyHost,
   webUrl: string,
@@ -1524,10 +1523,7 @@ async function handleGoalBoardWebRequest(
           }
           try {
             const saved = await withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory }, (catalog) => {
-              const current = catalog.listPersonalPlanningMethodPacks()
-                .find((pack) => pack.method_id === method.method_id) ?? null;
-              const saved = normalizePlanningMethodPack(method, "personal", current, new Date().toISOString());
-              catalog.putPersonalPlanningMethodPack(saved);
+              const saved = catalog.personalPlanningMethods.save(method, new Date().toISOString());
               return saved;
             });
             // Personal planning methods are constructor inputs for every
@@ -2027,10 +2023,7 @@ async function handleGoalBoardWebRequest(
               sendJson(response, 200, saved);
             } else {
               await withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory }, (catalog) => {
-                const current = catalog.listPersonalPlanningMethodPacks()
-                  .find((pack) => pack.method_id === method.method_id) ?? null;
-                const saved = normalizePlanningMethodPack(method, "personal", current, new Date().toISOString());
-                catalog.putPersonalPlanningMethodPack(saved);
+                const saved = catalog.personalPlanningMethods.save(method, new Date().toISOString());
                 sendJson(response, 200, { method: saved });
               });
             }
@@ -2734,7 +2727,7 @@ async function handleGoalBoardWebRequest(
             const result = goalsAdapter.commands.addProjectGuidance({
               board_id: options.boardId,
               actor_id: "web-user",
-              kind: String(body.kind ?? "") as Parameters<GoalBoardCoordinator["goals"]["commands"]["addProjectGuidance"]>[0]["kind"],
+              kind: String(body.kind ?? "") as Parameters<GoalProjectApplication["goals"]["commands"]["addProjectGuidance"]>[0]["kind"],
               content: String(body.content ?? ""),
               source_refs: Array.isArray(body.source_refs) ? body.source_refs.map(String) : [],
               reason: String(body.reason ?? ""),
@@ -2767,10 +2760,10 @@ async function handleGoalBoardWebRequest(
               board_id: options.boardId,
               guidance_id: decodeURIComponent(projectGuidanceUpdateMatch[1]),
               actor_id: "web-user",
-              action: action as Parameters<GoalBoardCoordinator["goals"]["commands"]["updateProjectGuidance"]>[0]["action"],
+              action: action as Parameters<GoalProjectApplication["goals"]["commands"]["updateProjectGuidance"]>[0]["action"],
               kind: body.kind == null
                 ? undefined
-                : String(body.kind) as Parameters<GoalBoardCoordinator["goals"]["commands"]["updateProjectGuidance"]>[0]["kind"],
+                : String(body.kind) as Parameters<GoalProjectApplication["goals"]["commands"]["updateProjectGuidance"]>[0]["kind"],
               content: body.content == null ? undefined : String(body.content),
               source_refs: Array.isArray(body.source_refs) ? body.source_refs.map(String) : undefined,
               reason: String(body.reason ?? ""),

@@ -80,3 +80,7 @@ export {
   type EvidenceSqliteStatement,
 } from "./repository.js";
 export { EvidenceVerificationService } from "./verification.js";
+
+export function createEvidenceQueryApi(db: EvidenceSqliteDatabase): EvidenceQueryApi {
+  return new EvidenceVerificationService(new EvidenceRepository(db));
+}

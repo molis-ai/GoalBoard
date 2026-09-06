@@ -347,6 +347,12 @@ export interface GoalContractPlanningApi {
 }
 
 export interface GoalsPlanningApi {
+  validateRelationAddition(boardId: string, input: AddGoalRelationInput): Pick<PlanningGraphIssue, "code" | "message"> | null;
+  compoundCoverageBlocksClosure(boardId: string, goalId: string): boolean;
+  metrics(
+    goals: readonly Pick<GoalRecord, "goal_id" | "decomposition_state" | "fulfillment_state" | "trashed_at">[],
+    relations: readonly Pick<GoalRelationRecord, "relation_id" | "from_goal_id" | "to_goal_id" | "type" | "state">[],
+  ): Map<string, PlanningMetric>;
   proposals: GoalsProposalCoordinationApi;
   proposalGraphIssues(boardId: string, items: readonly PlanningProposalItem[]): PlanningGraphIssue[];
   wouldCreatePartOfCycle(boardId: string, fromGoalId: string, toGoalId: string): boolean;
@@ -654,6 +660,7 @@ export interface GoalLegacyCoverageRecord {
 }
 
 export interface GoalsQueryApi {
+  listActivePolicyBindings(boardId: string, goalId?: string): GoalPolicyBindingRecord[];
   listLegacyCoverage(boardId: string): Array<Omit<GoalLegacyCoverageRecord, "board_id">>;
   listPolicyHistory(boardId: string): GoalPolicyHistoryRecord[];
   listGoalRiskLinks(boardId: string): GoalRiskLinkRecord[];
@@ -798,6 +805,8 @@ export interface GoalsCommandApi<TTransition = unknown> {
     actor_id: string; reason: string; at: string;
   }): GoalRecord;
   applyConfirmedPolicy(input: ConfirmedPolicyChange): { policy_binding_id: string };
+  initializeBoard(input: { board_id: string; title: string; actor_id: string; idempotency_key: string }): { board_id: string; replayed: boolean; observed_event_cursor: number };
+  setActiveGoal(boardId: string, input: { goal_id: string; reason: string }, write: GoalsActorWrite): { active_goal_id: string; replayed: boolean; observed_event_cursor: number };
   createGoal(boardId: string, input: CreateGoalInput, write: GoalsActorWrite): {
     goal: GoalRecord;
     observed_event_cursor: number;
@@ -860,6 +869,7 @@ export interface AppliedGoalContractRevision {
 }
 
 export interface GoalsLifecycleApi<TTransition = unknown> {
+  markSatisfiedGoalForEvidenceRevalidation(boardId: string, goalId: string, actorId: string, evidenceId: string, correctionId: string, at: string): number;
   reconcileAllClosedCompoundGoals(boardId: string, actorId: string, at: string): number;
   markCandidateAwaitingRewire(boardId: string, goalId: string, at: string): void;
   reconcileRewireGoalValidity(boardId: string, formalGoalId: string, revalidatedGoalIds: readonly string[], at: string): void;

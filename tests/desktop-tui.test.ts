@@ -75,9 +75,7 @@ test("release version sources agree before packaging", () => {
 test("native Desktop identity self-heals before layout and survives full-page navigation", () => {
   assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /__TAURI_INTERNALS__\|\|globalThis\.__TAURI__/);
   assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /document\.documentElement\.dataset\.nativeDesktop="true"/);
-  assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /--desktop-native-project-safe-inline-start","88px"/);
-  assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /--desktop-native-settings-safe-inline-start","80px"/);
-  assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /--desktop-native-titlebar-control-offset-y","-8px"/);
+  assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /--desktop-window-safe-inline-start","88px"/);
   assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /next\.searchParams\.set\("desktop","1"\)/);
   assert.match(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, /location\.replace\(normalized\)/);
   assert.match(WEB_RENDER_SOURCE, /const THEME_BOOTSTRAP_SCRIPT = `\$\{BASE_THEME_BOOTSTRAP_SCRIPT\}\$\{NATIVE_DESKTOP_BOOTSTRAP_SCRIPT\}`/);

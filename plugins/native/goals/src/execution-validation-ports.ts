@@ -2,22 +2,13 @@ import type { EvidenceVerificationApplicationApi } from "@adeptify/goalboard-con
 import type { ExecutionApplicationApi } from "@adeptify/goalboard-contracts/modules/execution";
 import type { GovernanceApplicationApi } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { GoalPolicy } from "@adeptify/goalboard-contracts/modules/goals";
-import { ExecutionModule } from "@adeptify/goalboard-module-execution";
-import { GoalsModule } from "@adeptify/goalboard-module-goals";
+import type { GoalsLifecycleApi } from "@adeptify/goalboard-contracts/modules/goals";
 
-import type {
-  ActionTransitionReceipt,
-  BoardSnapshot,
-  ClaimRole,
-  DecisionReason,
-  GoalAction,
-  GoalRecord,
-  GoalWorkStateView,
-  ImpactBindingRecord,
-  ReviewRecord,
-  RunRecord,
-} from "./types.js";
-import { SqliteGoalBoardStore } from "./store.js";
+import type { ActionTransitionReceipt, GoalAction, GoalWorkStateView } from "./execution-validation-contract.js";
+import type { BoardSnapshot } from "./goal-entry-contract.js";
+import type { ExecutionClaimRole as ClaimRole, ExecutionRunRecord as RunRecord } from "@adeptify/goalboard-contracts/modules/execution";
+import type { GoalLifecycleReason as DecisionReason, GoalRecord, ImpactBindingRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { ReviewRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 
 export interface ExecutionValidationEvaluationInput {
   boardId: string;
@@ -39,12 +30,17 @@ export interface ExecutionValidationEvaluation {
 }
 
 export interface ExecutionValidationApplicationPorts {
-  readonly store: SqliteGoalBoardStore;
-  readonly executionModule: ExecutionModule;
+  readonly state: {
+    immediate<T>(operation: () => T): T;
+    snapshot(boardId: string): BoardSnapshot;
+    eventCursor(boardId: string): number;
+    appendEvent(input: { eventId: string; boardId: string; actorId: string; type: string; objectType: string; objectId: string; reason: string; payload: unknown; at: string }): number;
+  };
+  readonly errorType: new (code: string, message: string, details?: Record<string, unknown>) => Error & { code: string; details?: Record<string, unknown> };
   readonly execution: ExecutionApplicationApi;
   readonly evidenceVerification: EvidenceVerificationApplicationApi;
   readonly governance: GovernanceApplicationApi;
-  readonly goalsModule: GoalsModule<ActionTransitionReceipt>;
+  readonly goalsLifecycle: Pick<GoalsLifecycleApi<ActionTransitionReceipt>, "markSatisfiedGoalForEvidenceRevalidation">;
   readonly clock: () => Date;
   evaluate(input: ExecutionValidationEvaluationInput): ExecutionValidationEvaluation;
   claimRoleForAction(candidate: GoalAction, snapshot: BoardSnapshot): ClaimRole;
@@ -65,7 +61,7 @@ export interface ExecutionValidationApplicationPorts {
     at: string,
   ): ActionTransitionReceipt;
   hasPostExecutionNeedsChanges(boardId: string, goalId: string): boolean;
-  readRun(runId: string): RunRecord;
+  readRun(boardId: string, runId: string): RunRecord;
   readReview(boardId: string, reviewId: string): ReviewRecord;
   requireBoard(boardId: string): void;
   requireGoalOnBoard(boardId: string, goalId: string): GoalRecord;

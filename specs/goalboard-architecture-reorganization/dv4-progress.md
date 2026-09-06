@@ -1,5 +1,11 @@
 # DV4 阶段进展
 
+2026-09-06 09:24:26 UTC：DV4 全三项正式 Review pass，GoalBoard projection completed，cursor1238。完整证据见 [DV4 验收](dv4-validation.md)，Evidence `evidence-85cd5c01-b889-49fe-9dff-b3e81387672c`，Review `review-21270bfe-6272-4111-b518-5d359b641b2e`。当前 npm 独立消费和 66 项回归通过；最终产物中的旧编译残留已由公共 workspace clean/build 修复，新 npm/App 均复验。下方保留各阶段原始结果，不再将旧阻塞作为当前状态。未升级用户安装，未公开发布；整体安全恢复、Cutover、全产品 E2E 与清理后复验仍未完成。
+
+2026-09-06 09:03 UTC：安装包实际使用检查新增的整个工作台顶部对齐/全屏占位已修复，见 `../native-titlebar-alignment/spec.md`。真实 App 验证普通/全屏、目录展开/收起、标题/标签和全屏内跳转；普通 Web 不受 Native 偏移影响。定向 6/0/0、完整 App/DMG 构建和边界检查通过。完整样式套件另有 HEAD 已存在的搜索框旧断言失败，留整体测试清理。DV4 全三项正式审计/Review 和总重组仍未完成。
+
+2026-09-06 08:45 UTC：真实 0.1.13 DMG 升级实测发现旧项目缺 Listener 表，已修复 FeedStore 的 owner 初始化遗漏。修复前 HTTP 500、修复后 14/0/0；重新打包并从全新旧版环境升级，原 Goal 正文与两条事件保留。已安装卸载 Service 使用既有 Runtime 目录隔离参数完成普通卸载，项目 DB/WAL 不变；实际新版 App 重装后正文/历史仍可用。08:44:41 原服务恢复、原配置不变。详见 `dv4-upgrade-validation.md`。全量 DV4 Review 和整体 E2E/最终审计仍未完成。
+
 2026-09-05，Goal 仍执行中；不是最终验收报告。
 
 2026-09-06 08:21 UTC：用户授权的桌面确认框及真实重启修复已通过实际 App 验证。最终测试 PID 从 48298 切换为 48829，仍为受管 running/owned 服务；取消不改变 PID，退出重开正常。详见 `dv4-restart-repair.md`。用户补充的 Onboarding 标题栏重叠与高度对齐也已修复，并经最终 DMG 实际 App 截图、迁移/跳过操作与普通 Web/390px 布局验证，见 `../onboarding-native-titlebar/spec.md`。08:20:58 UTC 原服务和配置已恢复，测试 App/服务已退出。不再将这些问题或测试授权列作阻塞；未升级原用户 Home，不冒充 DV4/总重组完整验收。

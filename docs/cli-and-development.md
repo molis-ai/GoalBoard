@@ -2,7 +2,7 @@
 
 ## 安装代码的开发边界
 
-`pnpm build` 现在根据 workspace 声明的依赖顺序构建全部 48 个包，再生成根入口和 PTY bundle；不再依靠手写的迁移包顺序。Plugin CLI 的稳定 bin 启动文件随源码存在，干净 `pnpm install --frozen-lockfile` 后构建即可使用 `pnpm exec goalboard-plugin --help`。包边界扫描覆盖 src、tooling 和 bin 中的 JavaScript/TypeScript 调用。
+`pnpm build` 先清理各 workspace 包的生成目录，再根据声明的依赖顺序构建全部 48 个包，最后生成根入口和 PTY bundle。`build:migrated-packages` 复用同一个 `workspace:build`，因此删除/移动源码后不会把旧 JS 带进 npm/DMG。只清生成目录，不清 node_modules 或用户数据。Plugin CLI 的稳定 bin 启动文件随源码存在，干净 `pnpm install --frozen-lockfile` 后构建即可使用 `pnpm exec goalboard-plugin --help`。包边界扫描覆盖 src、tooling 和 bin 中的 JavaScript/TypeScript 调用。
 
 Desktop 发布脚本归 `apps/desktop/tooling/`，根 `pnpm desktop:*` 命令不变。它调用 Local Host 的 `createGoalBoardRuntimePayload` 生成自包含目录，不在孤立资源目录对 workspace:* manifest 再执行 npm install。失败不覆盖已有资源，vendor 来源、SBOM、许可证随 payload 和 Home 安装保留。
 
@@ -11,6 +11,12 @@ Home 安装、Runtime 接入、常驻 Web 服务和卸载的实现统一在 `app
 `installGoalBoardHome` 必须接收明确的 `sourceDirectory`；只有产品根 CLI 根据自己的入口位置补默认值，因此从其他工作目录执行、不传 `--source` 仍安装同一个产品。卸载器必须注入 `UninstallProjectAccess`，根 `src/local-host/uninstall.ts` 负责只读连接与现有 Demo 删除装配；Projects 的公开检查负责 catalog facts，预览不迁移数据库。
 
 修改 workspace 源码后必须重新构建。`pnpm build` 最后通过 `apps/local-host/tooling/write-build-manifest.mjs` 调用 Local Host 的构建记录生成函数，覆盖根源码、workspace 包源码/配置和构建脚本；不要单独生成记录掩盖旧构建。新建 workspace 层级时同步 installer fingerprint 的包发现范围与构建列表。定向回归包括 `tests/install.test.ts`、`tests/service.test.ts`、`tests/uninstall.test.ts`、`tests/uninstall-catalog.test.ts`，真实 Web/Desktop 调用由对应集成测试覆盖。DV4 完整发布验收尚未完成，不能把这些回归当成可发布证明。
+
+## 父 Goal 的覆盖澄清
+
+父 Goal 已收口但子 Contract 实质修订时，仍可产生覆盖核对的 `clarify` 动作。定义澄清与覆盖是否过期的判断归 `plugins/native/goals/src/clarification-policy.ts`；动作投影、领取/Explain、work-state 和完成状态核对共用它。Draft Dialogue 消费公开 work-state，不能另写“accepted 就不可澄清”的门禁。
+
+只有有效且覆盖过期的父 Goal 可进入这条入口；缺失映射、已有 Claim、待用户决定、归档/回收/替代、权限及过期 token 的限制不变。领取或对话不修改 Contract，覆盖更新仍走 Proposal → Check → 用户决定。回归见 `tests/coverage-clarifier.test.ts`。
 
 ## 一次性 V3 导入
 
@@ -76,7 +82,10 @@ src/v1/                      SQLite Store、Coordinator、types、CLI 与一次�
 src/mcp/server.ts            V1-only MCP Server
 src/web/                     剩余产品 UI、Goal Tree、本机 PTY 与 Host adapters；Shell/视觉基础/Feed renderer 已迁出
 src/desktop/                 AP4 后只保留旧启动配方与推进提示 import 的兼容转发
-src/install/                 安装、Runtime 接入、常驻服务与安全卸载
+apps/local-host/src/installer/
+                             安装、Runtime 接入、常驻服务与安全卸载的唯一实现
+apps/local-host/tooling/     构建记录与 npm 发布包生成；调用 Local Host 公开 API
+apps/desktop/tooling/        macOS 构建、Runtime payload、安装与启动脚本
 src/cli/main.ts              产品 CLI 与 V1 管理入口
 desktop/                     macOS App 的 Cargo/Tauri 发布配置；源码位于 apps/desktop/adapters/tauri
 examples/seed-demo.mts       调用产品 demo 生命周期的开发脚本

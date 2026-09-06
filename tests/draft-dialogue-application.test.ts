@@ -6,10 +6,43 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
-import { GovernanceClarificationStore } from "@adeptify/goalboard-module-governance-collaboration";
+import { GovernanceClarificationStore, migrateClarificationDialogue } from "@adeptify/goalboard-module-governance-collaboration";
 import { DraftDialogueApplication, type DraftDialogueView } from "@adeptify/goalboard-plugin-goals";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
 import { GoalBoardCoordinator, GoalBoardV1Error } from "../src/v1/coordinator.js";
+
+test("Governance migration 8 rolls back schema and marker together, then persists a usable dialogue after retry", () => {
+  const directory = mkdtempSync(join(tmpdir(), "goalboard-dialogue-schema-"));
+  const databasePath = join(directory, "project.db");
+  const store = new SqliteGoalBoardStore(databasePath);
+  let sessionId: string;
+  try {
+    store.db.exec(`
+      DROP TABLE clarification_turns;
+      DROP TABLE clarification_sessions;
+      DELETE FROM schema_migrations WHERE migration_id = 8;
+      CREATE TRIGGER fail_dialogue_migration BEFORE INSERT ON schema_migrations WHEN NEW.migration_id = 8
+      BEGIN SELECT RAISE(ABORT, 'migration 8 interrupted'); END;
+    `);
+    assert.throws(() => migrateClarificationDialogue(store.db), /migration 8 interrupted/);
+    assert.equal(store.db.prepare("SELECT 1 FROM schema_migrations WHERE migration_id = 8").get(), undefined);
+    assert.deepEqual(store.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('clarification_sessions', 'clarification_turns')").all(), []);
+    store.db.exec("DROP TRIGGER fail_dialogue_migration");
+    migrateClarificationDialogue(store.db);
+    const coordinator = new GoalBoardCoordinator(store);
+    coordinator.initializeBoard({ board_id: "board", title: "Recovered dialogue", actor_id: "user", idempotency_key: "init" });
+    const saved = coordinator.draftDialogue.startDraftDialogue({ board_id: "board", actor_id: "runtime",
+      rough_idea: "迁移后保留的真实澄清正文", idempotency_key: "start" });
+    sessionId = saved.dialogue.session_id;
+  } finally { store.close(); }
+  const reopened = new SqliteGoalBoardStore(databasePath);
+  try {
+    const snapshot = reopened.snapshot("board");
+    assert.equal(snapshot.clarification_sessions.find(session => session.session_id === sessionId)?.rough_idea, "迁移后保留的真实澄清正文");
+    assert.equal(snapshot.clarification_turns.find(turn => turn.session_id === sessionId)?.user_message, "迁移后保留的真实澄清正文");
+    assert.equal(snapshot.runs.length, 1);
+  } finally { reopened.close(); rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("dialogue owner transaction rolls back Goal, Claim, Run and answer writes together, then permits the same retry", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd1-atomic-"));

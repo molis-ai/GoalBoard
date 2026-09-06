@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
+import { createGoalReadServices } from "@adeptify/goalboard-module-goals";
 
 import {
   FeedPluginRouteTable,
@@ -21,8 +21,8 @@ import {
 } from "../feed/sources/service.js";
 import { FeedStore, FeedStoreError } from "../feed/store.js";
 import { feedItemContext, type SourceHistoryDecision } from "../feed/types.js";
-import { GoalBoardCoordinator, GoalBoardV1Error } from "../v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../v1/store.js";
+import { GoalProjectApplication, GoalBoardV1Error } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import {
   renderFeedWorkbenchFragment,
   renderPersistedFeedItemDetail,
@@ -33,8 +33,8 @@ export interface FeedNativePluginHttpOptions {
   readonly boardId: string;
   readonly routePrefix: string;
   readonly databasePath: string;
-  readonly store: SqliteGoalBoardStore;
-  readonly coordinator: GoalBoardCoordinator;
+  readonly store: LocalProjectDatabase;
+  readonly coordinator: GoalProjectApplication;
   readonly readWebView: () => GoalBoardWebView;
   readonly invalidateWebView: () => void;
 }
@@ -323,8 +323,8 @@ function createHandlers(options: FeedNativePluginHttpOptions): Record<string, Fe
 }
 
 function promoteFeedItemToGoal(
-  store: SqliteGoalBoardStore,
-  coordinator: GoalBoardCoordinator,
+  store: LocalProjectDatabase,
+  coordinator: GoalProjectApplication,
   feed: FeedStore,
   options: Pick<FeedNativePluginHttpOptions, "boardId" | "routePrefix">,
   itemId: string,
@@ -343,7 +343,7 @@ function promoteFeedItemToGoal(
       throw new FeedStoreError("feed_invalid_transition", isInboxMessage ? "请先恢复这条已归档的 Inbox Message" : "请先恢复这条已忽略的 Feed Item");
     }
     const existingGoal = item.linked_goal_id
-      ? new GoalsQueryService(new GoalsRepository(store.db)).getGoal(options.boardId, item.linked_goal_id)
+      ? createGoalReadServices(store.db).query.getGoal(options.boardId, item.linked_goal_id)
       : null;
     if (existingGoal && existingGoal.trashed_at === null && existingGoal.archived_at === null) {
       const linked = startProcessing && item.disposition !== "processing"

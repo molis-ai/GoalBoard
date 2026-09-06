@@ -56,27 +56,7 @@ export class GovernanceCollaborationModule implements GovernanceApplicationApi {
     this.reviews = new GovernanceReviewLifecycle(this.repository, options);
     this.records = new GovernanceRecordStore(options.db, options.errorFactory);
     this.decisions = new GovernanceDecisionTransactions(options.db);
-    this.query = {
-      hasCandidateBootstrap: (boardId, candidateId, goalId, proposalId) =>
-        this.repository.hasCandidateBootstrap(boardId, candidateId, goalId, proposalId),
-      listLifecycleEvents: boardId => this.repository.listLifecycleEvents(boardId),
-      eventCursor: (boardId) => this.repository.eventCursor(boardId),
-      snapshot: (boardId) => this.repository.snapshot(boardId),
-      getReviewObligation: (boardId, obligationId) =>
-        this.repository.getReviewObligation(boardId, obligationId),
-      listReviewObligations: (boardId, goalId) =>
-        this.repository.listReviewObligations(boardId, goalId),
-      listReviews: (boardId, goalId) => this.repository.listReviews(boardId, goalId),
-      getCandidate: (boardId, candidateId) => this.repository.getCandidate(boardId, candidateId),
-      getContractProposal: (boardId, proposalId) =>
-        this.repository.getContractProposal(boardId, proposalId),
-      getRewire: (boardId, rewireId) => this.repository.getRewire(boardId, rewireId),
-      getGoalTreeProposal: (boardId, proposalId) =>
-        this.repository.getGoalTreeProposal(boardId, proposalId),
-      listGoalTreeProposals: (boardId) => this.repository.listGoalTreeProposals(boardId),
-      latestNeedsChangesReviewEventSeq: (boardId, goalId) =>
-        this.repository.latestNeedsChangesReviewEventSeq(boardId, goalId),
-    };
+    this.query = governanceQueries(this.repository);
   }
 }
 
@@ -123,3 +103,37 @@ export {
   migrateRuntimeDialogueAuthority,
 } from "./migrations.js";
 export { assertGovernanceTransition, deriveGoalTreeProposalState } from "./state-machine.js";
+
+export { CLARIFICATION_SCHEMA_SQL, migrateClarificationDialogue } from "./clarification-schema.js";
+
+function governanceQueries(repository: GovernanceRepository): GovernanceQueryApi {
+  return {
+      hasCandidateBootstrap: (boardId, candidateId, goalId, proposalId) =>
+        repository.hasCandidateBootstrap(boardId, candidateId, goalId, proposalId),
+      listLifecycleEvents: boardId => repository.listLifecycleEvents(boardId),
+      eventCursor: (boardId) => repository.eventCursor(boardId),
+      snapshot: (boardId) => repository.snapshot(boardId),
+      getReviewObligation: (boardId, obligationId) =>
+        repository.getReviewObligation(boardId, obligationId),
+      listReviewObligations: (boardId, goalId) =>
+        repository.listReviewObligations(boardId, goalId),
+      listReviews: (boardId, goalId) => repository.listReviews(boardId, goalId),
+      getCandidate: (boardId, candidateId) => repository.getCandidate(boardId, candidateId),
+      getContractProposal: (boardId, proposalId) =>
+        repository.getContractProposal(boardId, proposalId),
+      getRewire: (boardId, rewireId) => repository.getRewire(boardId, rewireId),
+      getGoalTreeProposal: (boardId, proposalId) =>
+        repository.getGoalTreeProposal(boardId, proposalId),
+      listGoalTreeProposals: (boardId) => repository.listGoalTreeProposals(boardId),
+      latestNeedsChangesReviewEventSeq: (boardId, goalId) =>
+        repository.latestNeedsChangesReviewEventSeq(boardId, goalId),
+    };
+}
+
+export function createGovernanceReadServices(db: GovernanceSqliteDatabase): {
+  query: GovernanceQueryApi;
+  clarification: Pick<GovernanceApplicationApi["clarification"], "listSessions" | "listTurns">;
+} {
+  const clarification = new GovernanceClarificationStore(db);
+  return { query: governanceQueries(new GovernanceRepository(db)), clarification };
+}

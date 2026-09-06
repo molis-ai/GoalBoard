@@ -14,9 +14,21 @@ export const NATIVE_DESKTOP_BOOTSTRAP_SCRIPT = `(()=>{
   };
   if(!native)return;
   document.documentElement.dataset.nativeDesktop="true";
-  document.documentElement.style.setProperty("--desktop-native-project-safe-inline-start","88px");
-  document.documentElement.style.setProperty("--desktop-native-settings-safe-inline-start","80px");
-  document.documentElement.style.setProperty("--desktop-native-titlebar-control-offset-y","-8px");
+  const root=document.documentElement;
+  root.style.setProperty("--desktop-window-safe-inline-start","88px");
+  const nativeWindow=globalThis.__TAURI__?.window?.getCurrentWindow();
+  if(nativeWindow){
+    const syncFullscreen=async()=>{
+      try{
+        const fullscreen=await nativeWindow.isFullscreen();
+        root.dataset.nativeFullscreen=String(fullscreen);
+        root.style.setProperty("--desktop-window-safe-inline-start",fullscreen?"2px":"88px");
+      }catch(error){console.warn("GoalBoard could not read native fullscreen state",error)}
+    };
+    nativeWindow.onResized(syncFullscreen).then(syncFullscreen).catch((error)=>{
+      console.warn("GoalBoard could not observe native window resize",error);
+    });
+  }
   const normalized=globalThis.goalboardNavigationUrl(location.href);
   if(normalized!==location.href)location.replace(normalized);
 })();`;

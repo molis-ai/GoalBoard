@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@adeptify/goalboard-module-goals": "workspace:*",
     "@adeptify/goalboard-app-mcp": "workspace:*",
     "@adeptify/goalboard-plugin-runtime": "workspace:*",
     "@adeptify/goalboard-plugin-artifacts": "workspace:*",
@@ -32,7 +33,18 @@
     "@adeptify/goalboard-contracts": "workspace:*",
     "@adeptify/goalboard-module-context-ledger": "workspace:*",
     "@adeptify/goalboard-module-private-work-context": "workspace:*",
-    "@adeptify/goalboard-kernel": "workspace:*"
+    "@adeptify/goalboard-kernel": "workspace:*",
+    "@adeptify/goalboard-storage": "workspace:*",
+    "@adeptify/goalboard-module-artifacts": "workspace:*",
+    "@adeptify/goalboard-module-evidence-verification": "workspace:*",
+    "@adeptify/goalboard-module-execution": "workspace:*",
+    "@adeptify/goalboard-module-governance-collaboration": "workspace:*",
+    "@adeptify/goalboard-module-feed": "workspace:*",
+    "@adeptify/goalboard-module-sources": "workspace:*",
+    "@adeptify/goalboard-module-signals": "workspace:*",
+    "@adeptify/goalboard-module-attention-resumption": "workspace:*",
+    "@adeptify/goalboard-service-listener-host": "workspace:*",
+    "@adeptify/goalboard-plugin-goals": "workspace:*"
   },
   "goalboard": {
     "path": "apps/local-host",

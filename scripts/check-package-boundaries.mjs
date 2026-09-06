@@ -318,7 +318,7 @@ function checkMigratedFeedUiOwnership(repositoryRoot) {
 function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   const errors = [];
   const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
-  const coordinatorPath = "src/v1/coordinator.ts";
+  const coordinatorPath = "apps/local-host/src/goal-project-application.ts";
   const coordinator = read(coordinatorPath);
   errors.push(...checkDraftProposalOwnerSql(read("modules/goals/src/goal-commands.ts")));
   if (!coordinator.includes('from "@adeptify/goalboard-module-goals"')) {
@@ -381,7 +381,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     "modules/goals/src/query.ts",
     "modules/goals/src/repository.ts",
     "packages/contracts/src/modules/goals.ts",
-    "src/v1/goal-query-application.ts",
+    "plugins/native/goals/src/goal-query-application.ts",
     "tooling/migrations/audit-goal-lifecycle.mjs",
     "tooling/migrations/README.md",
   ];
@@ -484,7 +484,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     "migrateGoalContractCoverageSchema",
     "migratePlanningMethodPacksSchema",
   ]) {
-    if (!store.includes(migration)) {
+    if (!read("apps/local-host/src/project-migrations.ts").includes(migration) || !read("apps/local-host/src/project-database.ts").includes("migrateLocalProjectDatabase")) {
       errors.push(`${storePath}: startup migration must call public ${migration}`);
     }
   }
@@ -513,11 +513,11 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   }
 
   const queryDelegates = [
-    ["readProjectGuidance", "private authorizeGoalRiskUpdate", "this.goalQueries.readProjectGuidance"],
+    ["readProjectGuidance", "setActiveGoal", "this.goalQueries.readProjectGuidance"],
     ["listTrashedGoals", "queryReady", "this.goalQueries.listTrashedGoals"],
-    ["queryReady", "queryAvailable", "this.goalsModule.query.listGoals"],
+    ["queryReady", "queryAvailable", "this.availability.queryReady"],
     ["getResolvedGoalPolicy", "explainGoal", "this.goalQueries.getResolvedGoalPolicy"],
-    ["readGoalContract", "private ensureReviewObligations", "this.goalQueries.readGoalContract"],
+    ["readGoalContract", "private readRun", "this.goalQueries.readGoalContract"],
   ];
   for (const [method, nextMethod, expectedCall] of queryDelegates) {
     const start = coordinator.indexOf(`  ${method}(`);
@@ -534,9 +534,8 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
 
   const storeQuerySlices = [
     ["getGoal", "listGoals", "new GoalsRepository"],
-    ["listGoals", "listTrashedGoals", "this.goalsQuery().listGoals"],
-    ["listTrashedGoals", "listPlanningMethodPacks", "this.goalsQuery().listTrashedGoals"],
-    ["snapshot", "activePolicyRows", "this.goalsQuery().snapshot"],
+    ["listGoals", "listTrashedGoals", "this.goalsQuery.listGoals"],
+    ["listTrashedGoals", "listPlanningMethodPacks", "this.goalsQuery.listTrashedGoals"],
     ["activePolicyRows", "activePolicyRowsForBoard", "listActivePolicyBindings"],
   ];
   for (const [method, nextMethod, expectedCall] of storeQuerySlices) {
@@ -556,7 +555,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     errors.push("tests/goals-query-module.test.ts: Goal facts and parity must be tested through the public Query API");
   }
 
-  const goalReadApplicationPath = "src/v1/goal-query-application.ts";
+  const goalReadApplicationPath = "plugins/native/goals/src/goal-query-application.ts";
   const goalReadApplication = read(goalReadApplicationPath);
   if (
     !goalReadApplication.includes("GoalsQueryApi")
@@ -766,7 +765,7 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
     }
   }
 
-  const coordinatorPath = "src/v1/coordinator.ts";
+  const coordinatorPath = "apps/local-host/src/goal-project-application.ts";
   const coordinator = read(coordinatorPath);
   if (
     !coordinator.includes('from "@adeptify/goalboard-module-governance-collaboration"')
@@ -843,11 +842,11 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     "plugins/native/goals/src/action-projection.ts",
     "plugins/native/goals/src/action-projection-index.ts",
     "plugins/native/goals/src/action-projection-factory.ts",
-    "src/v1/execution-validation-application.ts",
-    "src/v1/execution-validation-claim-commands.ts",
-    "src/v1/execution-validation-run-commands.ts",
-    "src/v1/execution-validation-verification-commands.ts",
-    "src/v1/execution-validation-ports.ts",
+    "plugins/native/goals/src/execution-validation-application.ts",
+    "plugins/native/goals/src/execution-validation-claim-commands.ts",
+    "plugins/native/goals/src/execution-validation-run-commands.ts",
+    "plugins/native/goals/src/execution-validation-verification-commands.ts",
+    "plugins/native/goals/src/execution-validation-ports.ts",
     "apps/workbench/src/execution-validation-ui.ts",
     "tests/execution-validation-app-adapters.test.ts",
   ];
@@ -858,7 +857,7 @@ function checkExecutionValidationOwnership(repositoryRoot) {
   }
   if (errors.length > 0) return { errors };
 
-  const coordinatorPath = "src/v1/coordinator.ts";
+  const coordinatorPath = "apps/local-host/src/goal-project-application.ts";
   const coordinator = read(coordinatorPath);
   if (
     !coordinator.includes("readonly executionValidation: ExecutionValidationApplicationApi<BoardSnapshot>")
@@ -997,10 +996,10 @@ function checkExecutionValidationOwnership(repositoryRoot) {
   }
 
   for (const relativePath of [
-    "src/v1/execution-validation-application.ts",
-    "src/v1/execution-validation-claim-commands.ts",
-    "src/v1/execution-validation-run-commands.ts",
-    "src/v1/execution-validation-verification-commands.ts",
+    "plugins/native/goals/src/execution-validation-application.ts",
+    "plugins/native/goals/src/execution-validation-claim-commands.ts",
+    "plugins/native/goals/src/execution-validation-run-commands.ts",
+    "plugins/native/goals/src/execution-validation-verification-commands.ts",
     "plugins/native/goals/src/action-projection.ts",
   ]) {
     const lineCount = read(relativePath).split(/\r?\n/u).length;
@@ -1090,15 +1089,16 @@ function checkArtifactsOwnership(repositoryRoot) {
   }
 
   const store = read("src/v1/store.ts");
-  const coordinator = read("src/v1/coordinator.ts");
-  if (!store.includes("ARTIFACTS_SCHEMA_SQL") || !store.includes("migrateArtifactsSchema")) {
+  const coordinator = read("apps/local-host/src/goal-project-application.ts");
+  const projectMigrations = read("apps/local-host/src/project-migrations.ts");
+  if (!read("apps/local-host/src/project-database.ts").includes("migrateLocalProjectDatabase") || !projectMigrations.includes("ARTIFACTS_SCHEMA_SQL") || !projectMigrations.includes("migrateArtifactsSchema")) {
     errors.push("src/v1/store.ts: root storage must compose the Artifact owner schema and migration");
   }
   if (!coordinator.includes("ArtifactsModule") || !coordinator.includes("readonly artifacts: ArtifactsApplicationApi")) {
     errors.push("src/v1/coordinator.ts: compatibility composition must expose the public Artifacts API");
   }
   const directArtifactSql = /\b(?:CREATE TABLE(?: IF NOT EXISTS)?|FROM|INTO|UPDATE|DELETE FROM)\s+(artifacts|artifact_versions)\b/giu;
-  for (const relativePath of ["src/v1/coordinator.ts", "src/v1/store.ts", "src/v1/types.ts"]) {
+  for (const relativePath of ["apps/local-host/src/goal-project-application.ts", "src/v1/store.ts", "src/v1/types.ts"]) {
     const source = read(relativePath);
     for (const match of source.matchAll(directArtifactSql)) {
       errors.push(`${relativePath}: direct ${match[1]} SQL must stay inside modules/artifacts`);
@@ -1392,13 +1392,13 @@ export function checkPackageBoundaries(repositoryRoot) {
   const privateWorkContextOwnership = checkPrivateWorkContextOwnership(repositoryRoot);
   const runtimeHostOwnership = checkRuntimeHostOwnership(repositoryRoot);
   const dialogueOwnership = checkDraftDialogueOwnership(...[
-    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/draft-dialogue-application.ts",
+    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/draft-dialogue-application.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
   const submissionOwnership = checkGoalTreeApplicationOwnership(...[
-    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-submission.ts",
+    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-submission.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
   const proposalCheckOwnership = checkGoalTreeApplicationOwnership(...[
-    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-check.ts",
+    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-check.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), "checkGoalTreeProposal", "goalTreeCheck");
   const errors = [
     ...checkProposalUiOwnership(...["src/web/render.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
@@ -1413,7 +1413,7 @@ export function checkPackageBoundaries(repositoryRoot) {
       ["submitCandidate", "legacyProposalSubmission", "legacy-proposal-submission"],
       ["submitDependencyProposal", "legacyProposalSubmission", "legacy-proposal-submission"],
     ].flatMap(([method, port, file]) => checkGoalTreeApplicationOwnership(...[
-      "src/v1/coordinator.ts", "src/local-host/composition.ts", `plugins/native/goals/src/${file}.ts`,
+      "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", `plugins/native/goals/src/${file}.ts`,
     ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), method, port)
       .map(message => `[proposal-decision-owner] ${message}`)),
     ...submissionOwnership.map(message => `[proposal-submission-owner] ${message}`),

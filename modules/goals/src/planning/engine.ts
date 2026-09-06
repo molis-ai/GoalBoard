@@ -1,3 +1,5 @@
+import { recordedContractCoverageBlocksClosure } from "./decomposition-coverage.js";
+import type { AddGoalRelationInput } from "@adeptify/goalboard-contracts/modules/goals";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -48,6 +50,26 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
   ) {
     this.contracts = new GoalContractPlanning(context);
     this.proposals = new GoalProposalCoordination(context);
+  }
+
+  validateRelationAddition(boardId: string, input: AddGoalRelationInput): Pick<PlanningGraphIssue, "code" | "message"> | null {
+    this.context.requireBoard(boardId);
+    const projectedId = "projected:new-relation";
+    const issue = this.validateGraph(this.context.repository.listGoals(boardId),
+      this.projectRelations(this.context.repository.listRelations(boardId), [{
+        action: "add", relation_id: projectedId, from_goal_id: input.from_goal_id,
+        to_goal_id: input.to_goal_id, type: input.type, reason: input.reason,
+      }])).find(candidate => candidate.relation_ids.includes(projectedId));
+    return issue ? { code: issue.code, message: issue.message } : null;
+  }
+
+  compoundCoverageBlocksClosure(boardId: string, goalId: string): boolean {
+    this.context.requireBoard(boardId);
+    const goals = this.context.repository.listGoals(boardId);
+    const goal = goals.find(candidate => candidate.goal_id === goalId);
+    return goal ? recordedContractCoverageBlocksClosure(goal, {
+      goals, relations: this.context.repository.listRelations(boardId),
+    }) : true;
   }
 
   effectiveMethods(boardId: string): PlanningMethodPack[] {

@@ -3,26 +3,16 @@ import type {
   ProjectGuidanceView,
 } from "@adeptify/goalboard-contracts/modules/goals";
 
-import type {
-  BoardSnapshot,
-  GoalActionProjection,
-  GoalContractView,
-  GoalPolicy,
-  GoalRecord,
-  GoalTreeProposalRecord,
-  GoalWorkStateView,
-  ClaimRecord,
-  RunRecord,
-} from "./types.js";
+import type { BoardSnapshot, GoalContractView } from "./goal-entry-contract.js";
+import type { GoalActionProjection, GoalWorkStateView } from "./execution-validation-contract.js";
+import type { GoalPolicy, GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GoalTreeProposalRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
+import type { ExecutionClaimRecord as ClaimRecord, ExecutionRunRecord as RunRecord } from "@adeptify/goalboard-contracts/modules/execution";
 
 export interface GoalReadApplicationPorts {
   now(): Date;
   snapshot(boardId: string): BoardSnapshot;
-  projectGoalLifecycle(
-    snapshot: Pick<BoardSnapshot, "claims" | "runs">,
-    goalId: string,
-    now: string,
-  ): { claims: ClaimRecord[]; runs: RunRecord[] };
+
   workState(
     boardId: string,
     goal: GoalRecord,
@@ -33,11 +23,7 @@ export interface GoalReadApplicationPorts {
   goalTreeProposals(boardId: string, rootGoalId: string): GoalTreeProposalRecord[];
 }
 
-/**
- * Compatibility application read model while Execution/Evidence/Governance
- * still live in the legacy root. Goal-owned facts always come from
- * GoalsQueryApi; the ports only contribute other owners' read-only context.
- */
+/** Compose a Goal Contract from the public Module facts and current workflow projection. */
 export class GoalReadApplication {
   constructor(
     private readonly goals: GoalsQueryApi,
@@ -65,7 +51,7 @@ export class GoalReadApplication {
     const snapshot = this.ports.snapshot(boardId);
     const goal = goalFacts.goal;
     const now = this.ports.now().toISOString();
-    const { claims, runs } = this.ports.projectGoalLifecycle(snapshot, goalId, now);
+    const { claims, runs } = projectGoalLifecycle(snapshot, goalId, now);
     const runIds = new Set(runs.map((item) => item.run_id));
     const candidates = snapshot.candidates.filter(
       (item) => item.discovered_in_run_id != null && runIds.has(item.discovered_in_run_id),
@@ -109,4 +95,39 @@ export class GoalReadApplication {
       project_guidance: goalFacts.project_guidance,
     };
   }
+}
+
+export function projectGoalLifecycle(
+  snapshot: Pick<BoardSnapshot, "claims" | "runs">,
+  goalId: string,
+  now: string,
+): { claims: ClaimRecord[]; runs: RunRecord[] } {
+  const expiredClaims = new Map(
+    snapshot.claims
+      .filter((item) => item.goal_id === goalId && item.state === "active" && item.expires_at <= now)
+      .map((item) => [item.claim_id, item]),
+  );
+  const claims = snapshot.claims
+    .filter((item) => item.goal_id === goalId)
+    .map((item) => expiredClaims.has(item.claim_id)
+      ? {
+          ...item,
+          state: "expired" as const,
+          released_at: item.expires_at,
+          release_reason: "领取租约已到期",
+        }
+      : item);
+  const runs = snapshot.runs
+    .filter((item) => item.goal_id === goalId)
+    .map((item) => {
+      const expiredClaim = expiredClaims.get(item.claim_id);
+      if (!expiredClaim || !["started", "blocked"].includes(item.state)) return item;
+      return {
+        ...item,
+        state: "abandoned" as const,
+        block_reason: "领取租约已到期，当前 Run 自动中断",
+        ended_at: expiredClaim.expires_at,
+      };
+    });
+  return { claims, runs };
 }

@@ -2,7 +2,7 @@
 
 ## Installer ownership during development
 
-`pnpm build` builds all 48 packages in declared workspace dependency order before the root entrypoints and PTY bundle. It no longer relies on the handwritten migration order. The Plugin CLI launcher exists in source, so a clean frozen-lockfile install followed by build makes `pnpm exec goalboard-plugin --help` available. Boundary checks cover JavaScript/TypeScript under src, tooling and bin.
+`pnpm build` cleans generated workspace outputs, then builds all 48 packages in declared dependency order before the root entrypoints and PTY bundle. `build:migrated-packages` reuses `workspace:build`: deleted or moved sources must not leave stale JavaScript in npm/DMG artifacts. This removes generated dist only, not node_modules or user data. The Plugin CLI launcher exists in source, so a clean frozen-lockfile install followed by build makes `pnpm exec goalboard-plugin --help` available. Boundary checks cover JavaScript/TypeScript under src, tooling and bin.
 
 Desktop release scripts belong to `apps/desktop/tooling/`; root `pnpm desktop:*` commands are unchanged. They call Local Host's `createGoalBoardRuntimePayload` instead of running npm install against an isolated workspace:* manifest. Failed preparation preserves old resources; vendor provenance, SBOM and license assets survive both payload generation and Home installation.
 
@@ -11,6 +11,12 @@ Home installation, Runtime integration, managed Web service and uninstall implem
 `installGoalBoardHome` requires an explicit `sourceDirectory`; only the product-root CLI derives its default from its own entry location. Calling that CLI from another working directory without `--source` still installs the same product. Uninstall requires injected `UninstallProjectAccess`; `src/local-host/uninstall.ts` composes the read-only connection and existing Demo deletion lifecycle. Projects owns catalog interpretation, and preview never runs database migrations.
 
 Rebuild after changing workspace sources. At the end of `pnpm build`, `apps/local-host/tooling/write-build-manifest.mjs` invokes the Local Host build-record API over root and workspace source/configuration plus build scripts. Never stamp an old build as fresh. Update fingerprint package discovery and build lists when introducing a workspace level. Targeted tests are `tests/install.test.ts`, `tests/service.test.ts`, `tests/uninstall.test.ts`, and `tests/uninstall-catalog.test.ts`, supplemented by Web/Desktop integration tests. Full DV4 release acceptance remains pending; these checks are not release certification.
+
+## Compound coverage clarification
+
+A closed parent can still need a coverage `clarify` action after a substantive child Contract revision. `plugins/native/goals/src/clarification-policy.ts` owns definition clarification and coverage freshness; action projection, claim/Explain, work-state and completion reconciliation share that policy. Draft Dialogue consumes the public work-state instead of independently rejecting all accepted Goals.
+
+Only valid parents with stale coverage qualify for this entry. Missing mappings, active Claims, pending user decisions, archive/trash/replacement, capabilities and stale tokens retain their gates. Claiming or discussing does not edit a Contract: coverage changes still require Proposal → Check → user decision. Regression: `tests/coverage-clarifier.test.ts`.
 
 ## One-time V3 import
 
@@ -76,7 +82,10 @@ src/v1/                      SQLite Store, Coordinator, types, CLI, and one-time
 src/mcp/server.ts            V1-only MCP Server
 src/web/                     Remaining product UI, Goal Tree, PTY, and Host adapters; Shell, visual foundation, and Feed renderers have moved
 src/desktop/                 AP4 compatibility forwards for old launch/prompt imports
-src/install/                 Install, Runtime integration, persistent service, and safe uninstall
+apps/local-host/src/installer/
+                             Sole implementation of installation, Runtime integration, service and uninstall
+apps/local-host/tooling/     Build manifest and npm packaging through public Local Host APIs
+apps/desktop/tooling/        macOS build, Runtime payload, install and launch tooling
 src/cli/main.ts              Product CLI and V1 management entry
 desktop/                     macOS Cargo/Tauri distribution config; source lives under apps/desktop/adapters/tauri
 examples/seed-demo.mts       Dev script calling the product demo lifecycle

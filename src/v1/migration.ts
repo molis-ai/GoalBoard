@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { GoalBoardCoordinator } from "./coordinator.js";
-import { SqliteGoalBoardStore } from "./store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 import type { LegacyV3ImportInput, V3ImportReport } from "@adeptify/goalboard-plugin-goals";
 export type { LegacyV3ImportInput, V3ImportReport } from "@adeptify/goalboard-plugin-goals";
@@ -10,8 +10,8 @@ function safeId(value: string): string {
 }
 
 export function importV3Board(
-  store: SqliteGoalBoardStore,
-  coordinator: GoalBoardCoordinator,
+  store: LocalProjectDatabase,
+  coordinator: GoalProjectApplication,
   legacy: LegacyV3ImportInput,
   input: {
     target_board_id: string;

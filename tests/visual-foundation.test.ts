@@ -174,7 +174,7 @@ test("Light desktop navigation and directory selections stay flat", () => {
 });
 
 test("native desktop project controls clear the macOS traffic lights", () => {
-  assert.match(VISUAL_FOUNDATION_STYLES, /--desktop-native-project-safe-inline-start: 88px/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /--desktop-native-project-safe-inline-start: var\(--desktop-window-safe-inline-start, 88px\)/);
   assert.match(
     VISUAL_FOUNDATION_STYLES,
     /\.navigator-native-row \{[\s\S]*padding: 0 8px 0 var\(--desktop-project-safe-inline-start\);/,
@@ -222,9 +222,9 @@ test("desktop shell uses one project directory, project tabs, and soft work surf
   assert.match(VISUAL_FOUNDATION_STYLES, /--desktop-project-control-center-y: calc\(var\(--desktop-titlebar-height\) \/ 2\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /--desktop-native-control-row-height: var\(--desktop-titlebar-height\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /--desktop-project-safe-inline-start: var\(--desktop-native-project-safe-inline-start, 2px\)/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-native-desktop="true"\] body\[data-desktop-shell="true"\][\s\S]*--desktop-native-project-safe-inline-start: 88px/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-native-desktop="true"\] body\[data-desktop-shell="true"\][\s\S]*--desktop-native-project-safe-inline-start: var\(--desktop-window-safe-inline-start, 88px\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.navigator-native-row \{[\s\S]*padding: 0 8px 0 var\(--desktop-project-safe-inline-start\);/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\]\[data-native-desktop="true"\] \.navigator-native-row,[\s\S]*\.desktop-workbench-bar \{[\s\S]*transform: translateY\(var\(--desktop-native-titlebar-control-offset-y, -8px\)\);/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\]\[data-native-desktop="true"\] \.navigator-native-row,[\s\S]*\.desktop-workbench-bar \{[\s\S]*transform: translateY\(-2px\);/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.settings-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar,/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.project-index-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar,[\s\S]*height: var\(--desktop-titlebar-height\);/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.settings-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar > \*,[\s\S]*body\.project-index-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar > \*/);

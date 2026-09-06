@@ -1,3 +1,4 @@
+import { GoalBoardCommands } from "./board-commands.js";
 import type {
   AddGoalRelationInput,
   AddProjectGuidanceInput,
@@ -157,7 +158,10 @@ export class GoalsModule<TTransition> {
       (boardId, goalId, state, at) => lifecycle.setValidityState(boardId, goalId, state, at));
     const confirmedRelations = new ConfirmedRelationCommands(context, lifecycle);
     const acceptedRewireRelations = new AcceptedRewireRelations(context, lifecycle, this.planning);
+    const boards = new GoalBoardCommands(context);
     this.commands = {
+      initializeBoard: input => boards.initializeBoard(input),
+      setActiveGoal: (...args) => boards.setActiveGoal(...args),
       importLegacyCoverage: (boardId, rows) => new LegacyGoalCoverage(context).import(boardId, rows),
       applyAcceptedRewireRelations: input => acceptedRewireRelations.apply(input),
       registerAcceptedRisk: (facts, at) => confirmedRisks.registerAcceptedRisk(facts, at),
@@ -203,6 +207,7 @@ export class GoalsModule<TTransition> {
     };
     this.lifecycle = lifecycle;
     this.query = {
+      listActivePolicyBindings: (...args) => query.listActivePolicyBindings(...args),
       listLegacyCoverage: boardId => query.listLegacyCoverage(boardId),
       listPolicyHistory: boardId => query.listPolicyHistory(boardId),
       listGoalRiskLinks: boardId => query.listGoalRiskLinks(boardId),
@@ -233,7 +238,7 @@ export class GoalsModule<TTransition> {
 }
 
 export { GoalsCommandError, type GoalsErrorFactory } from "./errors.js";
-export { GOALS_SCHEMA_SQL } from "./schema.js";
+export { GOAL_BOARDS_SCHEMA_SQL, GOALS_SCHEMA_SQL } from "./schema.js";
 export { migrateRiskTreatmentPlan, migrateProjectGuidance, migrateProjectGuidanceRevisions } from "./guidance-migrations.js";
 export { migrateGoalContractRevisionColumn, backfillGoalContractRevisions } from "./revision-migration.js";
 export { GoalImpactCommands } from "./impact-commands.js";
@@ -332,3 +337,12 @@ export type {
 } from "@adeptify/goalboard-contracts/modules/goals";
 export { GoalsRepository, type GoalsSqliteDatabase } from "./repository.js";
 export { GOAL_INPUT_BINDINGS_SCHEMA_SQL, GoalInputBindings } from "./input-bindings.js";
+export { createPersonalPlanningMethodSchema, PersonalPlanningMethods, readPersonalPlanningMethods } from "./planning/personal-methods.js";
+
+/** Read-only Module assembly; callers do not construct Goals repositories. */
+export function createGoalReadServices(db: GoalsSqliteDatabase): {
+  query: GoalsQueryApi; impacts: Pick<GoalsImpactApi, "list">;
+} {
+  const repository = new GoalsRepository(db);
+  return { query: new GoalsQueryService(repository), impacts: new GoalImpactCommands(new GoalsCommandContext(repository)) };
+}

@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  compactGoalActionProjection,
-  contractRevisionIsCompatible,
-  deriveGoalActionProjection,
-  type ReportRunResult as RunReportResult,
-} from "@adeptify/goalboard-plugin-goals";
+import { compactGoalActionProjection, deriveGoalActionProjection } from "./action-projection.js";
+import { contractRevisionIsCompatible } from "./contract-revisions.js";
+import { type ReportRunResult as RunReportResult } from "./execution-validation-contract.js";
 
-import { GoalBoardV1Error } from "./errors.js";
-import type { ActionTransitionReceipt, GoalRecord, RunRecord } from "./types.js";
+import type { ActionTransitionReceipt } from "./execution-validation-contract.js";
+import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { ExecutionRunRecord as RunRecord } from "@adeptify/goalboard-contracts/modules/execution";
 import type { ExecutionValidationApplicationPorts } from "./execution-validation-ports.js";
 import {
   executionValidationRequestHash as requestHash,
@@ -18,15 +16,14 @@ import {
 export class ExecutionValidationRunCommands {
   constructor(private readonly ports: ExecutionValidationApplicationPorts) {}
 
-  private get store() { return this.ports.store; }
+  private get store() { return this.ports.state; }
   private get execution() { return this.ports.execution; }
-  private get executionModule() { return this.ports.executionModule; }
   private get governance() { return this.ports.governance; }
   private get clock(): () => Date { return this.ports.clock; }
   private getGoalActionProjection(input: { board_id: string; goal_id: string }) {
     const snapshot = this.store.snapshot(input.board_id);
     const goal = snapshot.goals.find((item) => item.goal_id === input.goal_id);
-    if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
+    if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
     return deriveGoalActionProjection(goal, snapshot, this.clock().toISOString());
   }
   private reconcileLifecycle(
@@ -39,7 +36,7 @@ export class ExecutionValidationRunCommands {
   ): ActionTransitionReceipt {
     return this.ports.reconcileLifecycle(boardId, goalId, actorId, previousActionToken, summary, at);
   }
-  private readRun(runId: string): RunRecord { return this.ports.readRun(runId); }
+  private readRun(boardId: string, runId: string): RunRecord { return this.ports.readRun(boardId, runId); }
   private requireGoalOnBoard(boardId: string, goalId: string): GoalRecord {
     return this.ports.requireGoalOnBoard(boardId, goalId);
   }
@@ -122,18 +119,18 @@ export class ExecutionValidationRunCommands {
 
       const goal = this.requireGoalOnBoard(input.board_id, input.goal_id);
       if (!reasonText) {
-        throw new GoalBoardV1Error("goal.rework_reason_required", "请求返工必须说明哪项既有完成前提已经不成立");
+        throw new this.ports.errorType("goal.rework_reason_required", "请求返工必须说明哪项既有完成前提已经不成立");
       }
       if (criterionIds.length === 0) {
-        throw new GoalBoardV1Error("goal.rework_criterion_required", "请求返工必须指出至少一条受新反证影响的验收条件");
+        throw new this.ports.errorType("goal.rework_criterion_required", "请求返工必须指出至少一条受新反证影响的验收条件");
       }
       if (evidenceRefs.length === 0) {
-        throw new GoalBoardV1Error("goal.rework_evidence_required", "请求返工必须引用至少一项可追溯的新反证或检查记录");
+        throw new this.ports.errorType("goal.rework_evidence_required", "请求返工必须引用至少一项可追溯的新反证或检查记录");
       }
       const validCriterionIds = new Set(goal.acceptance_criteria.map((criterion) => criterion.criterion_id));
       const invalidCriterionIds = criterionIds.filter((criterionId) => !validCriterionIds.has(criterionId));
       if (invalidCriterionIds.length > 0) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "goal.rework_criterion_invalid",
           `返工请求引用了不属于这条 Goal 的验收条件: ${invalidCriterionIds.join("、")}`,
           { invalid_criterion_ids: invalidCriterionIds },
@@ -147,7 +144,7 @@ export class ExecutionValidationRunCommands {
         goal.trashed_at ||
         goal.archived_at
       ) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "goal.rework_state_invalid",
           "只有仍未完成、当前有效且已经接受的最小 Goal 可以从完成前门禁返回返工",
           {
@@ -159,22 +156,22 @@ export class ExecutionValidationRunCommands {
         );
       }
       const now = this.clock().toISOString();
-      const activeClaimId = this.executionModule.repository
+      const activeClaimId = this.execution.query
         .activeClaimIdsForGoal(input.board_id, input.goal_id, now)[0];
       if (activeClaimId) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "goal.rework_active_claim",
           "这条 Goal 仍有有效 Claim；请在当前工作流内处理新发现，不要并行开启返工",
           { claim_id: activeClaimId },
         );
       }
-      const latestWorkRun = this.executionModule.repository.latestRunForGoal(
+      const latestWorkRun = this.execution.query.latestRunForGoal(
         input.board_id,
         input.goal_id,
         ["executor", "revalidator"],
       );
       if (!latestWorkRun || latestWorkRun.state !== "completed") {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "goal.rework_completed_run_required",
           "只有既有执行已经结束、随后出现新反证时才需要返工请求；未结束的工作应继续当前 Run",
         );
@@ -195,7 +192,7 @@ export class ExecutionValidationRunCommands {
         )
       );
       if (!atCompletionGate) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "goal.rework_not_at_completion_gate",
           "这条 Goal 当前不在完成前门禁；请按 Available 返回的现有阶段继续，不要制造重复返工",
           { projection: projectionBefore },
@@ -275,9 +272,9 @@ export class ExecutionValidationRunCommands {
     }
     const leaseRecovery = this.store.immediate(() => {
       const pair = this.execution.query.getRunWithClaim(input.board_id, input.run_id);
-      if (!pair) throw new GoalBoardV1Error("run.not_found", `Run 不存在: ${input.run_id}`);
+      if (!pair) throw new this.ports.errorType("run.not_found", `Run 不存在: ${input.run_id}`);
       if (pair.run.actor_id !== input.actor_id) {
-        throw new GoalBoardV1Error("run.not_owner", "只有执行者可以报告这个 Run");
+        throw new this.ports.errorType("run.not_owner", "只有执行者可以报告这个 Run");
       }
       const at = this.clock().toISOString();
       if (pair.claim.state === "active" && pair.claim.expires_at <= at) {
@@ -298,7 +295,7 @@ export class ExecutionValidationRunCommands {
       return null;
     });
     if (leaseRecovery) {
-      throw new GoalBoardV1Error(
+      throw new this.ports.errorType(
         "run.claim_expired",
         "Run 对应的 Claim 租约已过期，旧 Runtime 不能再报告终态；请重新领取 Goal",
         {
@@ -321,9 +318,9 @@ export class ExecutionValidationRunCommands {
         return { ...replay, replayed: true };
       }
       const pair = this.execution.query.getRunWithClaim(input.board_id, input.run_id);
-      if (!pair) throw new GoalBoardV1Error("run.not_found", `Run 不存在: ${input.run_id}`);
+      if (!pair) throw new this.ports.errorType("run.not_found", `Run 不存在: ${input.run_id}`);
       if (pair.run.actor_id !== input.actor_id) {
-        throw new GoalBoardV1Error("run.not_owner", "只有执行者可以报告这个 Run");
+        throw new this.ports.errorType("run.not_owner", "只有执行者可以报告这个 Run");
       }
       const previousProjection = this.getGoalActionProjection({
         board_id: input.board_id,
@@ -341,7 +338,7 @@ export class ExecutionValidationRunCommands {
           now,
         );
         const outcome = {
-          run: this.readRun(input.run_id),
+          run: this.readRun(input.board_id, input.run_id),
           observed_event_cursor: transition.observed_event_cursor,
           transition,
         };
@@ -355,14 +352,14 @@ export class ExecutionValidationRunCommands {
         !contractRevisionIsCompatible(currentGoal, revisionSnapshot, pair.claim.contract_revision) ||
         (input.contract_revision != null && !contractRevisionIsCompatible(currentGoal, revisionSnapshot, input.contract_revision))
       ) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "contract.revision_stale",
           "这个 Run 属于旧 Contract revision，写入没有生效。",
           { current_contract_revision: currentGoal.current_contract_revision, projection: previousProjection },
         );
       }
       if (input.action_token && input.action_token !== previousProjection.action_token) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "action.token_stale",
           "报告 Run 前 Goal 已变化；旧写入没有生效。",
           { projection: previousProjection },

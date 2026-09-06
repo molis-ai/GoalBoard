@@ -77,12 +77,12 @@ importers:
       '@adeptify/goalboard-plugin-artifacts':
         specifier: workspace:*
         version: link:plugins/native/artifacts
-      '@adeptify/goalboard-plugin-feed':
-        specifier: workspace:*
-        version: link:plugins/native/feed
       '@adeptify/goalboard-plugin-cli':
         specifier: workspace:*
         version: link:tooling/plugin-cli
+      '@adeptify/goalboard-plugin-feed':
+        specifier: workspace:*
+        version: link:plugins/native/feed
       '@adeptify/goalboard-plugin-goals':
         specifier: workspace:*
         version: link:plugins/native/goals
@@ -101,6 +101,9 @@ importers:
       '@adeptify/goalboard-service-runtime-host':
         specifier: workspace:*
         version: link:horizontal/runtime-host
+      '@adeptify/goalboard-storage':
+        specifier: workspace:*
+        version: link:packages/storage
       '@adeptify/goalboard-ui-host':
         specifier: workspace:*
         version: link:packages/ui-host
@@ -189,18 +192,54 @@ importers:
       '@adeptify/goalboard-kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@adeptify/goalboard-module-artifacts':
+        specifier: workspace:*
+        version: link:../../modules/artifacts
+      '@adeptify/goalboard-module-attention-resumption':
+        specifier: workspace:*
+        version: link:../../modules/attention-resumption
       '@adeptify/goalboard-module-context-ledger':
         specifier: workspace:*
         version: link:../../modules/context-ledger
+      '@adeptify/goalboard-module-evidence-verification':
+        specifier: workspace:*
+        version: link:../../modules/evidence-verification
+      '@adeptify/goalboard-module-execution':
+        specifier: workspace:*
+        version: link:../../modules/execution
+      '@adeptify/goalboard-module-feed':
+        specifier: workspace:*
+        version: link:../../modules/feed
+      '@adeptify/goalboard-module-goals':
+        specifier: workspace:*
+        version: link:../../modules/goals
+      '@adeptify/goalboard-module-governance-collaboration':
+        specifier: workspace:*
+        version: link:../../modules/governance-collaboration
       '@adeptify/goalboard-module-private-work-context':
         specifier: workspace:*
         version: link:../../modules/private-work-context
+      '@adeptify/goalboard-module-signals':
+        specifier: workspace:*
+        version: link:../../modules/signals
+      '@adeptify/goalboard-module-sources':
+        specifier: workspace:*
+        version: link:../../modules/sources
       '@adeptify/goalboard-plugin-artifacts':
         specifier: workspace:*
         version: link:../../plugins/native/artifacts
+      '@adeptify/goalboard-plugin-goals':
+        specifier: workspace:*
+        version: link:../../plugins/native/goals
       '@adeptify/goalboard-plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
+      '@adeptify/goalboard-service-listener-host':
+        specifier: workspace:*
+        version: link:../../horizontal/listener-host
+      '@adeptify/goalboard-storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@adeptify/goalboard-ui-host':
         specifier: workspace:*
         version: link:../../packages/ui-host
@@ -321,6 +360,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      better-sqlite3:
+        specifier: 12.8.0
+        version: 12.8.0
 
   modules/governance-collaboration:
     dependencies:
@@ -414,6 +456,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../contracts
+      better-sqlite3:
+        specifier: 12.8.0
+        version: 12.8.0
 
   packages/test-kit:
     dependencies:
@@ -459,6 +504,9 @@ importers:
       '@adeptify/goalboard-module-evidence-verification':
         specifier: workspace:*
         version: link:../../../modules/evidence-verification
+      '@adeptify/goalboard-module-execution':
+        specifier: workspace:*
+        version: link:../../../modules/execution
       '@adeptify/goalboard-module-goals':
         specifier: workspace:*
         version: link:../../../modules/goals

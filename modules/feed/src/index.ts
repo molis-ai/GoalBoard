@@ -1,3 +1,4 @@
+import { migrateFeedImportReceipts } from "./import-receipts.js";
 import { randomUUID } from "node:crypto";
 import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
 import { FeedGoalLinks } from "./goal-links.js";
@@ -73,6 +74,7 @@ export class FeedError extends Error {
 }
 
 export function migrateFeed(db: FeedSqliteDatabase): void {
+  migrateFeedImportReceipts(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS feed_items (
       board_id TEXT NOT NULL REFERENCES boards(board_id) ON DELETE CASCADE,
@@ -978,3 +980,5 @@ function json<T>(value: unknown, fallback: T): T {
 }
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+
+export { FeedReceiptStore } from "./import-receipts.js";

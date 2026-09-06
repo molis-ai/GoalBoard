@@ -4,7 +4,7 @@
 
 ## macOS Desktop 安装包
 
-当前重组工作树提示：安装实现已迁至 Local Host；从源码安装前需完整构建，包括所有 workspace 包。旧构建会被拒绝，已有安装不受这次拒绝影响。以下发布流程仍是待 DV4 完整复验的分发流程，当前切片测试不代表新工作树的 DMG/供应链产物已验收。
+安装实现已迁至 Local Host；从源码安装前需完整构建，包括清理并重建所有 workspace 包。旧构建会被拒绝，已有安装不受这次拒绝影响。当前分发验收、实际 App 升级/恢复和独立 npm 消费证据集中在 [DV4 验收报告](../specs/goalboard-architecture-reorganization/dv4-validation.md)。本机内部包验证不代表 Apple 公证、Intel 实机或公开发布资格。
 
 普通 macOS 用户优先从 [GitHub Releases](https://github.com/adeptify/GoalBoard/releases) 下载 `macos-arm64`（Apple Silicon）或 `macos-x64`（Intel）DMG，把 GoalBoard 拖入 Applications 后启动。App 内含匹配架构的 Node、GoalBoard Core 和生产依赖；首次打开才调用同一套 `goalboard install` 服务写入 `~/.goalboard`，随后启动本地 Web。它不会在首次启动时创建项目、接入 Runtime、创建 demo 或修改用户项目。
 
@@ -33,6 +33,14 @@ pnpm desktop:start:macos    # 启动已安装 App
 项目使用不可变的 `project_id` 区分，显示名称可以改名或重名；每个项目都有自己的 `goalboard.db`。`projects/catalog.db` 保存项目身份、DB 位置、可选 Session 绑定、workspace 与多个项目的历史关联、用户显式设置的唯一默认项目，以及删除收据；不复制 Goal 事实，也不依赖 Git。普通项目选择不会自动成为目录默认项，新 Session 会拿到历史候选并询问；只有用户单独设置默认后才会自动恢复。解绑关联不删除项目；删除项目及其 DB 必须单独确认，并会拒绝仍有有效 Claim 或未结束 Run 的项目。
 
 ## 更新已有安装
+
+### 离线备份与恢复边界
+
+当前没有通用在线备份命令。备份前退出 App，并按服务的所有权检查停止 GoalBoard 服务及其他写入进程；仅退出窗口不保证后台停止。将整个 GoalBoard Home 复制到受保护的位置，不要只复制项目 `.db`：Catalog、Session Registry、加密正文 Blob 和对应密钥必须保持同一份快照。外部工作区文件仍需单独备份。
+
+恢复时同样先停止所有写入，保留故障目录供回退，将完整备份恢复到原 Home 绝对路径，再启动并核对项目、Goal 正文/历史、Artifact 版本和 Session 内容。Catalog 保存项目数据库路径，因此此流程不是跨目录或跨机器迁移。Keychain 或环境变量提供的密钥不随 Home 文件复制，必须另行确认其仍可用；不要用新密钥替换丢失的旧密钥。缺密钥时加密内容应保持不可读，而不是生成空数据冒充恢复成功。
+
+离线完整恢复、恢复后续写及缺密钥拒绝的生产路径测试见 [恢复测试](../tests/home-backup-recovery.test.ts)。这不代表在线一致性备份、跨机器 Keychain 恢复或外部工作区内容已验证。
 
 已经从仓库安装过时，先拉取新内容，再走同一个安装入口。即使版本号没有变化，安装器也会比较实际内容并刷新程序和 Skill；用户项目、Runtime 配置和 demo 都不会被自动改写：
 

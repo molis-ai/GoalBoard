@@ -252,3 +252,11 @@ export { GoalBoardUninstallError, type GoalBoardUninstallPlan, type GoalBoardUni
 export { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "./web-control-token.js";
 export { createGoalBoardRuntimePayload, type GoalBoardRuntimePayloadOptions } from "./installer/runtime-payload.js";
 export { createGoalBoardNpmPackageDirectory } from "./installer/npm-package.js";
+export { readPersonalPlanningMethodPacks } from "./personal-planning-methods.js";
+
+export { migrateLocalProjectDatabase } from "./project-migrations.js";
+export { migrateFeedTables, migrateInfoflowContractV2 } from "./feed-migrations.js";
+
+export { LocalProjectDatabase } from "./project-database.js";
+
+export * from "./goal-project-application.js";

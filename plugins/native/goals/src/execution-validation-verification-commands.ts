@@ -1,22 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  compactGoalActionProjection,
-  compatibleContractRevisions,
-  contractRevisionIsCompatible,
-  deriveGoalActionProjection,
-  dialogueEvidenceDigest,
-  humanReviewAttentionToken,
-} from "@adeptify/goalboard-plugin-goals";
+import { compactGoalActionProjection, deriveGoalActionProjection } from "./action-projection.js";
+import { compatibleContractRevisions, contractRevisionIsCompatible } from "./contract-revisions.js";
+import { dialogueEvidenceDigest, humanReviewAttentionToken } from "./human-review.js";
 
-import { GoalBoardV1Error } from "./errors.js";
-import type {
-  ActionTransitionReceipt,
-  EvidenceCorrectionRecord,
-  EvidenceRecord,
-  GoalRecord,
-  ReviewRecord,
-} from "./types.js";
+import type { ActionTransitionReceipt } from "./execution-validation-contract.js";
+import type { EvidenceCorrectionRecord, EvidenceRecord } from "@adeptify/goalboard-contracts/modules/evidence-verification";
+import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { ReviewRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { ExecutionValidationApplicationPorts } from "./execution-validation-ports.js";
 import {
   executionValidationRequestHash as requestHash,
@@ -26,17 +17,15 @@ import {
 export class ExecutionValidationVerificationCommands {
   constructor(private readonly ports: ExecutionValidationApplicationPorts) {}
 
-  private get store() { return this.ports.store; }
+  private get store() { return this.ports.state; }
   private get execution() { return this.ports.execution; }
-  private get executionModule() { return this.ports.executionModule; }
   private get evidenceVerification() { return this.ports.evidenceVerification; }
   private get governance() { return this.ports.governance; }
-  private get goalsModule() { return this.ports.goalsModule; }
   private get clock(): () => Date { return this.ports.clock; }
   private getGoalActionProjection(input: { board_id: string; goal_id: string }) {
     const snapshot = this.store.snapshot(input.board_id);
     const goal = snapshot.goals.find((item) => item.goal_id === input.goal_id);
-    if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
+    if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
     return deriveGoalActionProjection(goal, snapshot, this.clock().toISOString());
   }
   private hasPostExecutionNeedsChanges(boardId: string, goalId: string): boolean {
@@ -140,14 +129,14 @@ export class ExecutionValidationVerificationCommands {
         input.contract_revision != null &&
         !contractRevisionIsCompatible(goal, revisionSnapshot, input.contract_revision)
       ) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "contract.revision_stale",
           "Evidence 属于旧 Contract revision，未写入当前 Goal。",
           { current_contract_revision: goal.current_contract_revision, projection: previousProjection },
         );
       }
       if (input.action_token && input.action_token !== previousProjection.action_token) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "action.token_stale",
           "提交 Evidence 前 Goal 已变化；旧写入未生效。",
           { projection: previousProjection },
@@ -156,7 +145,7 @@ export class ExecutionValidationVerificationCommands {
       const validCriteria = new Set(goal.acceptance_criteria.map((item) => item.criterion_id));
       for (const criterionId of input.criterion_ids) {
         if (!validCriteria.has(criterionId)) {
-          throw new GoalBoardV1Error(
+          throw new this.ports.errorType(
             "evidence.criterion_invalid",
             `验收条件不属于这个 Goal: ${criterionId}`,
           );
@@ -165,13 +154,13 @@ export class ExecutionValidationVerificationCommands {
       if (input.run_id) {
         const pair = this.execution.query.getRunWithClaim(input.board_id, input.run_id);
         if (!pair || pair.run.goal_id !== input.goal_id) {
-          throw new GoalBoardV1Error("evidence.run_invalid", "Evidence 引用的 Run 不属于这个 Goal");
+          throw new this.ports.errorType("evidence.run_invalid", "Evidence 引用的 Run 不属于这个 Goal");
         }
         if (pair.run.actor_id !== input.actor_id) {
-          throw new GoalBoardV1Error("evidence.actor_invalid", "只有 Run 执行者可以提交它的 Evidence");
+          throw new this.ports.errorType("evidence.actor_invalid", "只有 Run 执行者可以提交它的 Evidence");
         }
         if (!contractRevisionIsCompatible(goal, revisionSnapshot, pair.claim.contract_revision)) {
-          throw new GoalBoardV1Error(
+          throw new this.ports.errorType(
             "contract.revision_stale",
             "这个 Run 属于旧 Contract revision，不能继续写入当前 Evidence。",
             { current_contract_revision: goal.current_contract_revision, projection: previousProjection },
@@ -279,7 +268,7 @@ export class ExecutionValidationVerificationCommands {
       });
       const now = corrected.correction.created_at;
       if (corrected.invalidates_passing_evidence) {
-        this.goalsModule.lifecycle.markSatisfiedGoalForEvidenceRevalidation(
+        this.ports.goalsLifecycle.markSatisfiedGoalForEvidenceRevalidation(
           input.board_id,
           input.goal_id,
           input.actor_id,
@@ -365,7 +354,7 @@ export class ExecutionValidationVerificationCommands {
       const reviewGoal = this.requireGoalOnBoard(input.board_id, input.goal_id);
       const revisionSnapshot = this.store.snapshot(input.board_id);
       if (reviewGoal.trashed_at) {
-        throw new GoalBoardV1Error("goal.trashed", "回收站中的 Goal 不能提交 Review");
+        throw new this.ports.errorType("goal.trashed", "回收站中的 Goal 不能提交 Review");
       }
       const previousProjection = this.getGoalActionProjection({
         board_id: input.board_id,
@@ -375,47 +364,47 @@ export class ExecutionValidationVerificationCommands {
         input.contract_revision != null &&
         !contractRevisionIsCompatible(reviewGoal, revisionSnapshot, input.contract_revision)
       ) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "contract.revision_stale",
           "Review 属于旧 Contract revision，未写入当前 Goal。",
           { current_contract_revision: reviewGoal.current_contract_revision, projection: previousProjection },
         );
       }
       if (input.action_token && input.action_token !== previousProjection.action_token) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "action.token_stale",
           "提交 Review 前 Goal 已变化；旧写入未生效。",
           { projection: previousProjection },
         );
       }
-      if (!input.reasoning.trim()) throw new GoalBoardV1Error("review.reasoning_required", "Review 必须说明判断理由");
+      if (!input.reasoning.trim()) throw new this.ports.errorType("review.reasoning_required", "Review 必须说明判断理由");
       const obligation = this.governance.query.getReviewObligation(
         input.board_id,
         input.obligation_id,
       );
       if (!obligation || obligation.goal_id !== input.goal_id) {
-        throw new GoalBoardV1Error("review.obligation_not_found", "找不到这项 Review 要求");
+        throw new this.ports.errorType("review.obligation_not_found", "找不到这项 Review 要求");
       }
       if (obligation.state !== "pending") {
-        throw new GoalBoardV1Error("review.obligation_closed", "这项 Review 要求已经关闭");
+        throw new this.ports.errorType("review.obligation_closed", "这项 Review 要求已经关闭");
       }
       if (!contractRevisionIsCompatible(reviewGoal, revisionSnapshot, obligation.contract_revision)) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "contract.revision_stale",
           "这项 Review 要求属于旧 Contract revision。",
           { current_contract_revision: reviewGoal.current_contract_revision, projection: previousProjection },
         );
       }
-      const latestWorkRun = this.executionModule.repository.latestRunForGoal(
+      const latestWorkRun = this.execution.query.latestRunForGoal(
         input.board_id,
         input.goal_id,
         ["executor", "revalidator"],
       );
       if (!latestWorkRun || latestWorkRun.state !== "completed") {
-        throw new GoalBoardV1Error("review.execution_not_completed", "执行 Run 尚未完成，不能提交 Review");
+        throw new this.ports.errorType("review.execution_not_completed", "执行 Run 尚未完成，不能提交 Review");
       }
       if (this.hasPostExecutionNeedsChanges(input.board_id, input.goal_id)) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "review.rework_pending",
           "Review 已要求返工，必须先完成新的执行 Run 再重新复核",
         );
@@ -429,13 +418,13 @@ export class ExecutionValidationVerificationCommands {
             referenced.evidence.board_id !== input.board_id ||
             referenced.evidence.goal_id !== input.goal_id
           ) {
-            throw new GoalBoardV1Error(
+            throw new this.ports.errorType(
               "review.evidence_wrong_goal",
               "Review 引用的 Evidence 不属于这个 Goal",
             );
           }
           if (referenced.evidence.lifecycle_state !== "effective") {
-            throw new GoalBoardV1Error(
+            throw new this.ports.errorType(
               "review.evidence_not_effective",
               "Review 通过只能引用当前有效 Evidence；已被替代或撤销的记录只保留为历史",
             );
@@ -449,7 +438,7 @@ export class ExecutionValidationVerificationCommands {
               ) >= referenced.submitted_event_seq,
           );
           if (staleCriterionIds.length > 0) {
-            throw new GoalBoardV1Error(
+            throw new this.ports.errorType(
               "review.evidence_stale_after_rework",
               "Review 通过不能复用返工请求之前的旧 Evidence",
               {
@@ -463,19 +452,19 @@ export class ExecutionValidationVerificationCommands {
       }
       const role = obligation.role;
       if (role === "human_approver" && input.actor_kind !== "user") {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "review.user_authority_required",
           "只有用户可以提交 human approval Review",
         );
       }
       if (role === "cross_reviewer" || role === "adversarial_reviewer") {
-        const executor = this.executionModule.repository.latestClaimForGoal(
+        const executor = this.execution.query.latestClaimForGoal(
           input.board_id,
           input.goal_id,
           ["executor", "revalidator"],
         );
         if (executor?.actor_id === input.actor_id) {
-          throw new GoalBoardV1Error(
+          throw new this.ports.errorType(
             "review.independence_failed",
             "执行者不能交叉或对抗性复核自己的 Goal",
           );
@@ -513,9 +502,9 @@ export class ExecutionValidationVerificationCommands {
       });
       const reviewId = submittedReview.review.review_id;
       if (activeReviewerClaim) {
-        const activeRun = this.executionModule.repository.latestActiveRunForClaim(activeReviewerClaim.claim_id);
+        const activeRun = this.execution.query.latestActiveRunForClaim(activeReviewerClaim.claim_id);
         if (activeRun) {
-          this.executionModule.repository.completeRun(activeRun.run_id, now);
+          this.execution.commands.completeReviewedRun(activeRun.run_id, now);
           this.store.appendEvent({
             eventId: randomUUID(),
             boardId: input.board_id,
@@ -591,14 +580,14 @@ export class ExecutionValidationVerificationCommands {
         !normalized.exact_user_quote || !normalized.user_id ||
         !normalized.session_id || !normalized.message_id
       ) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "review.dialogue_provenance_required",
           "对话验收必须保留用户原话、用户、Session 和消息来源。",
         );
       }
       const snapshot = this.store.snapshot(input.board_id);
       const goal = snapshot.goals.find((candidate) => candidate.goal_id === input.goal_id);
-      if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
+      if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
       const compatibleRevisions = compatibleContractRevisions(goal, snapshot);
       const pendingHuman = snapshot.review_obligations.filter((obligation) =>
         obligation.goal_id === input.goal_id &&
@@ -619,7 +608,7 @@ export class ExecutionValidationVerificationCommands {
           : [];
       const obligation = candidates.find((candidate) => candidate.obligation_id === input.obligation_id);
       if (!obligation || candidates.length !== 1) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "review.dialogue_target_ambiguous",
           "当前对话不能唯一对应一项用户验收；请到 Decision Center 逐项处理。",
           { pending_obligation_ids: pendingHuman.map((item) => item.obligation_id) },
@@ -627,7 +616,7 @@ export class ExecutionValidationVerificationCommands {
       }
       const expectedToken = humanReviewAttentionToken(goal, obligation, snapshot);
       if (input.attention_token !== expectedToken) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "review.attention_token_stale",
           "验收内容在用户回答前已经变化；旧回答没有写入。",
           {

@@ -17,7 +17,6 @@ export interface GoalRevalidationRunView {
 }
 
 export interface GoalArchiveHooks {
-  clearActiveGoalIfMatches?(boardId: string, goalId: string, at: string): boolean;
   blockingWork?(boardId: string, goalId: string, now: string): {
     claim_ids: string[];
     run_ids: string[];
@@ -38,13 +37,12 @@ export interface GoalArchiveHooks {
 }
 
 export interface GoalCompletionHooks {
-  clearActiveGoalIfMatches?(boardId: string, goalId: string, at: string): boolean;
   compoundCoverageBlocksClosure?(boardId: string, goalId: string): boolean;
   completionGateReasons?(boardId: string, goalId: string): GoalLifecycleReason[];
 }
 
 export interface GoalsLifecycleHooks<TTransition>
-  extends Pick<GoalArchiveHooks, "clearActiveGoalIfMatches" | "blockingWork">,
+  extends Pick<GoalArchiveHooks, "blockingWork">,
     Pick<
       GoalCompletionHooks,
       "compoundCoverageBlocksClosure" | "completionGateReasons"

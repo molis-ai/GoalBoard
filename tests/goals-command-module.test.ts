@@ -170,12 +170,6 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-lifecycle-"));
   const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
   try {
-    new GoalBoardCoordinator(store).initializeBoard({
-      board_id: "board-lifecycle",
-      title: "Goals Lifecycle",
-      actor_id: "user-1",
-      idempotency_key: "initialize",
-    });
     const revisionTransitions: GoalRevisionDependentTransition[] = [];
     const goals = new GoalsModule<{ observed_event_cursor: number }>(store.db, {
       supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
@@ -187,6 +181,20 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
         observed_event_cursor: store.snapshot(boardId).cursor,
       }),
     });
+    const initialize = { board_id: "board-lifecycle", title: "Goals Lifecycle", actor_id: "user-1", idempotency_key: "initialize" };
+    store.db.exec(`CREATE TRIGGER reject_board_event BEFORE INSERT ON events
+      WHEN NEW.type = 'board.created' BEGIN SELECT RAISE(ABORT, 'board event unavailable'); END`);
+    assert.throws(() => goals.commands.initializeBoard(initialize), /board event unavailable/u);
+    assert.equal(goals.query.getBoard("board-lifecycle"), null, "a failed event rolls back Board creation too");
+    store.db.exec("DROP TRIGGER reject_board_event");
+    const initialized = goals.commands.initializeBoard(initialize);
+    assert.equal(initialized.replayed, false);
+    assert.deepEqual(goals.commands.initializeBoard(initialize), { ...initialized, replayed: true });
+    assert.throws(() => goals.commands.initializeBoard({ ...initialize, title: "Changed" }),
+      (error: unknown) => error instanceof GoalsCommandError && error.code === "request.idempotency_key_reused");
+    assert.equal(goals.query.getBoard("board-lifecycle")?.title, "Goals Lifecycle");
+    assert.equal(store.db.prepare("SELECT COUNT(*) AS count FROM events WHERE board_id = ? AND type = 'board.created'")
+      .get("board-lifecycle")?.count, 1, "retry does not duplicate the Board event");
     goals.commands.createGoal("board-lifecycle", {
       goal_id: "goal-lifecycle",
       title: "Lifecycle Draft",
@@ -256,6 +264,10 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
     assert.equal(revised.effect, "metadata");
     assert.equal(revisionTransitions.length, 1);
 
+    const active = goals.commands.setActiveGoal("board-lifecycle", { goal_id: "goal-lifecycle", reason: "验证当前目标归属" },
+      { actor_id: "user-1", idempotency_key: "make-active" });
+    assert.equal(active.active_goal_id, "goal-lifecycle");
+    assert.equal(goals.query.getBoard("board-lifecycle")?.active_goal_id, "goal-lifecycle");
     const completed = goals.lifecycle.evaluateCompletion({
       board_id: "board-lifecycle",
       goal_id: "goal-lifecycle",
@@ -263,6 +275,12 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
       idempotency_key: "complete",
     });
     assert.equal(completed.satisfied, true);
+    assert.equal(goals.query.getBoard("board-lifecycle")?.active_goal_id, null,
+      "Goals completion clears its own Board pointer without a Host hook");
+    const persisted = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+    try { assert.equal(persisted.snapshot("board-lifecycle").board.active_goal_id, null); }
+    finally { persisted.close(); }
+
     assert.equal(goals.lifecycle.setArchived("board-lifecycle", {
       goal_id: "goal-lifecycle",
       archived: true,

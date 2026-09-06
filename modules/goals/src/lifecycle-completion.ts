@@ -79,7 +79,7 @@ export class GoalCompletionCommands {
       this.context.repository.db
         .prepare("UPDATE goals SET fulfillment_state = 'satisfied', updated_at = ? WHERE goal_id = ?")
         .run(now, input.goal_id);
-      const activeGoalCleared = this.hooks.clearActiveGoalIfMatches?.(input.board_id, input.goal_id, now) ?? false;
+      const activeGoalCleared = this.context.repository.clearActiveGoalIfMatches(input.board_id, input.goal_id, now);
       this.context.repository.appendEvent({
         eventId: randomUUID(),
         boardId: input.board_id,
@@ -145,7 +145,7 @@ export class GoalCompletionCommands {
     this.context.repository.db
       .prepare("UPDATE goals SET fulfillment_state = 'satisfied', updated_at = ? WHERE goal_id = ?")
       .run(at, goalId);
-    const activeGoalCleared = this.hooks.clearActiveGoalIfMatches?.(boardId, goalId, at) ?? false;
+    const activeGoalCleared = this.context.repository.clearActiveGoalIfMatches(boardId, goalId, at);
     this.context.repository.appendEvent({
       eventId: randomUUID(),
       boardId,
@@ -433,7 +433,7 @@ export class GoalCompletionCommands {
     this.context.repository.db
       .prepare("UPDATE goals SET fulfillment_state = 'satisfied', updated_at = ? WHERE goal_id = ?")
       .run(at, goalId);
-    const activeGoalCleared = this.hooks.clearActiveGoalIfMatches?.(boardId, goalId, at) ?? false;
+    const activeGoalCleared = this.context.repository.clearActiveGoalIfMatches(boardId, goalId, at);
     this.context.repository.appendEvent({
       eventId: randomUUID(),
       boardId,

@@ -29,3 +29,4 @@ Proposal/Decision，通过 `decisions` 保证跨 owner 物化的原子性。SQLi
 - `goal-reorg-ex4`
 - `goal-reorg-ar2`（来源规则与兼容投影）
 - `goal-reorg-dd1`（草稿澄清的记录端口）
+`CLARIFICATION_SCHEMA_SQL` and `migrateClarificationDialogue` own the unchanged clarification session/turn schema and migration 8. Fresh storage and legacy upgrades share the same definition; table/index creation and migration stamping remain one immediate transaction. The Host supplies the existing connection and migration order.

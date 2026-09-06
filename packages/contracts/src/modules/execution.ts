@@ -144,6 +144,13 @@ export interface ExecutionRunWithClaim {
 }
 
 export interface ExecutionQueryApi {
+  activeRunIdsForGoal(boardId: string, goalId: string): string[];
+  listClaimsForGoal(boardId: string, goalId: string): ExecutionClaimRecord[];
+  latestCompletedWorkRunEventSeq(boardId: string, goalId: string): number;
+  latestRunForGoal(boardId: string, goalId: string, roles?: readonly ExecutionRunRecord["role"][]): ExecutionRunRecord | null;
+  latestClaimForGoal(boardId: string, goalId: string, roles?: readonly ExecutionClaimRecord["role"][]): ExecutionClaimRecord | null;
+  latestActiveRunForClaim(claimId: string): ExecutionRunRecord | null;
+  activeClaimIdsForGoal(boardId: string, goalId: string, at?: string): string[];
   listLifecycleEvents(boardId: string): import("../platform/storage.js").StoredModuleEvent[];
   getClaim(boardId: string, claimId: string): ExecutionClaimRecord | null;
   getRun(boardId: string, runId: string): ExecutionRunRecord | null;
@@ -154,6 +161,9 @@ export interface ExecutionQueryApi {
 }
 
 export interface ExecutionCommandApi {
+  completeRunForRevalidation(boardId: string, runId: string, actorId: string): void;
+  /** Application has authorized the Review; close its Run in the shared transaction. */
+  completeReviewedRun(runId: string, at: string): ExecutionRunRecord | null;
   transitionGoalContractRevision(input: GoalRevisionDependentTransition): void;
   /** Internal close-out after application reconciliation, inside its existing transaction. */
   releaseClaimForLifecycleFacts(boardId: string, claimId: string, actorId: string, at: string, reason: string): number;

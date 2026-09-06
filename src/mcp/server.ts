@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readPersonalPlanningMethodPacks } from "@adeptify/goalboard-app-local-host";
 import { runtimeGoalTreeDecisionAuthority } from "@adeptify/goalboard-app-local-host";
 /** GoalBoard V1 MCP Server：stdio JSON-RPC。 */
 import readline from "node:readline";
@@ -13,7 +14,6 @@ import {
 import {
   GoalBoardProjectCatalogError,
   normalizeRuntimeWorkContext,
-  readPersonalPlanningMethodPacks,
 } from "../projects/catalog.js";
 import { withGoalBoardProjectCatalog } from "../projects/catalog-session.js";
 import {

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { constants as fsConstants, realpathSync } from "node:fs";
+import { constants as fsConstants } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
-import type { PlanningMethodPack } from "@adeptify/goalboard-contracts/modules/goals";
+import { createPersonalPlanningMethodSchema, PersonalPlanningMethods } from "@adeptify/goalboard-module-goals";
 import {
   ExecutionRepository,
   type ExecutionSqliteDatabase,
@@ -50,9 +50,9 @@ import {
   migrateRuntimeContextBindingEventsForUnbind,
   migrateRuntimeContextProjectReferences,
 } from "@adeptify/goalboard-module-private-work-context";
-import { GoalBoardCoordinator } from "../v1/coordinator.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { DEMO_BOARD_ID, seedDemoBoard } from "../v1/demo.js";
-import { SqliteGoalBoardStore } from "../v1/store.js";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import type { BoardSnapshot } from "../v1/types.js";
 import { createDesktopPanelTables, SqliteDesktopPanelRepository } from "./desktop-panel-adapter.js";
 
@@ -236,12 +236,14 @@ export class GoalBoardProjectCatalog {
   private readonly projects: ProjectsModule;
   private readonly workContexts: RuntimeContextBindingRepository;
   readonly desktopPanels: DesktopPanelService;
+  readonly personalPlanningMethods: PersonalPlanningMethods;
 
   private constructor(
     private readonly db: Database.Database,
     homeDirectory: string,
     ledger: ContextLedgerApi,
   ) {
+    this.personalPlanningMethods = new PersonalPlanningMethods(db);
     this.homeDirectory = homeDirectory;
     this.projectsDirectory = path.join(homeDirectory, "projects");
     this.databasePath = path.join(this.projectsDirectory, "catalog.db");
@@ -314,43 +316,6 @@ export class GoalBoardProjectCatalog {
 
   listProjects(): GoalBoardProjectRecord[] {
     return this.projects.query.listProjects();
-  }
-
-  listPersonalPlanningMethodPacks(): PlanningMethodPack[] {
-    return (this.db
-      .prepare("SELECT pack_json FROM personal_planning_method_packs ORDER BY method_id")
-      .all() as Array<{ pack_json?: unknown }>)
-      .map((row) => parsePlanningMethodPack(row.pack_json))
-      .filter((pack): pack is PlanningMethodPack => pack != null);
-  }
-
-  putPersonalPlanningMethodPack(pack: PlanningMethodPack): void {
-    if (pack.scope !== "personal") {
-      throw new Error("个人方法库只能保存 scope=personal 的方法包");
-    }
-    this.db
-      .prepare(`
-        INSERT INTO personal_planning_method_packs (
-          method_id, version, enabled, pack_json, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(method_id) DO UPDATE SET
-          version = excluded.version,
-          enabled = excluded.enabled,
-          pack_json = excluded.pack_json,
-          updated_at = excluded.updated_at
-      `)
-      .run(
-        pack.method_id,
-        pack.version,
-        pack.enabled ? 1 : 0,
-        JSON.stringify(pack),
-        pack.created_at,
-        pack.updated_at,
-      );
-  }
-
-  deletePersonalPlanningMethodPack(methodId: string): boolean {
-    return this.db.prepare("DELETE FROM personal_planning_method_packs WHERE method_id = ?").run(methodId).changes > 0;
   }
 
   getProject(projectId: string): GoalBoardProjectRecord {
@@ -1326,7 +1291,7 @@ function initializeCatalog(db: Database.Database): void {
   createRuntimeContextSetupRequestTable(db);
   createRuntimeContextSuggestionRejectionTable(db);
   createDesktopPanelTables(db);
-  createPersonalPlanningMethodPackTable(db);
+  createPersonalPlanningMethodSchema(db);
   db.prepare("INSERT INTO catalog_meta (key, value) VALUES (?, ?)").run("owner", CATALOG_OWNER);
   db.prepare("INSERT INTO catalog_meta (key, value) VALUES (?, ?)").run("schema_version", String(CATALOG_SCHEMA_VERSION));
 }
@@ -1394,7 +1359,7 @@ function migrateCatalog(db: Database.Database, databasePath: string, ledger: Con
       current = 8;
     }
     if (current === 8) {
-      createPersonalPlanningMethodPackTable(db);
+      createPersonalPlanningMethodSchema(db);
       db.prepare("UPDATE catalog_meta SET value = ? WHERE key = 'schema_version'").run("9");
       current = 9;
     }
@@ -1412,65 +1377,15 @@ function migrateCatalog(db: Database.Database, databasePath: string, ledger: Con
   })();
 }
 
-function createPersonalPlanningMethodPackTable(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS personal_planning_method_packs (
-      method_id TEXT PRIMARY KEY,
-      version INTEGER NOT NULL,
-      enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
-      pack_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `);
-}
-
-function parsePlanningMethodPack(value: unknown): PlanningMethodPack | null {
-  if (typeof value !== "string" || !value) return null;
-  try {
-    return JSON.parse(value) as PlanningMethodPack;
-  } catch {
-    return null;
-  }
-}
-
-export function readPersonalPlanningMethodPacks(homeDirectory?: string): PlanningMethodPack[] {
-  const databasePath = path.join(
-    path.resolve(homeDirectory ?? path.join(os.homedir(), ".goalboard")),
-    "projects",
-    "catalog.db",
-  );
-  if (!realpathExists(databasePath)) return [];
-  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
-  try {
-    const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'personal_planning_method_packs'").get();
-    if (!table) return [];
-    return (db.prepare("SELECT pack_json FROM personal_planning_method_packs ORDER BY method_id").all() as Array<{ pack_json?: unknown }>)
-      .map((row) => parsePlanningMethodPack(row.pack_json))
-      .filter((pack): pack is PlanningMethodPack => pack != null);
-  } finally {
-    db.close();
-  }
-}
-
-function realpathExists(filePath: string): boolean {
-  try {
-    realpathSync(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function initializeProjectDatabase(
   databasePath: string,
   boardId: string,
   displayName: string,
   actorId: string,
 ): Promise<void> {
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
-    new GoalBoardCoordinator(store).initializeBoard({
+    new GoalProjectApplication(store).initializeBoard({
       board_id: boardId,
       title: displayName,
       actor_id: actorId,
@@ -1493,7 +1408,7 @@ function readManagedBoard(
   databasePath: string,
   checkpoint: boolean,
 ): { boardId: string; snapshot: BoardSnapshot; serializedSnapshot: string } {
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
     const rows = store.db.prepare("SELECT board_id FROM boards ORDER BY board_id").all() as Array<{ board_id?: unknown }>;
     if (rows.length !== 1 || typeof rows[0]?.board_id !== "string" || !rows[0].board_id) {

@@ -43,6 +43,10 @@ export class ExecutionLifecycle implements ExecutionCommandApi {
       new ExecutionError(code, message, details));
   }
 
+  completeReviewedRun(runId: string, at: string): ExecutionRunRecord | null {
+    return this.repository.completeRun(runId, at);
+  }
+
   createAuthorizedClaim(input: AuthorizedExecutionClaimInput): ExecutionClaimRecord {
     validatePositiveLease(input.lease_seconds, input.resolved_policy.max_lease_seconds, "领取", this.errorFactory);
     const now = this.now();

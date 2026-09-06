@@ -8,6 +8,12 @@ accepted Goal goal-reorg-dv4 revision 1。唯一结果：按新包结构可复�
 
 ## 当前证据与范围
 
+### 2026-09-06 顶部兼容修复后的文档核对
+
+实际工作台标题栏修复见 `../native-titlebar-alignment/spec.md`，已完成真实窗口/全屏、收起/展开及页面跳转验证。继续 DV4 文档验收时发现中英文开发指南在前文正确说明 Local Host owner，但“项目结构”仍列已删除的 `src/install/`。修正该目录图为唯一 installer owner 与两个 App-owned tooling 位置，不保留两套互相矛盾的开发指引。历史分阶段记录不作为当前全部验收结论，后续三条件报告需要归一当前证据。
+
+完整产物盘点发现：`modules/governance-collaboration/dist/proposal-submission-store.js` 对应源码已删除，但工作区旧编译文件未清，当前正式 npm archive仍包含该JS及声明。这是已经发生的迁移发布遗漏，不是未来防御要求。`pnpm build` 只清root dist，workspace tsc不会删除旧输出。最小完整修复为让既有 `build:migrated-packages` 调用已存在的 `workspace:build`（先workspace:clean再依赖拓扑build），使根build、typecheck及两种发布流程不再依赖残留dist。各包clean只删除包内生成的dist，不删除node_modules或用户数据。验证通过真实被删除源码的旧输出作为反证，修复后新npm包不得包含它；完整构建、当前安装/分发回归和新包真实consumer链重验。不能仅手动删除这一个文件或在pack时黑名单过滤。
+
 ### 2026-09-06 实际旧包升级补验
 
 重启和标题栏修复已通过后，继续补 DV4 的旧安装升级链。仓库保留真实 `GoalBoard-0.1.13-macos-arm64.dmg`，不是伪改版本号；与当前 0.1.14 DMG 分别安装到新临时目录。先以独立 Home 启动旧 App，使用前端创建一个普通用户项目并记录可见内容，再退出旧 App、打开新 App，验证内嵌 Runtime 升级、受管服务切换、原项目与内容可见、退出重开保持。必要时通过该临时安装的正式 CLI 预览/确认普通卸载，再由新 App 重装并验证保留的项目恢复。当前真实用户 Home、Runtime 配置和 App 安装均不升级；共享 4173 只按已有授权短暂停用并恢复原服务。

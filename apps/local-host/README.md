@@ -22,7 +22,7 @@ DV4: the former `src/install/` implementations are removed. `RuntimeIntegrationS
 
 `createGoalBoardRuntimePayload` accepts a built source, a new output directory and a verified Node executable. It reuses source inspection, recursive dependency collection and release creation; it neither installs a Home nor starts a service. Existing outputs are rejected and partial staging is removed on failure. Shared release assets include vendor tarballs/provenance/SBOM, license and READMEs, and are included in the source-content digest. No vendor is turned into a business package.
 
-Installer code migration is not DV4 release certification: payload/clean-build verification does not establish final DMG, signing/notarization, npm distribution or installed recovery. See [installation](../../docs/installation.md) and the [DV4 checkpoint](../../specs/goalboard-architecture-reorganization/dv4-progress.md).
+DV4 migration review passed on 2026-09-06. Current npm consumer, macOS App/DMG, installed upgrade/recovery and legacy-output removal have separate production-path evidence in the [DV4 validation](../../specs/goalboard-architecture-reorganization/dv4-validation.md). This is internal migration verification, not Apple notarization, public release, an update to the user's installation or whole-product E2E certification. See [installation](../../docs/installation.md) for distribution boundaries.
 
 `LocalHost` discovers one runtime per Project storage key, exposes a typed `LocalHostProjectClient`, serializes Capability calls, and owns runtime close/reopen. Concurrent clients for the same Project reuse the same runtime rather than opening competing writers.
 
@@ -79,3 +79,4 @@ DV4 also owns `createGoalBoardNpmPackageDirectory` and `tooling/pack-npm.mjs`. T
 - `src/mcp/`
 
 AP2 supplied the first real Contract → capability registry → Local Host → CLI/MCP/Web caller → compatibility-test slice. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [Local Host design](../../docs/platform/LOCAL-HOST.md), and [migration matrix](../../docs/system/MIGRATION.md).
+`readPersonalPlanningMethodPacks` locates the existing Home catalog and delegates the readonly personal library to Goals. Missing Home or pre-library catalogs return an empty list without provisioning or schema writes. All connections close after the read; Home path selection stays in Local Host, while SQLite access, method facts and validation stay in Goals.

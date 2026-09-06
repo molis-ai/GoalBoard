@@ -6,7 +6,7 @@ DD2 工程状态（2026-09-06）：原生/历史提案应用与决定 UI/copy/cl
 
 DD1 更新（2026-09-06）：Coordinator 的草稿 start/turn/resume 及独占 helper 已删除，当前 8,496 行；Plugin 应用 224 行、Governance clarification owner 123 行，分别负责用例与事实，不把旧大类换名搬迁。root Store 1,235 行，澄清查询和映射已委托 owner。剩余 Goal Tree 决定/关闭会话归 DD2；原 schema 初始化与最终装配仍待 Cutover。包边界 450 sources / 1,249 imports，0 errors；5 个 legacy huge files 仍未清零。
 
-状态：DV4 安装实现拆分更新；完整分发和总目标验收尚未完成
+状态：DV4 安装/分发拆分与完整切片 Review 已于 2026-09-06 09:24 UTC 完成，见 [DV4 验收](../../specs/goalboard-architecture-reorganization/dv4-validation.md)。当前边界仍有 4 个 legacy huge files、10 个兼容条目；全仓清零及总目标验收尚未完成。下方 DV4 等待分发验收与行数均为阶段历史。
 最新 2026-09-06：GW5 整项工程验收已齐，包含审查补迁的项目工作规则页面/交互/样式/19 条文案。root renderer **3,827**、server **3,353**；边界 448 sources / 1,236 imports，0 errors，串行 Goals/Web/Desktop **175/0/0**。完整范围、caller 与无损证据见 `specs/goalboard-architecture-reorganization/gw5-validation.md`。下方各阶段数字保留为历史；5 个 legacy huge files 仍由最终 Cutover 清零，不因此 retired。
 基线日期：2026-09-01  
 规则：行数只触发审查，真正的拆分单位是“唯一事实 owner + 一组完整用例 + 独立测试面”。

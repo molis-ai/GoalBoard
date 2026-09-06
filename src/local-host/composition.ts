@@ -16,8 +16,8 @@ import type {
 } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { PlanningMethodPack } from "@adeptify/goalboard-contracts/modules/goals";
 
-import { GoalBoardCoordinator } from "../v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { importV3Board } from "../v1/migration.js";
 import { pluginDevelopmentCapability } from "@adeptify/goalboard-contracts/platform/tooling";
 import { runPluginDevelopment } from "@adeptify/goalboard-app-local-host";
@@ -25,8 +25,8 @@ import { SqlitePluginRuntimeRepository, SqlitePluginPrivateStorage } from "@adep
 import { UiHost } from "@adeptify/goalboard-ui-host";
 
 export interface GoalBoardProjectRuntime {
-  store: SqliteGoalBoardStore;
-  coordinator: GoalBoardCoordinator;
+  store: LocalProjectDatabase;
+  coordinator: GoalProjectApplication;
 }
 
 export interface GoalBoardLocalHostOptions {
@@ -64,8 +64,8 @@ export class GoalBoardLocalHost {
       runtimeFactory: {
         open: (reference) => {
           options.onRuntimeOpen?.(reference);
-          const store = new SqliteGoalBoardStore(reference.storage_key);
-          const coordinator = new GoalBoardCoordinator(
+          const store = new LocalProjectDatabase(reference.storage_key);
+          const coordinator = new GoalProjectApplication(
             store,
             options.clock ?? (() => new Date()),
             [...(options.planningMethods?.() ?? [])],

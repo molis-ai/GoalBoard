@@ -24,6 +24,8 @@ GW6: `GOALS_SCHEMA_SQL` owns the remaining Goal tables and indexes. The public m
 
 The 37 built-in planning methods are package assets under `methods/`. Keeping them beside their owner makes source builds, npm packages, and the installed home runtime load the same catalog. The home installer exposes a contained compatibility link under the installed Runtime Skill for older readers; it does not create a second source copy.
 
+`PersonalPlanningMethods` owns the personal method library, including its existing catalog table, saved versions and validation. `save` normalizes and persists within one transaction; `list` never upgrades an old catalog. The Local Host supplies the Home catalog location to `readPersonalPlanningMethods`; Goals opens and closes the readonly connection. Catalog provisioning calls `createPersonalPlanningMethodSchema` inside the original schema transaction; it does not maintain a second SQL implementation. Personal/project/built-in precedence remains in the Planning Engine.
+
 Claims/Runs, Review obligations, Project active-Goal state, and action projection stay with their own owners. Lifecycle calls them through narrow ports; it does not read or write their stores. Planning consumes proposal-shaped values only for validation; Proposal and Decision persistence remain Governance-owned.
 
 ## Dependencies
@@ -64,3 +66,5 @@ Goals Query, GW1 Command/Repository, GW2 Lifecycle/Migrations, GW3 Planning Engi
 旧 FeedStore 的 Attention Goal subject 校验也必须调用公开 Goals Query；同项目 archived/trashed Goal 仍算存在，不用过滤后的可见 Goal 列表替代。缺失或跨项目 Goal 仍由 Attention 返回原错误，不能落 Inbox/审计事件。
 
 Web 的全部 Policy 历史与 Risk 关联，以及 Runtime 的依赖、开放风险、最新替代关系必须通过 `GoalsQueryApi` 读取。`query-facts-repository.ts` 维护这一组已有读取，不增加新表或第二存储。历史规则使用 `listPolicyHistory`（含 active/replaced/withdrawn、来源与理由），不能用 `resolvePolicy` 或 active-only snapshot 代替。旧公开 Query caller 审查遗漏的旁路及纠正验收见 `specs/goalboard-architecture-reorganization/goals-query-correction.md`。
+
+Cutover: Board schema, creation and current-Goal writes now belong to Goals. Completion/archive/trash clear the current pointer inside the same Goals transaction, without a Host SQL callback. Public Query exposes active policy inputs; public Planning exposes existing dependency metrics for the Goals Plugin.

@@ -1,6 +1,6 @@
 import { currentRevisionCriteriaPassed, currentRevisionRuntimeCriteriaPassed, deriveGoalActionProjection } from "./action-projection.js";
 import { compatibleContractRevisions } from "./contract-revisions.js";
-import { recordedContractCoverageBlocksClosure } from "@adeptify/goalboard-module-goals";
+import { compoundCoverageState } from "./clarification-policy.js";
 import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { ExecutionClaimRecord as ClaimRecord, ExecutionRunRecord as RunRecord } from "@adeptify/goalboard-contracts/modules/execution";
 import type { ExecutionValidationSnapshot as BoardSnapshot } from "./execution-validation-contract.js";
@@ -70,24 +70,12 @@ function currentHumanVerdictFailed(goal: GoalRecord, snapshot: BoardSnapshot): b
 }
 
 function compoundCanComplete(goal: GoalRecord, snapshot: BoardSnapshot): boolean {
-  if (goal.decomposition_state !== "closed_compound") return false;
-  if (recordedContractCoverageBlocksClosure(goal, snapshot)) return false;
+  const coverageState = compoundCoverageState(goal, snapshot);
+  if (coverageState.status !== "current") return false;
   const byId = new Map(snapshot.goals.map((candidate) => [candidate.goal_id, candidate]));
-  const childIds = snapshot.relations
-    .filter((relation) => relation.state === "active" && relation.type === "part_of" && relation.to_goal_id === goal.goal_id)
-    .map((relation) => relation.from_goal_id);
-  if (childIds.length === 0) return false;
-  const parentRevisions = compatibleContractRevisions(goal, snapshot);
-  return childIds.every((childId) => {
+  return coverageState.child_ids.every((childId) => {
     const child = byId.get(childId);
-    if (!child || child.fulfillment_state !== "satisfied" || child.validity_state !== "valid") return false;
-    const childRevisions = compatibleContractRevisions(child, snapshot);
-    return snapshot.coverage_contract_revisions.some((coverage) =>
-      coverage.parent_goal_id === goal.goal_id &&
-      coverage.child_goal_id === childId &&
-      parentRevisions.has(coverage.parent_contract_revision) &&
-      childRevisions.has(coverage.child_contract_revision)
-    );
+    return child?.fulfillment_state === "satisfied" && child.validity_state === "valid";
   });
 }
 

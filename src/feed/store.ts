@@ -1,24 +1,31 @@
-import { randomUUID } from "node:crypto";
+export { migrateFeedTables, migrateInfoflowContractV2 } from "@adeptify/goalboard-app-local-host";
+import {
+  LocalSqliteJournal,
+} from "@adeptify/goalboard-storage";
+import {
+  randomUUID,
+} from "node:crypto";
 import type Database from "better-sqlite3";
-import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
-import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
+import {
+  createContextLedger,
+} from "@adeptify/goalboard-module-context-ledger";
+import {
+  createGoalReadServices,
+} from "@adeptify/goalboard-module-goals";
 
 import {
   AttentionError,
   AttentionModule,
-  migrateAttention,
 } from "@adeptify/goalboard-module-attention-resumption";
 import {
   FeedError,
   FeedModule,
-  migrateFeed,
-  migrateInfoflowContractV2 as migrateModuleInfoflowContractV2,
+  FeedReceiptStore,
 } from "@adeptify/goalboard-module-feed";
-import { migrateSignals } from "@adeptify/goalboard-module-signals";
+
 import {
   SourcesError,
   SourcesModule,
-  migrateSources,
   sourceDeletedAt as moduleSourceDeletedAt,
 } from "@adeptify/goalboard-module-sources";
 import {
@@ -43,11 +50,14 @@ import type {
   ImportedFeedItemInput,
   InfoflowContractMigrationReport,
 } from "@adeptify/goalboard-contracts/modules/feed";
-import type { SourceRecord } from "@adeptify/goalboard-contracts/modules/sources";
-import type { ListenerRunRecord } from "@adeptify/goalboard-contracts/services/listener-host";
+import type {
+  SourceRecord,
+} from "@adeptify/goalboard-contracts/modules/sources";
+import type {
+  ListenerRunRecord,
+} from "@adeptify/goalboard-contracts/services/listener-host";
 
 import type {
-  FeedContractMigrationReceiptRecord,
   FeedItemDisposition,
   FeedItemRecord,
   FeedImportReceiptRecord,
@@ -61,9 +71,9 @@ import type {
   InboxEntrySubjectType,
   SourceHistoryDecision,
 } from "./types.js";
-import { assertSourceHistoryDecision } from "./contract.js";
-
-type Row = Record<string, unknown>;
+import {
+  assertSourceHistoryDecision,
+} from "./contract.js";
 
 export class FeedStoreError extends Error {
   constructor(
@@ -82,42 +92,8 @@ export class FeedStoreError extends Error {
 }
 
 /** Legacy schema entrypoint. Feed and Attention DDL are owned by their modules. */
-export function migrateFeedTables(db: Database.Database): void {
-  migrateSources(db);
-  migrateSignals(db);
-  migrateListenerHost(db);
-  migrateAttention(db);
-  migrateFeed(db);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS feed_runtime_blobs (
-      namespace TEXT NOT NULL,
-      key TEXT NOT NULL,
-      opaque TEXT NOT NULL,
-      cas_token TEXT NOT NULL,
-      PRIMARY KEY (namespace, key)
-    );
-
-    CREATE TABLE IF NOT EXISTS feed_import_receipts (
-      board_id TEXT NOT NULL REFERENCES boards(board_id) ON DELETE CASCADE,
-      receipt_id TEXT NOT NULL,
-      source_fingerprint TEXT NOT NULL,
-      summary_json TEXT NOT NULL,
-      credentials_status TEXT NOT NULL CHECK (credentials_status IN ('migrated', 'unavailable', 'not_requested')),
-      content_status TEXT NOT NULL CHECK (content_status IN ('migrated', 'partial', 'unavailable', 'not_requested')),
-      completed_at TEXT NOT NULL,
-      PRIMARY KEY (board_id, receipt_id)
-    );
-    CREATE INDEX IF NOT EXISTS feed_import_receipts_board_completed_idx
-      ON feed_import_receipts(board_id, completed_at DESC);
-  `);
-}
 
 /** Legacy export retained for schema migration 29 callers. */
-export function migrateInfoflowContractV2(db: Database.Database): InfoflowContractMigrationReport {
-  migrateFeedTables(db);
-  const attention = new AttentionModule(db, { exists: () => true });
-  return migrateModuleInfoflowContractV2(db, attention);
-}
 
 /**
  * Compatibility facade for callers that still speak the combined FeedStore
@@ -126,16 +102,20 @@ export function migrateInfoflowContractV2(db: Database.Database): InfoflowContra
  */
 export class FeedStore {
   private readonly sources: SourcesModule;
+  private readonly receipts: FeedReceiptStore;
+  private readonly journal: LocalSqliteJournal;
   private readonly attention: AttentionModule;
   private readonly feedItems: FeedModule;
 
   constructor(readonly db: Database.Database) {
     this.sources = new SourcesModule(db);
+    this.receipts = new FeedReceiptStore(db);
+    this.journal = new LocalSqliteJournal(db);
     // Pre-reorg projects already applied Feed migrations 22–29, but those
     // releases did not have Listener storage. Initialize its owner before
     // recovery or cursor reads; the migration preserves existing checkpoints.
     migrateListenerHost(db);
-    const goals = new GoalsQueryService(new GoalsRepository(db));
+    const goals = createGoalReadServices(db).query;
     let feedItems!: FeedModule;
     this.attention = new AttentionModule(db, {
       exists: (projectId, subjectType, subjectId) => {
@@ -188,12 +168,8 @@ export class FeedStore {
       ? { ...item, item_type: "inbox_message" as const }
       : item);
     const runs = listListenerRuns(this.db, boardId).map(compatibleRun);
-    const importReceipts = (this.db.prepare(
-      "SELECT * FROM feed_import_receipts WHERE board_id = ? ORDER BY completed_at DESC, receipt_id",
-    ).all(boardId) as Row[]).map(mapFeedImportReceipt);
-    const contractMigrations = (this.db.prepare(
-      "SELECT * FROM feed_contract_migration_receipts ORDER BY schema_version, receipt_id",
-    ).all() as Row[]).map(mapFeedContractMigrationReceipt);
+    const importReceipts = this.receipts.listImports(boardId);
+    const contractMigrations = this.receipts.listContractMigrations();
     return {
       sources,
       feed_items: feedItems,
@@ -469,26 +445,7 @@ export class FeedStore {
   }
 
   putImportReceipt(receipt: FeedImportReceiptRecord): void {
-    this.db.prepare(`
-      INSERT INTO feed_import_receipts (
-        board_id, receipt_id, source_fingerprint, summary_json,
-        credentials_status, content_status, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(board_id, receipt_id) DO UPDATE SET
-        source_fingerprint = excluded.source_fingerprint,
-        summary_json = excluded.summary_json,
-        credentials_status = excluded.credentials_status,
-        content_status = excluded.content_status,
-        completed_at = excluded.completed_at
-    `).run(
-      receipt.board_id,
-      receipt.receipt_id,
-      receipt.source_fingerprint,
-      JSON.stringify(receipt.summary),
-      receipt.credentials_status,
-      receipt.content_status,
-      receipt.completed_at,
-    );
+    this.receipts.putImportReceipt(receipt);
   }
 
   setDisposition(
@@ -597,20 +554,10 @@ export class FeedStore {
     payload: Record<string, unknown>,
     at: string,
   ): void {
-    this.db.prepare(`
-      INSERT INTO events (
-        event_id, board_id, actor_id, type, object_type, object_id, reason, payload_json, at
-      ) VALUES (?, ?, 'web-user', ?, ?, ?, ?, ?, ?)
-    `).run(
-      `event-${randomUUID()}`,
-      boardId,
-      type,
-      objectType,
-      objectId,
-      reason,
-      JSON.stringify(payload),
-      at,
-    );
+    this.journal.appendEvent({
+      eventId: `event-${randomUUID()}`, boardId, actorId: "web-user", type,
+      objectType, objectId, reason, payload, at,
+    });
   }
 }
 
@@ -707,44 +654,8 @@ function compatibleRun(run: ListenerRunRecord): FeedSourceRunRecord {
   };
 }
 
-function mapFeedImportReceipt(row: Row): FeedImportReceiptRecord {
-  return {
-    board_id: text(row.board_id),
-    receipt_id: text(row.receipt_id),
-    source_fingerprint: text(row.source_fingerprint),
-    summary: json<Record<string, unknown>>(row.summary_json, {}),
-    credentials_status: text(row.credentials_status) as FeedImportReceiptRecord["credentials_status"],
-    content_status: text(row.content_status) as FeedImportReceiptRecord["content_status"],
-    completed_at: text(row.completed_at),
-  };
-}
-
-function mapFeedContractMigrationReceipt(row: Row): FeedContractMigrationReceiptRecord {
-  return {
-    receipt_id: text(row.receipt_id),
-    schema_version: Number(row.schema_version ?? 0),
-    preflight: json<Record<string, number>>(row.preflight_json, {}),
-    postflight: json<Record<string, number>>(row.postflight_json, {}),
-    rollback_strategy: "sqlite_immediate_transaction",
-    applied_at: text(row.applied_at),
-  };
-}
-
 function isActiveAttention(status: InboxEntryStatus): boolean {
   return status === "open" || status === "in_progress";
-}
-
-function text(value: unknown): string {
-  return value == null ? "" : String(value);
-}
-
-function json<T>(value: unknown, fallback: T): T {
-  if (typeof value !== "string") return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 export type { InfoflowContractMigrationReport };

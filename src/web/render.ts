@@ -2209,7 +2209,7 @@ export function renderGoalBoardOnboardingStylesheet(): string {
   html[data-native-desktop="true"] .onboarding-page .onboarding-topbar {
     height: 44px;
     min-height: 44px;
-    padding: 0 24px 0 var(--desktop-native-project-safe-inline-start, 88px);
+    padding: 0 24px 0 var(--desktop-window-safe-inline-start, 88px);
   }
   body.onboarding-page[data-native-desktop="true"] .onboarding-topbar > *,
   html[data-native-desktop="true"] .onboarding-page .onboarding-topbar > * {

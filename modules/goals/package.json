@@ -26,6 +26,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "better-sqlite3": "12.8.0",
     "@adeptify/goalboard-contracts": "workspace:*"
   },
   "goalboard": {

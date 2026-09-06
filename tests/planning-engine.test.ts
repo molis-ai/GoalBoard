@@ -1,6 +1,7 @@
 import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import Database from "better-sqlite3";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,7 +21,8 @@ import {
   projectPlanningRelations,
   validatePlanningGraph,
 } from "@adeptify/goalboard-module-goals";
-import { GoalBoardProjectCatalog, readPersonalPlanningMethodPacks } from "../src/projects/catalog.js";
+import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+import { readPersonalPlanningMethodPacks } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { goalTreeProposalDecompositionIssues } from "@adeptify/goalboard-module-goals";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
@@ -430,9 +432,64 @@ test("project and personal methods persist without a second Goal truth model", a
 
   const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
   const personal = normalizePlanningMethodPack(customMethod("domain-personal-research"), "personal", null, "2026-08-22T04:00:00.000Z");
-  catalog.putPersonalPlanningMethodPack(personal);
+  catalog.personalPlanningMethods.save(personal, personal.updated_at);
   catalog.close();
   assert.equal(readPersonalPlanningMethodPacks(root)[0]?.method_id, personal.method_id);
+});
+
+test("personal method owner preserves versions and timestamps across reopen and rejects invalid writes", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "goalboard-personal-methods-"));
+  try {
+    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const method = { ...customMethod("domain-personal-test"), version: 7 };
+    try { catalog.personalPlanningMethods.save(method, "2026-09-01T01:00:00.000Z"); }
+    finally { catalog.close(); }
+    const reopened = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    try {
+      const saved = reopened.personalPlanningMethods.save({ ...method, name: "更新的方法", enabled: false }, "2026-09-02T01:00:00.000Z");
+      assert.equal(saved.version, 8);
+      assert.equal(saved.scope, "personal");
+      assert.equal(saved.created_at, "2026-09-01T01:00:00.000Z");
+      assert.throws(() => reopened.personalPlanningMethods.save({ ...method, name: "" }, "2026-09-03T01:00:00.000Z"));
+    } finally { reopened.close(); }
+    const [stored] = readPersonalPlanningMethodPacks(root);
+    assert.equal(stored?.version, 8);
+    assert.equal(stored?.name, "更新的方法");
+    assert.equal(stored?.enabled, false);
+    assert.equal(stored?.created_at, "2026-09-01T01:00:00.000Z");
+    assert.equal(stored?.updated_at, "2026-09-02T01:00:00.000Z");
+    const deleting = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    try {
+      assert.equal(deleting.personalPlanningMethods.delete(method.method_id), true);
+      assert.equal(deleting.personalPlanningMethods.delete(method.method_id), false);
+    } finally { deleting.close(); }
+    assert.deepEqual(readPersonalPlanningMethodPacks(root), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("personal method reads do not create a Home or migrate v8 catalogs; normal open upgrades them", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "goalboard-personal-upgrade-"));
+  try {
+    const missingHome = path.join(root, "missing");
+    assert.deepEqual(readPersonalPlanningMethodPacks(missingHome), []);
+    assert.equal(existsSync(missingHome), false);
+    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const databasePath = catalog.databasePath;
+    catalog.close();
+    const legacy = new Database(databasePath);
+    legacy.exec("DROP TABLE personal_planning_method_packs; UPDATE catalog_meta SET value = '8' WHERE key = 'schema_version'");
+    legacy.close();
+    assert.deepEqual(readPersonalPlanningMethodPacks(root), []);
+    const unchanged = new Database(databasePath, { readonly: true });
+    try {
+      assert.deepEqual(unchanged.prepare("SELECT value FROM catalog_meta WHERE key = 'schema_version'").get(), { value: "8" });
+      assert.equal(unchanged.prepare("SELECT name FROM sqlite_master WHERE name = 'personal_planning_method_packs'").get(), undefined);
+    } finally { unchanged.close(); }
+    const upgraded = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    try { upgraded.personalPlanningMethods.save(customMethod("domain-after-upgrade"), "2026-09-01T01:00:00.000Z"); }
+    finally { upgraded.close(); }
+    assert.equal(readPersonalPlanningMethodPacks(root)[0]?.method_id, "domain-after-upgrade");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Goals public Planning API owns method versions, graph checks, and change impact", () => {

@@ -218,3 +218,14 @@ export const GOALS_SCHEMA_SQL = `
     PRIMARY KEY (board_id, method_id)
   );
 `;
+
+/** Board identity and current Goal pointer owned by Goals. */
+export const GOAL_BOARDS_SCHEMA_SQL = `
+        CREATE TABLE boards (
+          board_id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          active_goal_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+`;

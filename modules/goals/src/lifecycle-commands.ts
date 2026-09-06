@@ -39,7 +39,6 @@ implements GoalsLifecycleApi<TTransition> {
   ) {
     this.completion = new GoalCompletionCommands(context, hooks);
     this.archive = new GoalArchiveCommands(context, {
-      clearActiveGoalIfMatches: hooks.clearActiveGoalIfMatches,
       blockingWork: hooks.blockingWork,
       reopenCompoundAncestorsForUntrustedChild: (...args) =>
         this.completion.reopenCompoundAncestorsForUntrustedChild(...args),

@@ -4,6 +4,7 @@ import type { ExecutionApplicationApi } from "@adeptify/goalboard-contracts/modu
 import type { GovernanceApplicationApi, ClarificationSessionRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { DraftDialogueApplicationApi, DraftDialogueStartInput, DraftDialogueTurnInput, DraftDialogueResumeInput, DraftDialogueView } from "./draft-dialogue-contract.js";
 import type { ExecutionValidationApplicationApi } from "./execution-validation-contract.js";
+import { goalNeedsDefinitionClarification } from "./clarification-policy.js";
 
 export interface DraftDialogueApplicationOptions {
   goals: { query: Pick<GoalsQueryApi, "getGoal" | "getBoard">; commands: Pick<GoalsCommandApi, "createGoal"> };
@@ -37,7 +38,7 @@ export class DraftDialogueApplication implements DraftDialogueApplicationApi {
         throw this.error("board.not_found", `Board 不存在: ${input.board_id}`);
       }
       const existing = input.goal_id?.trim() ? this.ports.goals.query.getGoal(input.board_id, goalId) : null;
-      if (existing && !needsClarification(existing)) {
+      if (existing && !this.needsClarification(existing)) {
         throw this.error("draft_dialogue.goal_not_clarifiable", "只能为仍待澄清的 Goal 开始自然语言对话");
       }
       if (existing && this.ports.governance.clarification.listSessions(input.board_id)
@@ -129,7 +130,7 @@ export class DraftDialogueApplication implements DraftDialogueApplicationApi {
       operation: "draft_dialogue_resume", request_hash: hash }, () => {
       const session = this.requireSession(input.board_id, input.goal_id);
       const goal = this.requireGoal(input.board_id, input.goal_id);
-      if (!needsClarification(goal)) throw this.error("draft_dialogue.not_clarifiable", "只有仍待澄清的 Goal 可以恢复自然语言对话");
+      if (!this.needsClarification(goal)) throw this.error("draft_dialogue.not_clarifiable", "只有仍待澄清的 Goal 可以恢复自然语言对话");
       const current = this.readView(input.board_id, input.goal_id, session.session_id);
       if (current.run && current.run.role === "clarifier") {
         if (current.run.actor_id !== actorId) {
@@ -198,6 +199,12 @@ export class DraftDialogueApplication implements DraftDialogueApplicationApi {
     return pair.claim.claim_id;
   }
 
+  private needsClarification(goal: GoalRecord): boolean {
+    if (goalNeedsDefinitionClarification(goal)) return true;
+    const current = this.ports.validation.query.getGoalWorkState({ board_id: goal.board_id, goal_id: goal.goal_id });
+    return current.work_state === "clarification_pending" || current.active_run?.role === "clarifier";
+  }
+
   private requiredText(value: string, code: string, message: string): string {
     const result = value.trim();
     if (!result) throw this.error(code, message);
@@ -205,11 +212,6 @@ export class DraftDialogueApplication implements DraftDialogueApplicationApi {
   }
 
   private error(code: string, message: string): Error { return this.ports.errorFactory(code, message); }
-}
-
-function needsClarification(goal: GoalRecord): boolean {
-  return goal.definition_state !== "accepted" || goal.decomposition_state === "abstract" ||
-    goal.decomposition_state === "frontier_open" || goal.acceptance_criteria.length === 0;
 }
 
 // Preserves persisted request identity from the original dialogue implementation.

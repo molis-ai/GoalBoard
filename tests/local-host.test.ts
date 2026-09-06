@@ -166,10 +166,10 @@ test("legacy entrypoints no longer construct independent business stores", async
   const { readFile } = await import("node:fs/promises");
   for (const relativePath of ["../src/web/server.ts", "../src/mcp/server.ts", "../src/v1/cli.ts"]) {
     const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
-    assert.doesNotMatch(source, /new\s+(?:SqliteGoalBoardStore|GoalBoardCoordinator)\s*\(/u, relativePath);
+    assert.doesNotMatch(source, /new\s+(?:SqliteGoalBoardStore|LocalProjectDatabase|GoalBoardCoordinator|GoalProjectApplication)\s*\(/u, relativePath);
     assert.match(source, /GoalBoardLocalHost|localHost/u, relativePath);
   }
   const composition = await readFile(new URL("../src/local-host/composition.ts", import.meta.url), "utf8");
-  assert.match(composition, /new SqliteGoalBoardStore\(/u);
-  assert.match(composition, /new GoalBoardCoordinator\(/u);
+  assert.match(composition, /new LocalProjectDatabase\(/u);
+  assert.match(composition, /new GoalProjectApplication\(/u);
 });

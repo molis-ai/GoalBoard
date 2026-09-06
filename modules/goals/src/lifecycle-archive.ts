@@ -52,7 +52,7 @@ export class GoalArchiveCommands {
         .prepare("UPDATE goals SET archived_at = ?, archived_by = ?, updated_at = ? WHERE goal_id = ?")
         .run(input.archived ? now : null, input.archived ? write.actor_id : null, now, input.goal_id);
       const activeGoalCleared = input.archived
-        ? this.hooks.clearActiveGoalIfMatches?.(boardId, input.goal_id, now) ?? false
+        ? this.context.repository.clearActiveGoalIfMatches(boardId, input.goal_id, now)
         : false;
       this.context.repository.appendEvent({
         eventId: randomUUID(),
@@ -195,7 +195,7 @@ export class GoalArchiveCommands {
           `).run(trashRecordId, relationId, now);
           deactivatedRelationIds.push(relationId);
         }
-        const activeGoalCleared = this.hooks.clearActiveGoalIfMatches?.(boardId, input.goal_id, now) ?? false;
+        const activeGoalCleared = this.context.repository.clearActiveGoalIfMatches(boardId, input.goal_id, now);
         const cursor = this.context.repository.appendEvent({
           eventId: randomUUID(),
           boardId,

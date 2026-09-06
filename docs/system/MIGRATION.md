@@ -1,12 +1,14 @@
 # 架构重组迁移矩阵
 
+DV4 最终状态（2026-09-06 09:24 UTC）：安装、分发与文档迁移已通过完整 Review，GoalBoard completed。公开 owner/caller、旧实现退出、当前 npm 独立消费、真实 App 升级/卸载保留/重装及供应链资产均见 [完整验收](../../specs/goalboard-architecture-reorganization/dv4-validation.md)。最终检查额外修复旧编译输出混入包的问题：根构建统一执行 workspace clean/build，新 npm 和 App 已复验。下方 DV4 未完成文字为阶段历史；Apple 公证/公开发布、总数据安全恢复、全产品 E2E 和最终清理不在该完成结论内。
+
 GW6（2026-09-06）：Goals 基础 schema、15/25/26 与 migration 30 的 Goals revision/coverage 回填已由 Goals 接管。V3 importer 与 Web 覆盖账 caller 改用公开 Command/Query，Host 保留同连接跨 owner 顺序及事务。193 项定向前后端回归通过，补强历史升级对账 6 项通过，详情见 [GW6 验收](../../specs/goalboard-architecture-reorganization/gw6-validation.md)。旧 Store 仍非整体 retired；最终清理与全产品 E2E 义务不变。
 
 DD2 工程状态（2026-09-06）：原生/历史提案应用与决定 UI/copy/client 已按 owner 迁移，209 项串行回归和 12 项边界反证通过。当前 Coordinator / root renderer / server 为 2,771 / 2,240 / 3,243 行；它们仍未整体退出。真实 caller 与验收见 `specs/goalboard-architecture-reorganization/dd2-caller-audit.md`、`dd2-validation.md`。下文旧阶段记录只保留当时边界；canonical 完成状态以 GoalBoard 为准。
 
 DD1（2026-09-06）：草稿 start/turn/resume 的真实应用已迁入 Goals Native Plugin；Governance clarification API 接管原记录、事件、幂等与事务，Goals/Execution 保持原事实 owner。Host 三个 capability 改绑新应用，CLI/MCP 契约不变；旧 Coordinator 三方法/独占 helper 和 root Store 澄清读取映射已删除。无 schema 改动，无新 Web 表单。DD2 的提案/决定、决定后关闭会话与最终 Host 清理仍未完成，详情见 `specs/goalboard-architecture-reorganization/dd1-validation.md`。
 
-DV4 分发切片：release tooling 已归 Desktop / Local Host，Desktop payload 复用唯一 installer release 创建能力并保留 vendor provenance/SBOM。干净锁文件安装、依赖拓扑构建全部 48 包、真实 Node 下载校验、App/DMG 构建已通过。首次 CLI bin 缺失和手写构建顺序问题均已修复。Apple notarization、根 npm tarball 独立安装和最终用户安装恢复仍未闭合；详见 DV4 进展，不宣称整体分发完成。
+DV4 分发切片：release tooling 已归 Desktop / Local Host，Desktop payload 复用唯一 installer release 创建能力并保留 vendor provenance/SBOM。干净锁文件安装、全部 48 包构建、Node 下载校验、App/DMG 与 npm 独立 consumer 已验证。真实旧 DMG 0.1.13→0.1.14 升级发现 Listener 初始化遗漏，已通过 owner API 修复并重跑；普通项目正文/历史、普通卸载保留及实际 App 重装恢复通过。见 [旧版升级验收](../../specs/goalboard-architecture-reorganization/dv4-upgrade-validation.md)。Apple 公证、完整 DV4 Review 和全产品 E2E/最终审计仍不能从这些局部证据推断。
 
 DV4 安装代码切片：旧 `src/install/` 实现已清零。Home、Runtime integration、常驻服务和卸载归 Local Host 的具名公开 API，均按职责拆分；卸载 catalog 只读事实检查归 Projects，根装配只注入连接生命周期和 Demo 删除。构建指纹已包含 workspace 源码，CLI 不传 `--source` 时仍安装根产品。当前验证见 [DV4 进展](../../specs/goalboard-architecture-reorganization/dv4-progress.md)；release/Tauri/provenance/SBOM 与整体用户 E2E 尚未完成。
 
@@ -150,7 +152,7 @@ DV1 第八切片：七个项目 context 工具的转换归 MCP App；公开 cata
 ### EX4 已落地的执行验收入口与 Action Projection
 
 - `plugins/native/goals` 现在公开 `ExecutionValidationApplicationApi`、Goal work/action projection、Contract revision 与 Human Review token 规则；旧 `src/v1/action-projection.ts` 等四个兼容实现已删除。
-- `src/v1/execution-validation-application.ts` 只组合 Query 与三组 command owner。Coordinator 不再暴露 Claim、Run、Evidence、Correction、Review 或 action/work projection 的同名方法。
+- `plugins/native/goals/src/execution-validation-application.ts` 组合 Query 与 Claim、Run、Verification 三组 command owner；原 `src/v1/execution-validation-*` 已退出。应用仅注入有限事务/快照/事件函数与模块公开 API，不接收旧 Store 或 Repository。Coordinator 仍装配并提供待迁的评价与跨模块组合，不因此视为已完全退出。
 - Workbench、CLI、MCP 各自通过公开 adapter 使用同一应用端口；MCP 的 resume/trash read 也不再绕过 adapter。权限、action token、幂等、错误和恢复结果保持一致。
 - Workbench 的 Claim、Run、Evidence、Review renderer 已迁到 `apps/workbench/src/execution-validation-ui.ts`；旧 `render.ts` 只注入翻译、图标、日期和引用显示能力。
 - `tests/execution-validation-app-adapters.test.ts` 固定 CLI 领取 → MCP 报告 → Workbench Evidence/Review → Goal 完成的跨入口链，并覆盖错误 actor、stale token 和 UI contribution。

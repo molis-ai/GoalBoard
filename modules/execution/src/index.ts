@@ -40,15 +40,7 @@ export class ExecutionModule implements ExecutionApplicationApi {
     this.repository = new ExecutionRepository(options.db);
     this.lifecycle = new ExecutionLifecycle(this.repository, options);
     this.commands = this.lifecycle;
-    this.query = {
-      listLifecycleEvents: boardId => this.repository.listLifecycleEvents(boardId),
-      getClaim: (boardId, claimId) => this.repository.getClaim(boardId, claimId),
-      getRun: (boardId, runId) => this.repository.getRun(boardId, runId),
-      getRunWithClaim: (boardId, runId) => this.repository.getRunWithClaim(boardId, runId),
-      listClaims: (boardId) => this.repository.listClaims(boardId),
-      listRuns: (boardId) => this.repository.listRuns(boardId),
-      listNonterminalRuns: boardId => this.repository.listNonterminalRuns(boardId),
-    };
+    this.query = executionQueries(this.repository);
   }
 }
 
@@ -71,3 +63,26 @@ export {
   type ExecutionSqliteDatabase,
   type ExecutionSqliteStatement,
 } from "./repository.js";
+
+function executionQueries(repository: ExecutionRepository): ExecutionQueryApi {
+  return {
+      activeRunIdsForGoal: (...args) => repository.activeRunIdsForGoal(...args),
+      latestCompletedWorkRunEventSeq: (...args) => repository.latestCompletedWorkRunEventSeq(...args),
+      listClaimsForGoal: (...args) => repository.listClaimsForGoal(...args),
+      latestRunForGoal: (...args) => repository.latestRunForGoal(...args),
+      latestClaimForGoal: (...args) => repository.latestClaimForGoal(...args),
+      latestActiveRunForClaim: claimId => repository.latestActiveRunForClaim(claimId),
+      activeClaimIdsForGoal: (...args) => repository.activeClaimIdsForGoal(...args),
+      listLifecycleEvents: boardId => repository.listLifecycleEvents(boardId),
+      getClaim: (boardId, claimId) => repository.getClaim(boardId, claimId),
+      getRun: (boardId, runId) => repository.getRun(boardId, runId),
+      getRunWithClaim: (boardId, runId) => repository.getRunWithClaim(boardId, runId),
+      listClaims: (boardId) => repository.listClaims(boardId),
+      listRuns: (boardId) => repository.listRuns(boardId),
+      listNonterminalRuns: boardId => repository.listNonterminalRuns(boardId),
+    };
+}
+
+export function createExecutionQueryApi(db: ExecutionSqliteDatabase): ExecutionQueryApi {
+  return executionQueries(new ExecutionRepository(db));
+}

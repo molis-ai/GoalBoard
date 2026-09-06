@@ -184,3 +184,22 @@ export interface InfoflowContractMigrationReport {
 export interface FeedModuleDependencies {
   attention: AttentionApi;
 }
+
+export interface FeedImportReceiptRecord {
+  board_id: string;
+  receipt_id: string;
+  source_fingerprint: string;
+  summary: Record<string, unknown>;
+  credentials_status: "migrated" | "unavailable" | "not_requested";
+  content_status: "migrated" | "partial" | "unavailable" | "not_requested";
+  completed_at: string;
+}
+
+export interface FeedContractMigrationReceiptRecord {
+  receipt_id: string;
+  schema_version: number;
+  preflight: Record<string, number>;
+  postflight: Record<string, number>;
+  rollback_strategy: "sqlite_immediate_transaction";
+  applied_at: string;
+}

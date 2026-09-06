@@ -22,6 +22,8 @@ The app depends on public Contracts and the Feed native Plugin's external-conten
 
 The native adapter source lives under `adapters/tauri/src/`, split into window/Capsule composition, PTY, managed Web service and Runtime environment responsibilities. `../../desktop/src-tauri/` remains distribution configuration and points its binary at this adapter.
 
+The public native bootstrap reads Tauri's real fullscreen state on page load and window resize. It publishes `data-native-fullscreen` and one `--desktop-window-safe-inline-start` value: 88px in a window, 2px in fullscreen. Workbench, settings and onboarding consume that same inset; maximization and viewport width are not fullscreen signals. The 48px Workbench titlebar places its controls at a visible 22px center in the packaged macOS App, matching the traffic lights. See `specs/native-titlebar-alignment/spec.md` for real-window verification and browser compatibility coverage.
+
 ## Commands
 
 DV4 release tooling lives under `tooling/`: build, verified Node download/runtime preparation, App install/start and release-version checks. Root `pnpm desktop:*` commands call these files; they are not a second application package. `prepare-runtime-payload.mjs` consumes Local Host's public `createGoalBoardRuntimePayload`, verifies native dependencies and CLI using the payload's Node with the payload as cwd, then replaces generated resources. A failed preparation leaves the previous resources untouched. It does not run npm install over unresolved `workspace:*` manifests. Node checksum and target-architecture checks remain in the shell preparation step.

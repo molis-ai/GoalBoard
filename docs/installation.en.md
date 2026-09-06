@@ -4,7 +4,7 @@
 
 ## macOS Desktop installer
 
-Current reorganization worktree: installer implementations now belong to Local Host. Build all workspace packages before installing from source; stale builds are rejected without replacing the existing installation. The release procedures below still require full DV4 revalidation. Passing targeted installer tests does not certify DMG or supply-chain artifacts from this worktree.
+Installer implementations belong to Local Host. Clean and rebuild all workspace packages before installing from source; stale builds are rejected without replacing the existing installation. Current distribution checks, real App upgrade/recovery and independent npm-consumer evidence are collected in the [DV4 validation report](../specs/goalboard-architecture-reorganization/dv4-validation.md). Internal validation on this Mac does not certify Apple notarization, Intel hardware or public-release readiness.
 
 For macOS, download the `macos-arm64` (Apple Silicon) or `macos-x64` (Intel) DMG from [GitHub Releases](https://github.com/adeptify/GoalBoard/releases), drag GoalBoard into Applications, and launch it. The App contains architecture-matched Node, GoalBoard Core, and production dependencies. On first launch it calls the same `goalboard install` service to populate `~/.goalboard`, then starts the local Web service. It does not create a project, connect a Runtime, create demo data, or edit a user project.
 
@@ -33,6 +33,14 @@ For local installs from the repository use `pnpm install:local`; this single ent
 Projects use an immutable `project_id`; display names can be renamed or duplicated, and every project has its own `goalboard.db`. `projects/catalog.db` stores project identity, DB location, optional Session bindings, historical workspace-to-project associations, a user-set unique default project, and deletion receipts; it never copies Goal facts and never depends on Git. A normal project selection does not automatically become the directory default; a new Session sees historical candidates and asks. Only after the user explicitly sets a default does it restore automatically. Unbinding an association does not delete the project; deleting a project and its DB requires separate confirmation and is refused while valid Claims or unfinished Runs exist.
 
 ## Updating an existing install
+
+### Offline backup and recovery boundaries
+
+There is no general online backup command yet. Quit the App and stop the owned GoalBoard service and every other writer before copying the complete Home to protected storage. Closing a window alone does not stop background writers. Keep the Catalog, project databases, Session Registry, encrypted content blobs and their keys together; copying only `.db` files is insufficient. External workspace files require their own backup.
+
+Restore with all writers stopped, retain the damaged directory for rollback, and place the complete backup at the original absolute Home path. Then check Project records, Goal text/history, exact Artifact versions and Session content before resuming work. Catalog database paths are absolute: this is not a cross-directory or cross-machine migration procedure. Keychain or environment-supplied keys are not included in a Home copy; verify their availability separately and never replace a missing key with a fresh one.
+
+The [production-path recovery tests](../tests/home-backup-recovery.test.ts) cover offline restore, subsequent writes and missing-key rejection. They do not certify online snapshots, cross-machine Keychain recovery or external workspace contents.
 
 If you already installed from the repository, pull the new content first, then use the same install entry point. Even when the version number doesn't change, the installer compares the actual content and refreshes the program and Skill; user projects, Runtime configuration, and demos are never rewritten automatically:
 

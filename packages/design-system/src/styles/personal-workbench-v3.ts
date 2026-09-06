@@ -11,8 +11,8 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
     }
     body[data-desktop-shell="true"][data-native-desktop="true"],
     html[data-native-desktop="true"] body[data-desktop-shell="true"] {
-      --desktop-native-project-safe-inline-start: 88px;
-      --desktop-native-settings-safe-inline-start: 80px;
+      --desktop-native-project-safe-inline-start: var(--desktop-window-safe-inline-start, 88px);
+      --desktop-native-settings-safe-inline-start: var(--desktop-window-safe-inline-start, 88px);
     }
     body[data-desktop-shell="true"] .app {
       height: 100dvh;

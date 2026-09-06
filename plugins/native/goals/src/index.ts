@@ -38,6 +38,7 @@ export * from "./goal-tree-contract.js";
 export * from "./legacy-proposal-contract.js";
 export * from "./action-projection.js";
 export * from "./contract-revisions.js";
+export * from "./clarification-policy.js";
 export * from "./human-review.js";
 export * from "./parent-completion.js";
 export * from "./policy-ui.js";
@@ -127,3 +128,19 @@ export { LegacyProposalSubmissionApplication } from "./legacy-proposal-submissio
 export { GoalTreeWebDecisionInput } from "./goal-tree-web-decision-input.js";
 export { explainGoalDecision, type HumanDecisionKind, type DecisionCopy } from "./decision-copy.js";
 export { createGoalsDecisionPresentation, type GoalsDecisionPresentationPrimitives, type DecisionEventKind } from "./decision-common-ui.js";
+
+export { ExecutionValidationApplication } from "./execution-validation-application.js";
+export type { ExecutionValidationApplicationPorts } from "./execution-validation-ports.js";
+
+export { GoalWorkStateQueries } from "./work-state-queries.js";
+
+export { GoalEligibility } from "./goal-eligibility.js";
+export { GoalAvailability } from "./goal-availability.js";
+
+export { GoalReadApplication, projectGoalLifecycle } from "./goal-query-application.js";
+export { RiskActionAuthorization } from "./risk-action-authorization.js";
+export { ensureGoalReviewObligations } from "./review-obligation-planning.js";
+
+export { readGoalBoardSnapshot, type GoalBoardSnapshotPorts } from "./board-snapshot-query.js";
+
+export { GoalBoardV1Error } from "./errors.js";

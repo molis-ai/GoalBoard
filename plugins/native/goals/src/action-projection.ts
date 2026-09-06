@@ -1,4 +1,4 @@
-import { recordedContractCoverageBlocksClosure } from "@adeptify/goalboard-module-goals";
+import { compoundCoverageState, goalNeedsDefinitionClarification } from "./clarification-policy.js";
 import { humanReviewAttentionToken } from "./human-review.js";
 import {
   criterionHasPassingResult,
@@ -342,8 +342,9 @@ function dependencyActions(goal: GoalRecord, snapshot: BoardSnapshot): GoalActio
 function compoundActions(goal: GoalRecord, snapshot: BoardSnapshot): GoalAction[] {
   if (goal.decomposition_state !== "closed_compound") return [];
   const index = projectionIndex(snapshot);
-  const childIds = [...(index.child_ids_by_parent.get(goal.goal_id) ?? [])].sort();
-  if (childIds.length === 0 || recordedContractCoverageBlocksClosure(goal, snapshot)) {
+  const coverageState = compoundCoverageState(goal, snapshot);
+  const childIds = coverageState.child_ids;
+  if (coverageState.status === "missing") {
     return [action(
       goal,
       "runtime",
@@ -360,18 +361,7 @@ function compoundActions(goal: GoalRecord, snapshot: BoardSnapshot): GoalAction[
       )],
     )];
   }
-  const parentRevisions = compatibleContractRevisions(goal, snapshot);
-  const coverage = index.coverage_by_parent.get(goal.goal_id) ?? [];
-  const staleCoverage = childIds.filter((childId) => {
-    const child = index.goals_by_id.get(childId);
-    if (!child) return true;
-    const childRevisions = compatibleContractRevisions(child, snapshot);
-    return !coverage.some((item) =>
-      item.child_goal_id === childId &&
-      parentRevisions.has(item.parent_contract_revision) &&
-      childRevisions.has(item.child_contract_revision)
-    );
-  });
+  const staleCoverage = coverageState.stale_child_ids;
   if (staleCoverage.length > 0) {
     return [action(
       goal,
@@ -745,7 +735,7 @@ export function deriveGoalActionProjection(
     pendingContract.length === 0 &&
     actions.every((item) => item.kind !== "repair")
   ) {
-    if (goal.definition_state !== "accepted" || goal.decomposition_state === "abstract" || goal.decomposition_state === "frontier_open" || goal.acceptance_criteria.length === 0) {
+    if (goalNeedsDefinitionClarification(goal)) {
       actions.push(action(goal, "runtime", "clarify", "ready", "goal", goal.goal_id));
     } else if (goal.validity_state === "needs_revalidation") {
       actions.push(action(goal, "runtime", "revalidate", "ready", "goal", goal.goal_id));

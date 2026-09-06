@@ -1,29 +1,12 @@
 import type { ExecutionApplicationApi } from "@adeptify/goalboard-contracts/modules/execution";
 import type { GoalPolicy } from "@adeptify/goalboard-contracts/modules/goals";
-import {
-  compactGoalActionProjection,
-  deriveGoalActionProjection,
-  type ClaimDecision,
-  type ClaimReleaseHandoff,
-  type ClaimReleaseResult,
-  type ClaimRenewRequest,
-  type ClaimRenewResult,
-  type ClaimRequest,
-  type ClaimRunDecision,
-} from "@adeptify/goalboard-plugin-goals";
+import { compactGoalActionProjection, deriveGoalActionProjection } from "./action-projection.js";
+import { type ClaimDecision, type ClaimReleaseHandoff, type ClaimReleaseResult, type ClaimRenewRequest, type ClaimRenewResult, type ClaimRequest, type ClaimRunDecision } from "./execution-validation-contract.js";
 
-import { GoalBoardV1Error } from "./errors.js";
-import type {
-  ActionTransitionReceipt,
-  BoardSnapshot,
-  ClaimRecord,
-  ClaimRole,
-  DecisionReason,
-  GoalAction,
-  GoalRecord,
-  GoalWorkStateView,
-  RunRecord,
-} from "./types.js";
+import type { ActionTransitionReceipt, GoalAction, GoalWorkStateView } from "./execution-validation-contract.js";
+import type { BoardSnapshot } from "./goal-entry-contract.js";
+import type { ExecutionClaimRecord as ClaimRecord, ExecutionClaimRole as ClaimRole, ExecutionRunRecord as RunRecord } from "@adeptify/goalboard-contracts/modules/execution";
+import type { GoalLifecycleReason as DecisionReason, GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type {
   ExecutionValidationApplicationPorts,
   ExecutionValidationEvaluation,
@@ -40,7 +23,7 @@ import {
 export class ExecutionValidationClaimCommands {
   constructor(private readonly ports: ExecutionValidationApplicationPorts) {}
 
-  private get store() { return this.ports.store; }
+  private get store() { return this.ports.state; }
   private get execution(): ExecutionApplicationApi { return this.ports.execution; }
   private get clock(): () => Date { return this.ports.clock; }
 
@@ -72,13 +55,13 @@ export class ExecutionValidationClaimCommands {
   private getGoalActionProjection(input: { board_id: string; goal_id: string }) {
     const snapshot = this.store.snapshot(input.board_id);
     const goal = snapshot.goals.find((item) => item.goal_id === input.goal_id);
-    if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
+    if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
     return deriveGoalActionProjection(goal, snapshot, this.clock().toISOString());
   }
   private getGoalWorkState(input: { board_id: string; goal_id: string }): GoalWorkStateView {
     const snapshot = this.store.snapshot(input.board_id);
     const goal = snapshot.goals.find((item) => item.goal_id === input.goal_id);
-    if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
+    if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${input.goal_id}`);
     return this.deriveGoalWorkState(input.board_id, goal, snapshot, this.clock().toISOString());
   }
   private reconcileLifecycle(
@@ -142,10 +125,10 @@ export class ExecutionValidationClaimCommands {
       const observedCursor = this.store.eventCursor(request.board_id);
       const snapshot = this.store.snapshot(request.board_id);
       const goal = snapshot.goals.find((item) => item.goal_id === request.goal_id);
-      if (!goal) throw new GoalBoardV1Error("goal.not_found", `找不到这个 Goal: ${request.goal_id}`);
+      if (!goal) throw new this.ports.errorType("goal.not_found", `找不到这个 Goal: ${request.goal_id}`);
       const projection = deriveGoalActionProjection(goal, snapshot, now);
       if (request.action_token && request.action_token !== projection.action_token) {
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "action.token_stale",
           "这条 Goal 在你操作前已经变化；旧动作未执行，请按最新状态继续。",
           {
@@ -165,7 +148,7 @@ export class ExecutionValidationClaimCommands {
       if (request.action_id) {
         selectedAction = claimable.find((candidate) => candidate.action_id === request.action_id) ?? null;
         if (!selectedAction) {
-          throw new GoalBoardV1Error(
+          throw new this.ports.errorType(
             "action.not_available",
             "这个动作已经不可用；没有创建 Claim 或 Run。",
             { action_id: request.action_id, projection },
@@ -173,7 +156,7 @@ export class ExecutionValidationClaimCommands {
         }
         const derivedRole = this.claimRoleForAction(selectedAction, snapshot);
         if (request.role && request.role !== derivedRole) {
-          throw new GoalBoardV1Error(
+          throw new this.ports.errorType(
             "action.role_mismatch",
             `动作要求 ${derivedRole}，不能按 ${request.role} 领取。`,
             { action_id: selectedAction.action_id, expected_role: derivedRole },
@@ -261,7 +244,7 @@ export class ExecutionValidationClaimCommands {
             `${candidate.kind}:${this.claimRoleForAction(candidate, snapshot)}:${candidate.target_id}`
           )
           .join("、");
-        throw new GoalBoardV1Error(
+        throw new this.ports.errorType(
           "action.id_required",
           claimable.length === 0
             ? "当前没有与这个角色唯一匹配的可领取动作。"
@@ -358,7 +341,7 @@ export class ExecutionValidationClaimCommands {
       this.requireBoard(input.board_id);
       const now = this.clock().toISOString();
       const claim = this.execution.query.getClaim(input.board_id, input.claim_id);
-      if (!claim) throw new GoalBoardV1Error("claim.not_found", `Claim 不存在: ${input.claim_id}`);
+      if (!claim) throw new this.ports.errorType("claim.not_found", `Claim 不存在: ${input.claim_id}`);
       const previousProjection = this.getGoalActionProjection({
         board_id: input.board_id,
         goal_id: claim.goal_id,
@@ -438,7 +421,7 @@ export class ExecutionValidationClaimCommands {
           idempotency_key: `select-goal-claim:${request.idempotency_key}`,
         });
       } catch (error) {
-        if (!(error instanceof GoalBoardV1Error) || error.code !== "action.id_required") throw error;
+        if (!(error instanceof this.ports.errorType) || error.code !== "action.id_required") throw error;
         const snapshot = this.store.snapshot(request.board_id);
         const goal = snapshot.goals.find((item) => item.goal_id === request.goal_id);
         const workState = goal
@@ -597,9 +580,9 @@ export class ExecutionValidationClaimCommands {
     const leaseRecovery = this.store.immediate(() => {
       this.requireBoard(input.board_id);
       const claim = this.execution.query.getClaim(input.board_id, input.claim_id);
-      if (!claim) throw new GoalBoardV1Error("claim.not_found", `Claim 不存在: ${input.claim_id}`);
+      if (!claim) throw new this.ports.errorType("claim.not_found", `Claim 不存在: ${input.claim_id}`);
       if (claim.actor_id !== input.actor_id) {
-        throw new GoalBoardV1Error("claim.not_owner", "只有领取者可以释放 Claim");
+        throw new this.ports.errorType("claim.not_owner", "只有领取者可以释放 Claim");
       }
       const at = this.clock().toISOString();
       if (claim.state === "active" && claim.expires_at <= at) {
@@ -618,7 +601,7 @@ export class ExecutionValidationClaimCommands {
       return null;
     });
     if (leaseRecovery) {
-      throw new GoalBoardV1Error(
+      throw new this.ports.errorType(
         "claim.lease_expired",
         "Claim 租约已过期，旧 Runtime 不需要再释放；请重新领取 Goal",
         {
@@ -663,9 +646,9 @@ export class ExecutionValidationClaimCommands {
       }
       this.requireBoard(input.board_id);
       const claim = this.execution.query.getClaim(input.board_id, input.claim_id);
-      if (!claim) throw new GoalBoardV1Error("claim.not_found", `Claim 不存在: ${input.claim_id}`);
+      if (!claim) throw new this.ports.errorType("claim.not_found", `Claim 不存在: ${input.claim_id}`);
       if (claim.actor_id !== input.actor_id) {
-        throw new GoalBoardV1Error("claim.not_owner", "只有领取者可以释放 Claim");
+        throw new this.ports.errorType("claim.not_owner", "只有领取者可以释放 Claim");
       }
       const goalId = claim.goal_id;
       const previousProjection = this.getGoalActionProjection({
@@ -703,7 +686,7 @@ export class ExecutionValidationClaimCommands {
         return { ...outcome, replayed: false };
       }
       if (claim.state !== "active") {
-        throw new GoalBoardV1Error("claim.not_active", "Claim 已经不是 active 状态");
+        throw new this.ports.errorType("claim.not_active", "Claim 已经不是 active 状态");
       }
       const at = this.clock().toISOString();
       const ended = this.execution.commands.releaseClaim({
@@ -795,9 +778,9 @@ export class ExecutionValidationClaimCommands {
       }
       this.requireBoard(input.board_id);
       const claim = this.execution.query.getClaim(input.board_id, input.claim_id);
-      if (!claim) throw new GoalBoardV1Error("claim.not_found", `Claim 不存在: ${input.claim_id}`);
+      if (!claim) throw new this.ports.errorType("claim.not_found", `Claim 不存在: ${input.claim_id}`);
       if (claim.state !== "active") {
-        throw new GoalBoardV1Error("claim.not_active", "Claim 已经不是 active 状态");
+        throw new this.ports.errorType("claim.not_active", "Claim 已经不是 active 状态");
       }
       const goalId = claim.goal_id;
       const previousProjection = this.getGoalActionProjection({

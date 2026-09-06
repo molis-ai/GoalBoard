@@ -1,5 +1,7 @@
 # GoalBoard 架构与包重组需求书
 
+2026-09-06 范围澄清（用户明确确认）：**Outbox 的实现与重放验收留到后续，本期只重组现有功能。** 下文 Storage/Exchange/Materialization 中的 Outbox 设计仍保留为目标架构，不再表述为本期已有能力；本期完整保留并验证已实现的事务、幂等、失败重试与恢复。此澄清不减免旧代码清零、Huge Class治理、包边界、全产品前后端E2E及清理后复验。GoalBoard对应验收条目的正式修订当前遇到澄清入口冲突，见 [验证与范围记录](assurance-validation.md)，未冒充canonical已更新。
+
 GW6 实施补齐（2026-09-06）：按已接受 `gw6-work-plan.md`，Goals 基础 schema、15/25/26/30 Goals 升级、V3 旧覆盖账 Query/导入写入已经归入 Goals；Host 保留同连接跨 owner 事务，Web/导入器使用公开 API。已完成定向前后端兼容与失败恢复检查，见 [GW6 验收](gw6-validation.md)。不新增产品功能，不缩减父项/根目标的完整 E2E、清理、再次 E2E 和架构总审要求。
 
 状态：已确认（Architecture Baseline / F1）

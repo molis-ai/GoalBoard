@@ -70,24 +70,11 @@ export interface FeedSourceRunRecord {
   updated_at: string;
 }
 
-export interface FeedImportReceiptRecord {
-  board_id: string;
-  receipt_id: string;
-  source_fingerprint: string;
-  summary: Record<string, unknown>;
-  credentials_status: "migrated" | "unavailable" | "not_requested";
-  content_status: "migrated" | "partial" | "unavailable" | "not_requested";
-  completed_at: string;
-}
+export type { FeedImportReceiptRecord } from "@adeptify/goalboard-contracts/modules/feed";
+import type { FeedImportReceiptRecord } from "@adeptify/goalboard-contracts/modules/feed";
 
-export interface FeedContractMigrationReceiptRecord {
-  receipt_id: string;
-  schema_version: number;
-  preflight: Record<string, number>;
-  postflight: Record<string, number>;
-  rollback_strategy: "sqlite_immediate_transaction";
-  applied_at: string;
-}
+export type { FeedContractMigrationReceiptRecord } from "@adeptify/goalboard-contracts/modules/feed";
+import type { FeedContractMigrationReceiptRecord } from "@adeptify/goalboard-contracts/modules/feed";
 
 export interface InboxEntryRecord {
   board_id: string;

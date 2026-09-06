@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { GoalBoardCoordinator } from "./coordinator.js";
-import { SqliteGoalBoardStore } from "./store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 export const DEMO_BOARD_ID = "goalboard-v1-demo";
 
 export function seedDemoBoard(databasePath: string): void {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   try {
     const exists = store.db.prepare("SELECT board_id FROM boards WHERE board_id = ?").get(DEMO_BOARD_ID);
     if (exists) return;

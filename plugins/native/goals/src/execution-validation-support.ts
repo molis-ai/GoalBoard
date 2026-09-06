@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import type {
   ClaimReleaseHandoff,
   GoalAction,
-} from "@adeptify/goalboard-plugin-goals";
-import type { DecisionReason } from "./types.js";
+} from "./execution-validation-contract.js";
+import type { GoalLifecycleReason as DecisionReason } from "@adeptify/goalboard-contracts/modules/goals";
 
 export const CLAIMABLE_GOAL_ACTION_KINDS = new Set<GoalAction["kind"]>([
   "clarify",
