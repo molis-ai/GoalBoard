@@ -1,140 +1,173 @@
 import type {
   CandidateGoalRecord,
   ContractProposalRecord,
-  GoalTreeProposalDecisionRecord,
-  GoalTreeProposalItemRecord,
-  GoalTreeProposalRecord,
-  GoalTreeItemOwner,
   GovernanceRecordsApi,
-  NewNativeGoalTreeProposal,
-  NewNativeGoalTreeProposalItem,
+  GoalTreeProposalDecisionResult,
   RewireRecord,
 } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 
 import { json, text, type GovernanceRow } from "./mappers.js";
-import type { GovernanceSqliteDatabase } from "./repository.js";
+import { GovernanceRepository, type GovernanceSqliteDatabase } from "./repository.js";
+import { randomUUID } from "node:crypto";
 import { assertGovernanceTransition } from "./state-machine.js";
+import { GovernanceGoalTreeRecords } from "./goal-tree-records.js";
+import { GovernanceProposalOperationStore } from "./proposal-operation-store.js";
+import { GovernanceError, type GovernanceErrorFactory } from "./errors.js";
 
 export class GovernanceRecordStore implements GovernanceRecordsApi {
-  constructor(private readonly db: GovernanceSqliteDatabase) {}
-
-  findGoalTreeItemOwner(itemId: string): GoalTreeItemOwner | null {
-    const row = this.db.prepare(
-      "SELECT proposal_id, board_id FROM goal_tree_proposal_items WHERE item_id = ?",
-    ).get(itemId) as GovernanceRow | undefined;
-    return row ? { proposal_id: text(row.proposal_id), board_id: text(row.board_id) } : null;
+  private readonly proposalOperations: GovernanceProposalOperationStore;
+  private readonly goalTrees: GovernanceGoalTreeRecords;
+  constructor(private readonly db: GovernanceSqliteDatabase, errorFactory: GovernanceErrorFactory = (code, message, details) => new GovernanceError(code, message, details)) {
+    this.goalTrees = new GovernanceGoalTreeRecords(db, errorFactory);
+    this.proposalOperations = new GovernanceProposalOperationStore(db, errorFactory);
   }
 
-  insertGoalTreeProposal(proposal: NewNativeGoalTreeProposal): void {
-    this.db.prepare(`INSERT INTO goal_tree_proposals (
-      proposal_id, board_id, root_goal_id, submitted_by, discovered_in_run_id,
-      state, version, supersedes_proposal_id, supersedes_legacy_proposal_id,
-      base_event_cursor, summary, narrative_json, decision_json,
-      created_at, updated_at, decided_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`)
-      .run(
-        proposal.proposal_id, proposal.board_id, proposal.root_goal_id,
-        proposal.submitted_by, proposal.discovered_in_run_id, proposal.state,
-        proposal.version, proposal.supersedes_proposal_id,
-        proposal.supersedes_legacy_proposal_id ?? null, proposal.base_event_cursor,
-        proposal.summary, proposal.narrative == null ? null : json(proposal.narrative),
-        proposal.created_at, proposal.updated_at,
-      );
+  executeGoalTreeSubmission(...args: Parameters<GovernanceRecordsApi["executeGoalTreeSubmission"]>) {
+    return this.proposalOperations.executeSubmission(...args);
   }
 
-  insertGoalTreeProposalItem(item: NewNativeGoalTreeProposalItem): void {
-    this.db.prepare(`INSERT INTO goal_tree_proposal_items (
-      item_id, proposal_id, board_id, ordinal, kind, operation, payload_json,
-      source_refs_json, reason, explanation_json, confidence, affected_objects_json,
-      baseline_versions_json, requires_user_confirmation, state, conflict_json,
-      materialized_objects_json, revision_proposal_id, supersedes_item_id,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]', NULL, ?, ?, ?)`)
-      .run(
-        item.item_id, item.proposal_id, item.board_id, item.ordinal, item.kind,
-        item.operation, json(item.payload), json(item.source_refs), item.reason,
-        item.explanation == null ? null : json(item.explanation), item.confidence,
-        json(item.affected_objects), json(item.baseline_versions),
-        item.requires_user_confirmation ? 1 : 0, item.state,
-        item.supersedes_item_id, item.created_at, item.updated_at,
-      );
+  executeContractProposalSubmission(...args: Parameters<GovernanceRecordsApi["executeContractProposalSubmission"]>) {
+    return this.proposalOperations.executeContractProposalSubmission(...args);
   }
 
-  supersedeGoalTreeProposal(proposalId: string, at: string): void {
-    this.db.prepare("UPDATE goal_tree_proposals SET state = 'superseded', updated_at = ? WHERE proposal_id = ?")
-      .run(at, proposalId);
-    this.db.prepare(`UPDATE goal_tree_proposal_items SET state = 'superseded', updated_at = ?
-      WHERE proposal_id = ? AND state IN ('pending', 'conflict')`).run(at, proposalId);
+  executeCandidateSubmission(...args: Parameters<GovernanceRecordsApi["executeCandidateSubmission"]>) {
+    return this.proposalOperations.executeCandidateSubmission(...args);
   }
 
-  setGoalTreeItemCheck(
-    proposalId: string,
-    itemId: string,
-    state: "pending" | "conflict",
-    conflict: Record<string, unknown> | null,
-    at: string,
-  ): void {
-    this.db.prepare(`UPDATE goal_tree_proposal_items
-      SET state = ?, conflict_json = ?, updated_at = ? WHERE item_id = ? AND proposal_id = ?`)
-      .run(state, conflict ? json(conflict) : null, at, itemId, proposalId);
+  executeDependencyProposalSubmission(...args: Parameters<GovernanceRecordsApi["executeDependencyProposalSubmission"]>) {
+    return this.proposalOperations.executeDependencyProposalSubmission(...args);
   }
 
-  transitionGoalTreeProposal(
-    proposalId: string,
-    state: GoalTreeProposalRecord["state"],
-    decision: Record<string, unknown> | null,
-    at: string,
-    decidedAt: string | null = at,
-  ): void {
-    const current = this.db.prepare("SELECT state FROM goal_tree_proposals WHERE proposal_id = ?")
-      .get(proposalId) as GovernanceRow | undefined;
-    if (current) {
-      assertGovernanceTransition("goal_tree_proposal", text(current.state) as GoalTreeProposalRecord["state"], state);
-    }
-    this.db.prepare(`UPDATE goal_tree_proposals
-      SET state = ?, decision_json = ?, updated_at = ?, decided_at = ? WHERE proposal_id = ?`)
-      .run(state, decision == null ? null : json(decision), at, decidedAt, proposalId);
+  recordContractProposalSubmission(input: Parameters<GovernanceRecordsApi["recordContractProposalSubmission"]>[0]): number {
+    return this.proposalOperations.recordContractProposalSubmission(input);
   }
 
-  transitionGoalTreeItem(input: {
-    proposal_id: string;
-    item_id: string;
-    state: GoalTreeProposalItemRecord["state"];
-    conflict?: Record<string, unknown> | null;
-    materialized_objects?: GoalTreeProposalItemRecord["materialized_objects"];
-    revision_proposal_id?: string | null;
-    updated_at: string;
-  }): void {
-    const current = this.db.prepare(
-      "SELECT state FROM goal_tree_proposal_items WHERE proposal_id = ? AND item_id = ?",
-    ).get(input.proposal_id, input.item_id) as GovernanceRow | undefined;
-    if (current) {
-      assertGovernanceTransition("goal_tree_item", text(current.state) as GoalTreeProposalItemRecord["state"], input.state);
-    }
-    this.db.prepare(`UPDATE goal_tree_proposal_items SET state = ?, conflict_json = ?,
-      materialized_objects_json = ?, revision_proposal_id = ?, updated_at = ?
-      WHERE proposal_id = ? AND item_id = ?`)
-      .run(
-        input.state, input.conflict ? json(input.conflict) : null,
-        json(input.materialized_objects ?? []), input.revision_proposal_id ?? null,
-        input.updated_at, input.proposal_id, input.item_id,
-      );
+  recordCandidateSubmission(input: Parameters<GovernanceRecordsApi["recordCandidateSubmission"]>[0]): number {
+    return this.proposalOperations.recordCandidateSubmission(input);
   }
 
-  insertGoalTreeDecision(decision: GoalTreeProposalDecisionRecord): void {
-    this.db.prepare(`INSERT INTO goal_tree_proposal_decisions (
-      decision_id, board_id, proposal_id, item_id, decision, actor_id,
-      authority_source, runtime_actor_id, conversation_ref, message_ref,
-      reason, revision_proposal_id, materialized_objects_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(
-        decision.decision_id, decision.board_id, decision.proposal_id,
-        decision.item_id, decision.decision, decision.actor_id,
-        decision.authority_source, decision.runtime_actor_id,
-        decision.conversation_ref, decision.message_ref, decision.reason,
-        decision.revision_proposal_id, json(decision.materialized_objects),
-        decision.created_at,
-      );
+  recordDependencyProposalSubmission(input: Parameters<GovernanceRecordsApi["recordDependencyProposalSubmission"]>[0]): number {
+    return this.proposalOperations.recordDependencyProposalSubmission(input);
+  }
+
+  executeContractProposalDecision(...args: Parameters<GovernanceRecordsApi["executeContractProposalDecision"]>) {
+    return this.proposalOperations.executeContractDecision(...args);
+  }
+
+  executeCandidateDecision(...args: Parameters<GovernanceRecordsApi["executeCandidateDecision"]>) {
+    return this.proposalOperations.executeCandidateDecision(...args);
+  }
+
+  executeRewireDecision(...args: Parameters<GovernanceRecordsApi["executeRewireDecision"]>) {
+    return this.proposalOperations.executeRewireDecision(...args);
+  }
+
+  executeGoalTreeDecision<TTransition>(input: Parameters<GovernanceRecordsApi["executeGoalTreeDecision"]>[0],
+    operation: () => { value: Omit<GoalTreeProposalDecisionResult<TTransition>, "replayed">; at: string }): GoalTreeProposalDecisionResult<TTransition> {
+    return this.proposalOperations.executeGoalTreeDecision(input, operation);
+  }
+
+  recordGoalTreeDecision(input: Parameters<GovernanceRecordsApi["recordGoalTreeDecision"]>[0]): number {
+    return this.proposalOperations.recordGoalTreeDecision(input);
+  }
+
+  recordRewireDecision(input: Parameters<GovernanceRecordsApi["recordRewireDecision"]>[0]): number {
+    return this.proposalOperations.recordRewireDecision(input);
+  }
+
+  recordCandidateDecision(input: Parameters<GovernanceRecordsApi["recordCandidateDecision"]>[0]): number {
+    return this.proposalOperations.recordCandidateDecision(input);
+  }
+
+  recordContractProposalDecision(input: Parameters<GovernanceRecordsApi["recordContractProposalDecision"]>[0]): number {
+    return this.proposalOperations.recordContractDecision(input);
+  }
+
+  recordGoalTreeSubmission(input: Parameters<GovernanceRecordsApi["recordGoalTreeSubmission"]>[0]): number {
+    return this.proposalOperations.recordSubmission(input);
+  }
+
+  executeGoalTreeCheck(...args: Parameters<GovernanceRecordsApi["executeGoalTreeCheck"]>) {
+    return this.proposalOperations.executeCheck(...args);
+  }
+
+  recordGoalTreeCheck(input: Parameters<GovernanceRecordsApi["recordGoalTreeCheck"]>[0]): number {
+    return this.proposalOperations.recordCheck(input);
+  }
+
+  recordGoalTreeRevision(input: Parameters<GovernanceRecordsApi["recordGoalTreeRevision"]>[0]): number {
+    return this.proposalOperations.recordRevision(input);
+  }
+
+  recordEquivalentRewireSupersession(input: Parameters<GovernanceRecordsApi["recordEquivalentRewireSupersession"]>[0]): number {
+    return this.proposalOperations.recordEquivalentRewireSupersession(input);
+  }
+
+  recordTreeRewireDecision(input: Parameters<GovernanceRecordsApi["recordTreeRewireDecision"]>[0]): number {
+    const repository = new GovernanceRepository(this.db);
+    repository.appendEvent({
+      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
+      type: `rewire.${input.state}_from_tree_proposal`, object_type: "rewire", object_id: input.rewire_id,
+      reason: input.reason, at: input.at,
+      payload: { proposal_item_id: input.source_item_id,
+        ...(input.state === "applied" ? { relation_ids: input.relation_ids } : {}) },
+    });
+    return repository.eventCursor(input.board_id);
+  }
+
+  recordTreeCandidateApproval(input: Parameters<GovernanceRecordsApi["recordTreeCandidateApproval"]>[0]): number {
+    const repository = new GovernanceRepository(this.db);
+    repository.appendEvent({
+      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
+      type: "candidate.approved_from_tree_proposal", object_type: "candidate", object_id: input.candidate_id,
+      reason: input.reason, at: input.at,
+      payload: input.mode === "promote"
+        ? { proposal_id: input.proposal_id, proposal_item_id: input.source_item_id,
+            formal_goal_id: input.formal_goal_id, materialized_by_proposal_id: input.materialized_by_proposal_id,
+            relation_ids: input.relation_ids }
+        : { proposal_item_id: input.source_item_id, formal_goal_id: input.formal_goal_id },
+    });
+    return repository.eventCursor(input.board_id);
+  }
+
+  recordGoalTreeItemDecision(...args: Parameters<GovernanceRecordsApi["recordGoalTreeItemDecision"]>) {
+    return this.goalTrees.recordGoalTreeItemDecision(...args);
+  }
+
+  refreshGoalTreeProposalState(...args: Parameters<GovernanceRecordsApi["refreshGoalTreeProposalState"]>) {
+    return this.goalTrees.refreshGoalTreeProposalState(...args);
+  }
+
+  findGoalTreeItemOwner(...args: Parameters<GovernanceRecordsApi["findGoalTreeItemOwner"]>) {
+    return this.goalTrees.findGoalTreeItemOwner(...args);
+  }
+
+  insertGoalTreeProposal(...args: Parameters<GovernanceRecordsApi["insertGoalTreeProposal"]>) {
+    return this.goalTrees.insertGoalTreeProposal(...args);
+  }
+
+  insertGoalTreeProposalItem(...args: Parameters<GovernanceRecordsApi["insertGoalTreeProposalItem"]>) {
+    return this.goalTrees.insertGoalTreeProposalItem(...args);
+  }
+
+  supersedeGoalTreeProposal(...args: Parameters<GovernanceRecordsApi["supersedeGoalTreeProposal"]>) {
+    return this.goalTrees.supersedeGoalTreeProposal(...args);
+  }
+
+  setGoalTreeItemCheck(...args: Parameters<GovernanceRecordsApi["setGoalTreeItemCheck"]>) {
+    return this.goalTrees.setGoalTreeItemCheck(...args);
+  }
+
+  transitionGoalTreeProposal(...args: Parameters<GovernanceRecordsApi["transitionGoalTreeProposal"]>) {
+    return this.goalTrees.transitionGoalTreeProposal(...args);
+  }
+
+  transitionGoalTreeItem(...args: Parameters<GovernanceRecordsApi["transitionGoalTreeItem"]>) {
+    return this.goalTrees.transitionGoalTreeItem(...args);
+  }
+
+  insertGoalTreeDecision(...args: Parameters<GovernanceRecordsApi["insertGoalTreeDecision"]>) {
+    return this.goalTrees.insertGoalTreeDecision(...args);
   }
 
   supersedePendingContractProposals(
@@ -142,10 +175,15 @@ export class GovernanceRecordStore implements GovernanceRecordsApi {
     goalId: string,
     at: string,
     decision: Record<string, unknown>,
-  ): void {
+  ): string[] {
+    const pending = this.db.prepare(`SELECT proposal_id FROM contract_proposals
+      WHERE board_id = ? AND goal_id = ? AND state = 'pending' ORDER BY created_at`)
+      .all(boardId, goalId) as Array<{ proposal_id: string }>;
+    if (!pending.length) return [];
     this.db.prepare(`UPDATE contract_proposals SET state = 'superseded', decided_at = ?, decision_json = ?
       WHERE board_id = ? AND goal_id = ? AND state = 'pending'`)
       .run(at, json(decision), boardId, goalId);
+    return pending.map(proposal => proposal.proposal_id);
   }
 
   transitionContractProposal(

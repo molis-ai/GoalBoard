@@ -9,7 +9,7 @@ import {
   GoalBoardWebServiceError,
   GoalBoardWebServiceManager,
   type GoalBoardWebServiceManagerOptions,
-} from "../src/install/web-service.js";
+} from "@adeptify/goalboard-app-local-host";
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-web-service-"));
@@ -118,6 +118,55 @@ async function makeOwnedConfigNeedRepair(item: Awaited<ReturnType<typeof fixture
   await writeFile(item.manager.receiptPath, outdatedReceiptText);
   return { outdatedPlist, outdatedReceiptText };
 }
+
+test("Web self-restart keeps the job loaded and defers its single kickstart until after the response", async (t) => {
+  const item = await fixture(); t.after(() => rm(item.directory, { recursive: true, force: true }));
+  const install = await item.manager.prepare("install");
+  await item.manager.confirm({ plan_id: install.plan_id, decision: "confirmed" });
+  const originalPlist = await readFile(item.manager.plistPath);
+  const originalReceipt = await readFile(item.manager.receiptPath);
+  item.commands.length = 0;
+  const plan = await item.manager.prepare("restart");
+  const input = { plan_id: plan.plan_id, decision: "confirmed" as const };
+  const pending = await item.manager.confirmFromWeb(input, 4242);
+  assert.equal(pending.result.status, "restarting");
+  assert.equal(item.isLoaded(), true);
+  assert.equal(item.commands.some((c) => c[1] !== "print"), false);
+  await assert.rejects(item.manager.confirmFromWeb(input, 4242), /不存在或已失效/);
+  assert.ok(pending.afterResponse);
+  await Promise.all([pending.afterResponse(), pending.afterResponse()]);
+  assert.deepEqual(item.commands.filter((c) => c[1] !== "print"), [["/bin/launchctl", "kickstart", "-k", "gui/501/com.adeptify.goalboard.web"]]);
+  assert.equal(item.isLoaded(), true);
+  assert.deepEqual(await readFile(item.manager.plistPath), originalPlist);
+  assert.deepEqual(await readFile(item.manager.receiptPath), originalReceipt);
+});
+
+test("Web restart still rejects stale plans and cancellation performs no service mutation", async (t) => {
+  const item = await fixture(); t.after(() => rm(item.directory, { recursive: true, force: true }));
+  const install = await item.manager.prepare("install");
+  await item.manager.confirm({ plan_id: install.plan_id, decision: "confirmed" });
+  item.commands.length = 0;
+  const cancel = await item.manager.prepare("restart");
+  const declined = await item.manager.confirmFromWeb({ plan_id: cancel.plan_id, decision: "declined" }, 4242);
+  assert.equal(declined.result.status, "declined"); assert.equal(declined.afterResponse, undefined);
+  const stale = await item.manager.prepare("restart");
+  await writeFile(item.manager.plistPath, "changed externally");
+  await assert.rejects(item.manager.confirmFromWeb({ plan_id: stale.plan_id, decision: "confirmed" }, 4242), /预览后发生变化/);
+  assert.equal(item.commands.some((c) => c[1] !== "print"), false);
+  assert.equal(item.isLoaded(), true);
+});
+
+test("Web controlling a different process keeps synchronous CLI restart semantics", async (t) => {
+  const item = await fixture(); t.after(() => rm(item.directory, { recursive: true, force: true }));
+  const install = await item.manager.prepare("install");
+  await item.manager.confirm({ plan_id: install.plan_id, decision: "confirmed" });
+  item.commands.length = 0;
+  const plan = await item.manager.prepare("restart");
+  const confirmed = await item.manager.confirmFromWeb({ plan_id: plan.plan_id, decision: "confirmed" }, 1234);
+  assert.equal(confirmed.result.status, "restarted"); assert.equal(confirmed.afterResponse, undefined);
+  assert.deepEqual(item.commands.filter((c) => c[1] !== "print").map((c) => c[1]), ["bootout", "bootstrap"]);
+  assert.equal((await item.manager.detect()).state, "running");
+});
 
 test("macOS LaunchAgent preview is read-only and confirmed install is persistent and idempotent", async () => {
   const item = await fixture();

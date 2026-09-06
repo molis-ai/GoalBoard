@@ -1,0 +1,83 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { openGoalBrowser } from "./fixtures/goal-browser.js";
+
+test("Goals tree supports real collapse, search, status filtering and detail selection without changing project facts", { timeout: 60_000 }, async (t) => {
+  const browser = await openGoalBrowser(t);
+  if (!browser) return;
+  const { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
+  await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
+  await command("Page.navigate", { url: origin + "/goals/V1" }, sessionId);
+  await command("Page.bringToFront", {}, sessionId);
+  await waitFor("document.readyState === 'complete' && document.querySelector('[data-tree-item][data-goal-id=CORE]')");
+  const dom = (selector: string) => "document.querySelector(" + JSON.stringify(selector) + ")";
+  const screenshots = process.env.GOALBOARD_TEST_CAPTURE === "1" ? await mkdtemp(join(tmpdir(), "goalboard-gw5-tree-")) : null;
+  async function capture(name: string) {
+    if (!screenshots) return;
+    const { data } = await command<{ data: string }>("Page.captureScreenshot", { format: "png" }, sessionId);
+    await writeFile(join(screenshots, name + ".png"), Buffer.from(data, "base64"));
+    console.log("Tree UI capture: " + join(screenshots, name + ".png"));
+  }
+  await capture("desktop");
+  const root = '[data-tree-item][data-goal-id="V1"]';
+  const toggle = root + ' > .tree-row [data-tree-toggle]';
+  await click(toggle);
+  assert.equal(await evaluate(dom(root) + ".classList.contains('is-collapsed')"), true);
+  assert.equal(await evaluate(dom(toggle) + ".getAttribute('aria-expanded')"), "false");
+  await click(toggle);
+  assert.equal(await evaluate(dom(toggle) + ".getAttribute('aria-expanded')"), "true");
+
+  await command("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "f", code: "KeyF", modifiers: 4, windowsVirtualKeyCode: 70 }, sessionId);
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "f", code: "KeyF", modifiers: 4, windowsVirtualKeyCode: 70 }, sessionId);
+  assert.equal(await evaluate("document.activeElement.matches('[data-global-search]')"), true);
+
+  await click("[data-global-search]");
+  await command("Input.insertText", { text: "zz-no-goal-e2e" }, sessionId);
+  await waitFor(dom("[data-tree-filter-empty]") + ".hidden === false");
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-tree-item]')].some(item => !item.hidden)"), false);
+  await click("[data-clear-tree-filter]");
+  assert.equal(await evaluate(dom("[data-global-search]") + ".value"), "");
+  assert.equal(await evaluate(dom("[data-tree-filter-empty]") + ".hidden"), true);
+
+  await click("[data-tree-filter-trigger]");
+  await command("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+  assert.equal(await evaluate(dom("[data-tree-filter]") + ".hidden"), true);
+  assert.equal(await evaluate("document.activeElement.matches('[data-tree-filter-trigger]')"), true);
+  await click("[data-tree-filter-trigger]");
+  await click('[data-status-filter][value="completed"]');
+  assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="CORE"]') + ".hidden"), false);
+  assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="WEB"]') + ".hidden"), true);
+  assert.equal(await evaluate(dom(root) + ".hidden"), false, "The ancestor remains visible so the completed child keeps its hierarchy");
+  await reloadPage();
+  await waitFor(dom('[data-status-filter][value="completed"]') + "?.checked === true");
+  assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="CORE"]') + ".hidden"), false);
+  assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="WEB"]') + ".hidden"), true);
+  assert.equal(await evaluate(dom(root) + ".hidden"), false);
+  await click("[data-tree-filter-trigger]");
+  await click("[data-clear-status-filter]");
+  assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="WEB"]') + ".hidden"), false);
+  await click("[data-tree-filter-trigger]");
+  await click('.tree-node[data-select-goal="CORE"]');
+  await waitFor(dom("#goal-tab-overview-CORE") + " && " + dom('.tree-node[data-select-goal="CORE"]') + ".getAttribute('aria-pressed') === 'true'");
+  const core = before.goals.find(goal => goal.goal_id === "CORE")!;
+  assert.equal(await evaluate(dom('.tree-node[data-select-goal="CORE"] strong') + ".textContent"), core.title);
+  await reloadPage();
+  await waitFor(dom("#goal-tab-overview-CORE"));
+  assert.equal(await evaluate(dom('.tree-node[data-select-goal="CORE"]') + ".getAttribute('aria-pressed')"), "true");
+  await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
+  await click('[data-mobile-target="tree"]');
+  await click("[data-global-search]");
+  assert.equal(await evaluate("document.activeElement.matches('[data-global-search]')"), true);
+  assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
+  await capture("mobile");
+  const after = store.snapshot(DEMO_BOARD_ID);
+  assert.deepEqual(after.goals, before.goals);
+  assert.deepEqual(after.relations, before.relations);
+  assert.deepEqual(after.runs, before.runs);
+});

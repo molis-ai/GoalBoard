@@ -8,6 +8,7 @@ import type {
   GoalsLifecycleApi,
   GoalsQueryApi,
   GoalsActorWrite,
+  GoalsImpactApi,
   RiskFactsInput,
   SetRiskStateInput,
   UpdateProjectGuidanceInput,
@@ -21,8 +22,16 @@ import {
 import {
   GoalCommands,
   type GoalRelationGraphIssue,
+  type GoalsCommandLifecycleHooks,
 } from "./goal-commands.js";
 import { GuidanceCommands } from "./guidance-commands.js";
+import { LegacyGoalCoverage } from "./legacy-coverage.js";
+import { GoalImpactCommands } from "./impact-commands.js";
+import { ConfirmedPolicyCommands } from "./confirmed-policy.js";
+import { ConfirmedGoalCommands } from "./confirmed-goal.js";
+import { ConfirmedRiskCommands } from "./confirmed-risk.js";
+import { ConfirmedRelationCommands } from "./confirmed-relations.js";
+import { AcceptedRewireRelations } from "./accepted-rewire-relations.js";
 import {
   GoalLifecycleCommands,
   type GoalsLifecycleHooks,
@@ -72,7 +81,8 @@ export const packageDescriptor = {
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
 
 export interface GoalsModuleHooks<TTransition>
-  extends GoalsLifecycleHooks<TTransition>, GoalsRiskLifecycleHooks<TTransition>, Pick<GoalRevisionHooks, "transitionRevisionDependents"> {
+  extends GoalsLifecycleHooks<TTransition>, GoalsRiskLifecycleHooks<TTransition>, Pick<GoalRevisionHooks, "transitionRevisionDependents">,
+    Pick<GoalsCommandLifecycleHooks, "supersedePendingContractProposals"> {
   validateRelationGraph?(boardId: string, input: AddGoalRelationInput): GoalRelationGraphIssue | null;
 }
 
@@ -81,9 +91,9 @@ export interface GoalsModuleOptions extends GoalsCommandContextOptions {
 }
 
 export class GoalsModule<TTransition> {
+  readonly impacts: GoalsImpactApi;
   readonly repository: GoalsRepository;
   readonly commands: GoalsCommandApi<TTransition> & {
-    validateGoalInput: GoalCommands["validateGoalInput"];
     normalizeRiskFacts: RiskCommands<TTransition>["normalizeRiskFacts"];
   };
   readonly lifecycle: GoalsLifecycleApi<TTransition> & Pick<
@@ -102,9 +112,7 @@ export class GoalsModule<TTransition> {
     | "closeAcceptedCompound"
   >;
   readonly planning: GoalsPlanningEngine;
-  readonly query: GoalsQueryApi & {
-    getRisk: (boardId: string, riskId: string) => ReturnType<GoalsRepository["getRisk"]>;
-  };
+  readonly query: GoalsQueryApi;
 
   constructor(
     db: GoalsSqliteDatabase,
@@ -113,6 +121,7 @@ export class GoalsModule<TTransition> {
   ) {
     this.repository = new GoalsRepository(db);
     const context = new GoalsCommandContext(this.repository, options);
+    this.impacts = new GoalImpactCommands(context);
     const query = new GoalsQueryService(this.repository, options);
     this.planning = new GoalsPlanningEngine(
       context,
@@ -120,6 +129,7 @@ export class GoalsModule<TTransition> {
     );
     let lifecycle!: GoalLifecycleCommands<TTransition>;
     const goals = new GoalCommands(context, {
+      supersedePendingContractProposals: (...args) => hooks.supersedePendingContractProposals(...args),
       validateRelationGraph: hooks.validateRelationGraph,
       reopenSatisfiedCompoundParent: (...args) => lifecycle.reopenSatisfiedCompoundParent(...args),
       reconcileCompoundAncestors: (...args) => lifecycle.reconcileCompoundAncestors(...args),
@@ -139,7 +149,26 @@ export class GoalsModule<TTransition> {
         lifecycle.reopenCompoundAncestorsForUntrustedChild(...args),
     });
     const guidance = new GuidanceCommands(context);
+    const confirmedPolicy = new ConfirmedPolicyCommands(context);
+    const confirmedGoals = new ConfirmedGoalCommands(context, input => goals.validateGoalInput(input),
+      input => lifecycle.acceptDraft(input));
+    const confirmedRisks = new ConfirmedRiskCommands(context,
+      (boardId, input) => risks.normalizeRiskFacts(boardId, input),
+      (boardId, goalId, state, at) => lifecycle.setValidityState(boardId, goalId, state, at));
+    const confirmedRelations = new ConfirmedRelationCommands(context, lifecycle);
+    const acceptedRewireRelations = new AcceptedRewireRelations(context, lifecycle, this.planning);
     this.commands = {
+      importLegacyCoverage: (boardId, rows) => new LegacyGoalCoverage(context).import(boardId, rows),
+      applyAcceptedRewireRelations: input => acceptedRewireRelations.apply(input),
+      registerAcceptedRisk: (facts, at) => confirmedRisks.registerAcceptedRisk(facts, at),
+      registerAcceptedRewireRisk: (facts, actorId, at) => confirmedRisks.registerAcceptedRewireRisk(facts, actorId, at),
+      registerAcceptedPolicy: input => confirmedPolicy.registerAcceptedPolicy(input),
+      updateConfirmedDraft: input => confirmedGoals.updateConfirmedDraft(input),
+      recordConfirmedDraftUpdate: input => confirmedGoals.recordConfirmedDraftUpdate(input),
+      applyConfirmedRelations: input => confirmedRelations.applyConfirmedRelations(input),
+      applyConfirmedRisk: input => confirmedRisks.applyConfirmedRisk(input),
+      createConfirmedGoal: input => confirmedGoals.createConfirmedGoal(input),
+      applyConfirmedPolicy: input => confirmedPolicy.applyConfirmedPolicy(input),
       createGoal: (boardId: string, input: CreateGoalInput, write: GoalsActorWrite) =>
         goals.createGoal(boardId, input, write),
       updateDraftGoal: (
@@ -174,8 +203,22 @@ export class GoalsModule<TTransition> {
     };
     this.lifecycle = lifecycle;
     this.query = {
+      listLegacyCoverage: boardId => query.listLegacyCoverage(boardId),
+      listPolicyHistory: boardId => query.listPolicyHistory(boardId),
+      listGoalRiskLinks: boardId => query.listGoalRiskLinks(boardId),
+      listDependencies: (boardId, goalId) => query.listDependencies(boardId, goalId),
+      listOpenGoalRisks: (boardId, goalId) => query.listOpenGoalRisks(boardId, goalId),
+      activeReplacement: (boardId, goalId) => query.activeReplacement(boardId, goalId),
+      listLifecycleEvents: boardId => query.listLifecycleEvents(boardId),
+      listContractRevisions: boardId => query.listContractRevisions(boardId),
+      listCoverageRevisions: boardId => query.listCoverageRevisions(boardId),
+      getRelation: (boardId, relationId) => query.getRelation(boardId, relationId),
+      policyBindingState: (boardId, bindingId) => query.policyBindingState(boardId, bindingId),
+      criterionGoalId: criterionId => query.criterionGoalId(criterionId),
+      policyBindingVersion: (boardId, bindingId, mode) => query.policyBindingVersion(boardId, bindingId, mode),
       getBoard: (boardId: string) => query.getBoard(boardId),
       getGoal: (boardId: string, goalId: string) => query.getGoal(boardId, goalId),
+      hasGoalIdentity: goalId => query.hasGoalIdentity(goalId),
       listGoals: (boardId: string, queryOptions) => query.listGoals(boardId, queryOptions),
       listRelations: (boardId: string, goalId?: string) => query.listRelations(boardId, goalId),
       listTrashedGoals: (boardId: string) => query.listTrashedGoals(boardId),
@@ -190,6 +233,11 @@ export class GoalsModule<TTransition> {
 }
 
 export { GoalsCommandError, type GoalsErrorFactory } from "./errors.js";
+export { GOALS_SCHEMA_SQL } from "./schema.js";
+export { migrateRiskTreatmentPlan, migrateProjectGuidance, migrateProjectGuidanceRevisions } from "./guidance-migrations.js";
+export { migrateGoalContractRevisionColumn, backfillGoalContractRevisions } from "./revision-migration.js";
+export { GoalImpactCommands } from "./impact-commands.js";
+export { GoalImpactRepository, GOAL_IMPACTS_SCHEMA_SQL, migrateGoalImpactHistory } from "./impact-repository.js";
 export {
   GoalLifecycleCommands,
   type GoalRevalidationRunView,
@@ -283,3 +331,4 @@ export type {
   UpdateRiskInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 export { GoalsRepository, type GoalsSqliteDatabase } from "./repository.js";
+export { GOAL_INPUT_BINDINGS_SCHEMA_SQL, GoalInputBindings } from "./input-bindings.js";

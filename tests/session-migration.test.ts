@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
 import { reconcileLegacySessionCatalog } from "../src/sessions/compatibility.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 async function fixture(): Promise<{ directory: string; home: string; workspace: string }> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-migration-"));
@@ -18,7 +18,7 @@ async function fixture(): Promise<{ directory: string; home: string; workspace: 
 test("legacy bindings and panels reconcile idempotently without deleting compatibility facts", async () => {
   const data = await fixture();
   const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: data.home });
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: data.home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: data.home });
   try {
     const project = await catalog.createProject({ display_name: "迁移项目", actor_id: "user" });
     const first = catalog.openDesktopPanel({
@@ -79,7 +79,7 @@ test("legacy bindings and panels reconcile idempotently without deleting compati
 test("legacy reconciliation rolls back the whole Registry batch on failure", async () => {
   const data = await fixture();
   const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: data.home });
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: data.home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: data.home });
   try {
     const project = await catalog.createProject({ display_name: "回滚项目", actor_id: "user" });
     catalog.openDesktopPanel({
@@ -106,3 +106,4 @@ test("legacy reconciliation rolls back the whole Registry batch on failure", asy
     await rm(data.directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

@@ -44,7 +44,7 @@ export type GoalActionKind =
 export type GoalActionStatus = "ready" | "active" | "blocked";
 export type GoalActionProgress = "not_started" | "in_progress" | "work_recorded" | "verified";
 export type GoalDisplayStatus = "continue" | "in_progress" | "waiting_user" | "waiting" | "blocked" | "completed";
-export type ImpactAccess = "read" | "write" | "decide" | "exclusive";
+export type ImpactAccess = import("@adeptify/goalboard-contracts/modules/goals").ImpactAccess;
 export type RiskBlockingMode = import("@adeptify/goalboard-contracts/modules/goals").RiskBlockingMode;
 export type GoalMode = import("@adeptify/goalboard-contracts/modules/goals").GoalPolicy["goal_mode"];
 export type ProjectGuidanceKind = import("@adeptify/goalboard-contracts/modules/goals").ProjectGuidanceKind;
@@ -62,21 +62,7 @@ export type GoalRelationRecord = import("@adeptify/goalboard-contracts/modules/g
 export type GoalTrashStatus = import("@adeptify/goalboard-contracts/modules/goals").GoalTrashStatus;
 export type GoalTrashResult = import("@adeptify/goalboard-contracts/modules/goals").GoalTrashResult;
 
-export interface ImpactBindingRecord {
-  binding_id: string;
-  board_id: string;
-  goal_id: string;
-  surface: string;
-  access: ImpactAccess;
-  input_snapshot: string | null;
-  state: "proposed" | "confirmed" | "inactive";
-  reason: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  deactivated_at: string | null;
-  deactivation_reason: string | null;
-}
+export type ImpactBindingRecord = import("@adeptify/goalboard-contracts/modules/goals").ImpactBindingRecord;
 
 export type RiskRecord = import("@adeptify/goalboard-contracts/modules/goals").RiskRecord;
 export type GoalPolicy = import("@adeptify/goalboard-contracts/modules/goals").GoalPolicy;
@@ -99,39 +85,13 @@ export type ReviewRecord =
 
 export type ContractRevisionEffect = import("@adeptify/goalboard-contracts/modules/goals").GoalContractRevisionEffect;
 
-export interface GoalContractRevisionRecord {
-  goal_id: string;
-  board_id: string;
-  revision: number;
-  contract: CreateGoalInput;
-  effect: ContractRevisionEffect;
-  source_proposal_id: string | null;
-  changed_by: string;
-  reason: string;
-  created_at: string;
-}
+export type GoalContractRevisionRecord = import("@adeptify/goalboard-contracts/modules/goals").GoalContractRevisionRecord;
 
-export interface GoalRiskLinkRecord {
-  goal_id: string;
-  risk_id: string;
-}
+export type GoalRiskLinkRecord = import("@adeptify/goalboard-contracts/modules/goals").GoalRiskLinkRecord;
 
-export interface CoverageContractRevisionRecord {
-  parent_goal_id: string;
-  child_goal_id: string;
-  parent_contract_revision: number;
-  child_contract_revision: number;
-  recorded_at: string;
-}
+export type CoverageContractRevisionRecord = import("@adeptify/goalboard-contracts/modules/goals").CoverageContractRevisionRecord;
 
-export interface GoalLifecycleEventRecord {
-  seq: number;
-  type: string;
-  object_type: string;
-  object_id: string;
-  payload: Record<string, unknown>;
-  at: string;
-}
+export type GoalLifecycleEventRecord = import("@adeptify/goalboard-plugin-goals").BoardSnapshot["lifecycle_events"][number];
 
 export interface GoalAction {
   action_id: string;
@@ -192,57 +152,15 @@ export type ContractProposalRecord =
  * Contract. They let the current Runtime resume a Draft conversation without
  * treating an inference or an unapproved structure as settled Goal truth.
  */
-export type ClarificationSessionState = "clarifying" | "proposal_ready" | "closed";
+export type ClarificationSessionState = import("@adeptify/goalboard-contracts/modules/governance-collaboration").ClarificationSessionState;
 
-export interface ClarificationFact {
-  statement: string;
-  source_kind: "user_answer" | "repository_fact" | "document_fact";
-  source_refs: string[];
-  confidence: number;
-  confirmed_by_user: boolean;
-}
+export type ClarificationFact = import("@adeptify/goalboard-contracts/modules/governance-collaboration").ClarificationFact;
 
-export interface ClarificationAssumption {
-  statement: string;
-  source_refs: string[];
-  confidence: number;
-  requires_user_confirmation: true;
-}
+export type ClarificationAssumption = import("@adeptify/goalboard-contracts/modules/governance-collaboration").ClarificationAssumption;
 
-export interface ClarificationSessionRecord {
-  session_id: string;
-  board_id: string;
-  goal_id: string;
-  claim_id: string | null;
-  run_id: string | null;
-  rough_idea: string;
-  state: ClarificationSessionState;
-  current_understanding: string | null;
-  next_question: string | null;
-  proposal_summary: string | null;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  closed_at: string | null;
-}
+export type ClarificationSessionRecord = import("@adeptify/goalboard-contracts/modules/governance-collaboration").ClarificationSessionRecord;
 
-export interface ClarificationTurnRecord {
-  turn_id: string;
-  session_id: string;
-  board_id: string;
-  goal_id: string;
-  run_id: string | null;
-  actor_id: string;
-  turn_index: number;
-  turn_kind: "rough_idea" | "user_answer";
-  user_message: string;
-  current_understanding: string | null;
-  known_facts: ClarificationFact[];
-  assumptions: ClarificationAssumption[];
-  next_question: string | null;
-  proposal_summary: string | null;
-  created_at: string;
-}
+export type ClarificationTurnRecord = import("@adeptify/goalboard-contracts/modules/governance-collaboration").ClarificationTurnRecord;
 
 /**
  * A proposed Goal Tree is deliberately separate from canonical Goals. It can
@@ -308,16 +226,7 @@ export type RewireRecord =
 
 export type DecisionReason = import("@adeptify/goalboard-contracts/modules/goals").GoalLifecycleReason;
 
-export interface ReadyGoal {
-  goal: GoalRecord;
-  role: ClaimRole;
-  why_now: string;
-  priority_hint: number;
-  dependency_summary: string[];
-  risk_summary: string[];
-  resolved_policy: GoalPolicy;
-  relevant_surfaces: ImpactBindingRecord[];
-}
+export type ReadyGoal = import("@adeptify/goalboard-plugin-goals").ReadyGoal;
 
 /**
  * The one user-facing work state for a Goal. It is derived from canonical
@@ -341,133 +250,15 @@ export interface GoalWorkStateView {
   reasons: DecisionReason[];
 }
 
-export interface AvailableGoal extends Omit<ReadyGoal, "role"> {
-  /** Exact canonical action to submit to select_goal. Null only for a legacy repair action. */
-  action_id: string | null;
-  action_token: string;
-  action_kind: GoalActionKind | null;
-  action_target_type: string | null;
-  action_target_id: string | null;
-  /** Null means this action does not require a new Claim or Run. */
-  role: ClaimRole | null;
-  work_state: GoalWorkState;
-  next_action: GoalWorkAction;
-  review_obligation_id: string | null;
-  /** True when an open parent must return to the user before unrelated work is chosen. */
-  requires_parent_confirmation: boolean;
-  /** Dependency-derived planning signals used to explain the execution order. */
-  planning: {
-    topological_level: number;
-    unlock_count: number;
-    longest_downstream_chain: number;
-    rationale: string;
-  };
-}
+export type AvailableGoal = import("@adeptify/goalboard-plugin-goals").AvailableGoal;
+export type BlockedAvailableGoal = import("@adeptify/goalboard-plugin-goals").BlockedAvailableGoal;
+export type BlockedAvailableOverview = import("@adeptify/goalboard-plugin-goals").BlockedAvailableOverview;
+export type ParallelRuntimeAssignment = import("@adeptify/goalboard-plugin-goals").ParallelRuntimeAssignment;
+export type ParallelExecutionSuggestion = import("@adeptify/goalboard-plugin-goals").ParallelExecutionSuggestion;
 
-/** A Goal that is not claimable because its finished work is waiting on a completion gate. */
-export interface BlockedAvailableGoal {
-  goal: GoalRecord;
-  work_state: "completion_blocked" | "waiting_for_human" | "replaced";
-  next_action: null;
-  reasons: DecisionReason[];
-  priority_hint: number;
-  risk_summary: string[];
-}
+export type BoardSnapshot = import("@adeptify/goalboard-plugin-goals").BoardSnapshot;
 
-/** A compact pointer to an ordinary phase blocker that can be expanded with Explain. */
-export interface BlockedAvailableOverview {
-  goal: GoalRecord;
-  work_state:
-    | "clarification_blocked"
-    | "waiting_children"
-    | "execution_blocked"
-    | "review_blocked"
-    | "revalidation_blocked"
-    | "invalidated";
-  next_action: "explain" | "release";
-  reasons: Array<Pick<DecisionReason, "code" | "message" | "facts" | "remediation">>;
-  priority_hint: number;
-}
-
-export interface ParallelRuntimeAssignment {
-  runtime_slot: "current_runtime" | `additional_runtime_${number}`;
-  goal_id: string;
-  title: string;
-  role: "executor";
-  required_capabilities: string[];
-}
-
-export interface ParallelExecutionSuggestion {
-  kind: "safe_parallel_execution";
-  advisory_only: true;
-  assignments: ParallelRuntimeAssignment[];
-}
-
-export interface BoardSnapshot {
-  board: {
-    board_id: string;
-    title: string;
-    active_goal_id: string | null;
-    created_at: string;
-    updated_at: string;
-  };
-  cursor: number;
-  goals: GoalRecord[];
-  relations: GoalRelationRecord[];
-  impacts: ImpactBindingRecord[];
-  risks: RiskRecord[];
-  goal_risks: GoalRiskLinkRecord[];
-  claims: ClaimRecord[];
-  runs: RunRecord[];
-  evidence: EvidenceRecord[];
-  evidence_corrections: EvidenceCorrectionRecord[];
-  review_obligations: ReviewObligationRecord[];
-  reviews: ReviewRecord[];
-  goal_contract_revisions: GoalContractRevisionRecord[];
-  coverage_contract_revisions: CoverageContractRevisionRecord[];
-  lifecycle_events: GoalLifecycleEventRecord[];
-  candidates: CandidateGoalRecord[];
-  contract_proposals: ContractProposalRecord[];
-  rewires: RewireRecord[];
-  clarification_sessions: ClarificationSessionRecord[];
-  clarification_turns: ClarificationTurnRecord[];
-  goal_tree_proposals: GoalTreeProposalRecord[];
-  planning_method_packs: PlanningMethodPack[];
-  project_guidance: ProjectGuidanceEntryRecord[];
-}
-
-export interface GoalContractView {
-  board: BoardSnapshot["board"];
-  observed_event_cursor: number;
-  goal_path: string;
-  goal: GoalRecord;
-  parent_contract_coverage: Array<{
-    parent_goal_id: string;
-    parent_goal_title: string;
-    record_status: "recorded" | "unrecorded";
-    promised_outputs: NonNullable<DecompositionReview["contract_coverage"]>["promised_outputs"];
-    acceptance_criteria: NonNullable<DecompositionReview["contract_coverage"]>["acceptance_criteria"];
-  }>;
-  work_state: GoalWorkStateView;
-  action_projection: GoalActionProjection;
-  relations: GoalRelationRecord[];
-  impacts: ImpactBindingRecord[];
-  risks: RiskRecord[];
-  resolved_policy: GoalPolicy;
-  claims: ClaimRecord[];
-  runs: RunRecord[];
-  evidence: EvidenceRecord[];
-  evidence_corrections: EvidenceCorrectionRecord[];
-  review_obligations: ReviewObligationRecord[];
-  reviews: ReviewRecord[];
-  candidates: CandidateGoalRecord[];
-  contract_proposals: ContractProposalRecord[];
-  rewires: RewireRecord[];
-  clarification_sessions: ClarificationSessionRecord[];
-  clarification_turns: ClarificationTurnRecord[];
-  goal_tree_proposals: GoalTreeProposalRecord[];
-  project_guidance: ProjectGuidanceEntryRecord[];
-}
+export type GoalContractView = import("@adeptify/goalboard-plugin-goals").GoalContractView;
 
 export type CreateGoalInput = import("@adeptify/goalboard-contracts/modules/goals").CreateGoalInput;
 export interface ClaimRequest {
@@ -519,61 +310,13 @@ export interface ClaimRunDecision {
   replayed: boolean;
 }
 
-export interface DraftDialogueStartInput {
-  board_id: string;
-  actor_id: string;
-  rough_idea: string;
-  draft_title?: string;
-  goal_id?: string;
-  capabilities?: string[];
-  goal_mode_attestation?: boolean;
-  lease_seconds?: number;
-  idempotency_key: string;
-}
+export type DraftDialogueStartInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueStartInput;
 
-export interface DraftDialogueTurnInput {
-  board_id: string;
-  goal_id: string;
-  run_id: string;
-  actor_id: string;
-  user_message: string;
-  current_understanding: string;
-  known_facts?: Array<{
-    statement: string;
-    source_kind: ClarificationFact["source_kind"];
-    source_refs?: string[];
-    confidence?: number;
-    confirmed_by_user?: boolean;
-  }>;
-  assumptions?: Array<{
-    statement: string;
-    source_refs?: string[];
-    confidence?: number;
-  }>;
-  next_question?: string | null;
-  proposal_summary?: string | null;
-  idempotency_key: string;
-}
+export type DraftDialogueTurnInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueTurnInput;
 
-export interface DraftDialogueResumeInput {
-  board_id: string;
-  goal_id: string;
-  actor_id: string;
-  capabilities?: string[];
-  goal_mode_attestation?: boolean;
-  lease_seconds?: number;
-  idempotency_key: string;
-}
+export type DraftDialogueResumeInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueResumeInput;
 
-export interface DraftDialogueView {
-  dialogue: ClarificationSessionRecord;
-  turns: ClarificationTurnRecord[];
-  goal: GoalRecord;
-  work_state: GoalWorkStateView;
-  claim: ClaimRecord | null;
-  run: RunRecord | null;
-  observed_event_cursor: number;
-}
+export type DraftDialogueView = import("@adeptify/goalboard-plugin-goals").DraftDialogueView;
 
 export type RevalidationDecision = import("@adeptify/goalboard-contracts/modules/goals").GoalRevalidationDecision<ActionTransitionReceipt>;
 
@@ -586,4 +329,3 @@ export const DEFAULT_GOAL_POLICY: GoalPolicy = {
   human_approval: false,
   max_lease_seconds: 1800,
 };
-import type { PlanningMethodPack } from "@adeptify/goalboard-contracts/modules/goals";

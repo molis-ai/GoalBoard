@@ -1,3 +1,4 @@
+import type { StoredModuleEvent } from "@adeptify/goalboard-contracts/platform/storage";
 import type {
   ExecutionClaimRecord,
   ExecutionRunRecord,
@@ -79,6 +80,15 @@ export function createExecutionSchema(db: ExecutionSqliteDatabase): void {
 
 export class ExecutionRepository {
   constructor(readonly db: ExecutionSqliteDatabase) {}
+
+  listLifecycleEvents(boardId: string): StoredModuleEvent[] {
+    return (this.db.prepare(`SELECT seq, type, object_type, object_id, payload_json, at FROM events
+      WHERE board_id = ? AND type IN ('run.started', 'run.completed') ORDER BY seq`)
+      .all(boardId) as Row[]).map(row => ({
+      seq: Number(row.seq ?? 0), type: text(row.type), object_type: text(row.object_type), object_id: text(row.object_id),
+      payload: parseJson<Record<string, unknown>>(row.payload_json, {}), at: text(row.at),
+    }));
+  }
 
   immediate<T>(operation: () => T): T {
     return this.db.transaction(operation).immediate();

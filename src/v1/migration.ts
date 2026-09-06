@@ -2,42 +2,8 @@ import { randomUUID } from "node:crypto";
 import { GoalBoardCoordinator } from "./coordinator.js";
 import { SqliteGoalBoardStore } from "./store.js";
 
-export interface LegacyV3ImportInput {
-  schema_version: "3.0";
-  goal_id: string;
-  meta: {
-    title?: string;
-    source: { seed: string };
-  };
-  root_goal: {
-    constraints: string[];
-  };
-  goals: Array<{
-    id: string;
-    parent: string | null;
-    one_liner: string;
-    covers: string[];
-    inputs: string[];
-    outputs: string[];
-  }>;
-  coverage_ledger: Array<{
-    id: string;
-    requirement: string;
-    status: "now" | "later" | "out";
-    owner_goal: string | null;
-    reason?: string | null;
-    entry_condition?: string | null;
-    revisit_at?: string | null;
-  }>;
-}
-
-export interface V3ImportReport {
-  board_id: string;
-  migrated: string[];
-  regenerate: string[];
-  goal_id_map: Record<string, string>;
-  observed_event_cursor: number;
-}
+import type { LegacyV3ImportInput, V3ImportReport } from "@adeptify/goalboard-plugin-goals";
+export type { LegacyV3ImportInput, V3ImportReport } from "@adeptify/goalboard-plugin-goals";
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9._:-]+/g, "-").replace(/^-+|-+$/g, "") || "legacy";
@@ -121,27 +87,17 @@ export function importV3Board(
       );
     }
     const now = new Date().toISOString();
-    const coverage = store.db.prepare(`
-      INSERT INTO coverage_items (
-        requirement_id, board_id, statement, disposition, owner_goal_id,
-        reason, revisit_condition, blocking, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const item of legacy.coverage_ledger) {
+    coordinator.goals.commands.importLegacyCoverage(input.target_board_id, legacy.coverage_ledger.map(item => {
       const disposition = item.status === "out" ? "out" : item.status === "later" ? "deferred" : item.owner_goal ? "covered" : "unresolved";
-      coverage.run(
-        `${safeId(input.target_board_id)}:v3:${safeId(item.id)}`,
-        input.target_board_id,
-        item.requirement,
-        disposition,
-        item.owner_goal ? idMap[item.owner_goal] ?? null : null,
-        item.reason ?? "从 V3 coverage ledger 导入",
-        item.entry_condition ?? item.revisit_at ?? null,
-        disposition === "unresolved" ? 1 : 0,
-        now,
-        now,
-      );
-    }
+      return {
+        requirement_id: `${safeId(input.target_board_id)}:v3:${safeId(item.id)}`,
+        statement: item.requirement, disposition,
+        owner_goal_id: item.owner_goal ? idMap[item.owner_goal] ?? null : null,
+        reason: item.reason ?? "从 V3 coverage ledger 导入",
+        revisit_condition: item.entry_condition ?? item.revisit_at ?? null,
+        blocking: disposition === "unresolved", created_at: now, updated_at: now,
+      };
+    }));
     const activeGoalId = legacy.goals[0] ? idMap[legacy.goals[0].id] : null;
     store.db
       .prepare("UPDATE boards SET active_goal_id = ?, updated_at = ? WHERE board_id = ?")

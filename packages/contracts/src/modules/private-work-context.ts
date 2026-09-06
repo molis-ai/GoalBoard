@@ -1,4 +1,5 @@
 import type { ContractDescriptor } from "../platform/package.js";
+export * from "./runtime-project-context.js";
 
 export const modulesPrivateWorkContextContract = {
   contractId: "io.goalboard.module.private-work-context.v1",
@@ -7,6 +8,56 @@ export const modulesPrivateWorkContextContract = {
   maturity: "partial",
   ssot: "docs/modules/private-work-context.md",
 } as const satisfies ContractDescriptor;
+
+export interface RuntimeWorkContext {
+  runtime_id: string;
+  stable_work_context_id: string | null;
+  host_declares_stable: boolean;
+  /** Canonical host workspace, independent from the optional Session ID. */
+  workspace?: RuntimeWorkspaceContext | null;
+}
+
+export interface NormalizedRuntimeWorkContext {
+  runtime_id: string;
+  stable_work_context_id: string | null;
+  workspace?: NormalizedRuntimeWorkspaceContext;
+}
+
+export interface RuntimeWorkspaceContext {
+  canonical_path: string;
+  realpath_verified: boolean;
+}
+
+export interface NormalizedRuntimeWorkspaceContext extends RuntimeWorkspaceContext {
+  workspace_id: string;
+  display_name: string;
+}
+
+export interface RuntimeProjectSuggestionClue {
+  kind: RuntimeProjectSuggestionClueKind;
+  value: string;
+}
+
+export type RuntimeProjectSuggestionClueKind =
+  | "workspace"
+  | "path"
+  | "directory"
+  | "repository"
+  | "session_title"
+  | "runtime"
+  | "recent_project"
+  | "project_name";
+
+export interface RuntimeSessionHostSignals {
+  runtime_id: string;
+  goalboard_session_id: string | null;
+  native_runtime_session_id: string | null;
+  legacy_work_context_id: string | null;
+  surface_id: string | null;
+  goal_id: string | null;
+  runtime_context: RuntimeWorkContext;
+  project_suggestion_clues: RuntimeProjectSuggestionClue[];
+}
 
 export type PrivateWorkContextJsonValue =
   | null
@@ -73,6 +124,22 @@ export const WORK_SESSION_EVENT_KINDS = [
   "terminal_output",
 ] as const;
 export type WorkSessionEventKind = (typeof WORK_SESSION_EVENT_KINDS)[number];
+
+/** A successful Goal operation's existing secondary Session activity. */
+export interface RuntimeSessionReadResult {
+  sessionGoalId: string | null;
+  sessionRegistry:
+    | { status: "unavailable"; message: string; session: null }
+    | { status: "ready"; session: Pick<WorkSessionRecord,
+        "session_id" | "runtime_id" | "native_runtime_session_id" | "surface_id" | "project_id"
+        | "current_goal_id" | "workspace_id" | "status" | "provenance"> | null };
+}
+
+export interface RuntimeGoalSessionActivity {
+  goal_id: string;
+  actor_id: string;
+  event: Omit<AppendWorkSessionEventInput, "session_id">;
+}
 
 export interface WorkSessionEventRecord {
   event_id: string;
@@ -232,6 +299,8 @@ export interface CreateWorkSessionHandoffDraftInput {
   source_session_id: string;
   source_project_id: string;
   source_goal_id: string;
+  /** Exact revision used for a new package; omitted for legacy/unknown snapshots. */
+  source_goal_version?: number | null;
   target_runtime_id: string;
   target_project_id: string;
   target_workspace_id?: string | null;
@@ -241,7 +310,7 @@ export interface CreateWorkSessionHandoffDraftInput {
 }
 
 export interface UpdateWorkSessionHandoffDraftInput extends Omit<CreateWorkSessionHandoffDraftInput,
-  "source_session_id" | "source_project_id" | "source_goal_id"> {
+  "source_session_id" | "source_project_id" | "source_goal_id" | "source_goal_version"> {
   package_id: string;
 }
 
@@ -283,6 +352,10 @@ export interface LegacyWorkSessionMigrationReport {
   session_ids: string[];
 }
 
+export interface LegacySessionMigrationApi {
+  migrateLegacy(input: LegacyWorkSessionMigrationInput): LegacyWorkSessionMigrationReport;
+}
+
 export interface WorkSessionQueryApi {
   get(sessionId: string): WorkSessionRecord;
   findByNativeRuntimeSession(runtimeId: string, nativeId: string): WorkSessionRecord | null;
@@ -290,6 +363,7 @@ export interface WorkSessionQueryApi {
   list(filter?: WorkSessionListFilter): WorkSessionRecord[];
   goalHistory(sessionId: string): WorkSessionGoalLink[];
   events(sessionId: string): WorkSessionEventRecord[];
+  eventCount(sessionId: string): number;
   getHandoff(packageId: string): WorkSessionHandoffRecord;
   latestPendingHandoff(sourceSessionId: string): WorkSessionHandoffRecord | null;
   handoffsForSession(sessionId: string): WorkSessionHandoffRecord[];
@@ -307,7 +381,28 @@ export interface WorkSessionCommandApi {
   createHandoffDraft(input: CreateWorkSessionHandoffDraftInput): WorkSessionHandoffRecord;
   updateHandoffDraft(input: UpdateWorkSessionHandoffDraftInput): WorkSessionHandoffRecord;
   cancelHandoff(packageId: string): WorkSessionHandoffRecord;
+  markHandoffSending(packageId: string): WorkSessionHandoffRecord;
+  attachHandoffDestination(input: WorkSessionHandoffDestinationInput): WorkSessionHandoffRecord;
+  markHandoffSent(input: WorkSessionHandoffDestinationInput): WorkSessionHandoffRecord;
+  markHandoffFailed(input: {
+    package_id: string;
+    error_code: string;
+    error_message: string;
+    retryable: boolean;
+    destination_session_id?: string | null;
+    delivery_mode?: WorkSessionHandoffDeliveryMode | null;
+  }): WorkSessionHandoffRecord;
 }
+
+export interface WorkSessionHandoffDestinationInput {
+  package_id: string;
+  destination_session_id: string;
+  delivery_mode: WorkSessionHandoffDeliveryMode;
+}
+
+/** Public fact operations; excludes opening storage, SQL and repository internals. */
+export interface WorkSessionApi extends WorkSessionQueryApi, WorkSessionCommandApi {}
+
 
 export interface PrivateWorkContextApplicationApi {
   query: WorkSessionQueryApi;
@@ -325,3 +420,16 @@ export type PrivateWorkContextErrorCode =
   | "session.handoff_invalid_state"
   | "session.registry_unknown"
   | "session.registry_reader_too_old";
+
+export class PrivateWorkContextError extends Error {
+  constructor(
+    readonly code: PrivateWorkContextErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GoalBoardSessionError";
+  }
+}
+
+/** Compatibility name retained while old Session callers move to the Module API. */
+export { PrivateWorkContextError as GoalBoardSessionError };

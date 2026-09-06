@@ -25,7 +25,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@adeptify/goalboard-app-mcp": "workspace:*",
+    "@adeptify/goalboard-plugin-runtime": "workspace:*",
+    "@adeptify/goalboard-plugin-artifacts": "workspace:*",
+    "@adeptify/goalboard-ui-host": "workspace:*",
     "@adeptify/goalboard-contracts": "workspace:*",
+    "@adeptify/goalboard-module-context-ledger": "workspace:*",
+    "@adeptify/goalboard-module-private-work-context": "workspace:*",
     "@adeptify/goalboard-kernel": "workspace:*"
   },
   "goalboard": {

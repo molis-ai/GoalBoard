@@ -308,8 +308,9 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
       align-items: center;
       justify-content: space-between;
       gap: 5px;
+      flex-wrap: wrap;
     }
-    body[data-desktop-shell="true"] .desktop-goal-directory .tree-search { display: none; }
+    body[data-desktop-shell="true"] .desktop-goal-directory .tree-search { display: flex; flex: 1 0 100%; order: -1; }
     body[data-desktop-shell="true"] .navigator-view-switch {
       width: auto;
       padding: 2px;
@@ -1507,4 +1508,3 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
   }
 
 `;
-

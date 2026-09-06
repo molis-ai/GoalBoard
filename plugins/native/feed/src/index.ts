@@ -32,3 +32,4 @@ export type GoalBoardPackageDescriptor = typeof packageDescriptor;
 export * from "./routes.js";
 export * from "./ui.js";
 export * from "./context.js";
+export { readLinkedFeedContext } from "./linked-context.js";

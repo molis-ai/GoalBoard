@@ -11,13 +11,14 @@ import type {
 
 import { GoalsCommandContext, requestHash, unique } from "./command-support.js";
 import { sqliteJson } from "./repository.js";
+import { insertInitialGoalContract } from "./goal-contract-records.js";
 
 export interface GoalRelationGraphIssue {
   code: string;
   message: string;
 }
 
-export interface GoalsCommandLifecycleHooks {
+export interface GoalsCommandLifecycleHooks extends Pick<import("@adeptify/goalboard-contracts/modules/governance-collaboration").GovernanceRecordsApi, "supersedePendingContractProposals"> {
   validateRelationGraph?(boardId: string, input: AddGoalRelationInput): GoalRelationGraphIssue | null;
   reopenSatisfiedCompoundParent?(
     boardId: string,
@@ -44,7 +45,7 @@ export interface GoalsCommandLifecycleHooks {
 export class GoalCommands {
   constructor(
     private readonly context: GoalsCommandContext,
-    private readonly lifecycle: GoalsCommandLifecycleHooks = {},
+    private readonly lifecycle: GoalsCommandLifecycleHooks,
   ) {}
 
   createGoal(
@@ -73,69 +74,10 @@ export class GoalCommands {
       const at = this.context.now().toISOString();
       const definitionState = input.definition_state ?? "draft";
       const decompositionState = input.decomposition_state ?? "abstract";
-      const acceptedAt = definitionState === "accepted" ? at : null;
-      const acceptedBy = definitionState === "accepted" ? write.actor_id : null;
-      repository.db.prepare(`
-        INSERT INTO goals (
-          goal_id, board_id, title, outcome, why, business_logic,
-          in_scope_json, out_of_scope_json, constraints_json,
-          required_inputs_json, promised_outputs_json, decomposition_review_json,
-          definition_state, decomposition_state, validity_state, fulfillment_state,
-          priority, accepted_by, accepted_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'valid', 'unmet', ?, ?, ?, ?, ?)
-      `).run(
-        goalId,
-        boardId,
-        input.title.trim(),
-        input.outcome.trim(),
-        input.why.trim(),
-        input.business_logic.trim(),
-        sqliteJson(input.in_scope ?? []),
-        sqliteJson(input.out_of_scope ?? []),
-        sqliteJson(input.constraints ?? []),
-        sqliteJson(input.required_inputs ?? []),
-        sqliteJson(input.promised_outputs ?? []),
-        input.decomposition_review == null ? null : sqliteJson(input.decomposition_review),
-        definitionState,
-        decompositionState,
-        input.priority ?? 0,
-        acceptedBy,
-        acceptedAt,
-        at,
-        at,
-      );
-      const insertCriterion = repository.db.prepare(`
-        INSERT INTO acceptance_criteria (
-          criterion_id, goal_id, statement, decision_method,
-          pass_condition, target_json, required_evidence_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const criterion of input.acceptance_criteria) {
-        insertCriterion.run(
-          criterion.criterion_id?.trim() || `criterion-${randomUUID()}`,
-          goalId,
-          criterion.statement.trim(),
-          criterion.decision_method,
-          criterion.pass_condition.trim(),
-          criterion.target == null ? null : sqliteJson(criterion.target),
-          sqliteJson(criterion.required_evidence ?? []),
-        );
-      }
-      const createdGoal = repository.getGoal(goalId);
-      if (!createdGoal) throw new Error(`Goal 写入后无法读取: ${goalId}`);
-      repository.db.prepare(`
-        INSERT INTO goal_contract_revisions (
-          goal_id, board_id, revision, contract_json, effect, source_proposal_id,
-          changed_by, reason, created_at
-        ) VALUES (?, ?, 1, ?, 'metadata', NULL, ?, ?, ?)
-      `).run(
-        goalId,
-        boardId,
-        sqliteJson(contractInputFromGoal(createdGoal)),
-        write.actor_id,
-        "创建 Goal Contract revision 1",
-        at,
-      );
+      insertInitialGoalContract(this.context, {
+        board_id: boardId, goal_id: goalId, goal: input, actor_id: write.actor_id, at,
+        source_proposal_id: null, revision_reason: "创建 Goal Contract revision 1",
+      });
       const cursor = repository.appendEvent({
         eventId: randomUUID(),
         boardId,
@@ -226,25 +168,10 @@ export class GoalCommands {
       }
 
       const now = this.context.now().toISOString();
-      const pendingProposals = repository.db.prepare(`
-        SELECT proposal_id FROM contract_proposals
-        WHERE board_id = ? AND goal_id = ? AND state = 'pending' ORDER BY created_at
-      `).all(boardId, goalId) as Array<{ proposal_id: string }>;
-      if (pendingProposals.length) {
-        repository.db.prepare(`
-          UPDATE contract_proposals
-          SET state = 'superseded', decided_at = ?, decision_json = ?
-          WHERE board_id = ? AND goal_id = ? AND state = 'pending'
-        `).run(
-          now,
-          sqliteJson({
-            reason: "用户直接更新了 Draft，需要基于新事实重新提交 Contract Proposal",
-            superseded_by: write.actor_id,
-          }),
-          boardId,
-          goalId,
-        );
-      }
+      const supersededProposalIds = this.lifecycle.supersedePendingContractProposals(boardId, goalId, now, {
+        reason: "用户直接更新了 Draft，需要基于新事实重新提交 Contract Proposal",
+        superseded_by: write.actor_id,
+      });
 
       repository.db.prepare(`
         UPDATE goals SET
@@ -299,7 +226,7 @@ export class GoalCommands {
         payload: {
           decomposition_state: normalized.decomposition_state ?? current.decomposition_state,
           acceptance_criterion_count: normalized.acceptance_criteria.length,
-          superseded_contract_proposal_ids: pendingProposals.map((item) => item.proposal_id),
+          superseded_contract_proposal_ids: supersededProposalIds,
         },
         at: now,
       });
@@ -537,41 +464,10 @@ export class GoalCommands {
       };
       const bindingId = `policy-${randomUUID()}`;
       const at = this.context.now().toISOString();
-      const replaced = (input.goal_id
-        ? repository.db.prepare(`
-            SELECT policy_binding_id FROM policy_bindings
-            WHERE board_id = ? AND goal_id = ? AND scope = 'goal' AND state = 'active'
-          `).all(boardId, input.goal_id)
-        : repository.db.prepare(`
-            SELECT policy_binding_id FROM policy_bindings
-            WHERE board_id = ? AND goal_id IS NULL AND scope = 'project_default' AND state = 'active'
-          `).all(boardId)) as Array<{ policy_binding_id: string }>;
-      if (input.goal_id) {
-        repository.db.prepare(`
-          UPDATE policy_bindings SET state = 'replaced'
-          WHERE board_id = ? AND goal_id = ? AND scope = 'goal' AND state = 'active'
-        `).run(boardId, input.goal_id);
-      } else {
-        repository.db.prepare(`
-          UPDATE policy_bindings SET state = 'replaced'
-          WHERE board_id = ? AND goal_id IS NULL AND scope = 'project_default' AND state = 'active'
-        `).run(boardId);
-      }
-      repository.db.prepare(`
-        INSERT INTO policy_bindings (
-          policy_binding_id, board_id, goal_id, scope, policy_json,
-          state, created_by, reason, created_at
-        ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
-      `).run(
-        bindingId,
-        boardId,
-        input.goal_id ?? null,
-        scope,
-        sqliteJson(normalizedPolicy),
-        write.actor_id,
-        input.reason.trim(),
-        at,
-      );
+      const replaced = repository.replacePolicyBinding({
+        board_id: boardId, goal_id: input.goal_id ?? null, policy_binding_id: bindingId,
+        policy: normalizedPolicy, actor_id: write.actor_id, reason: input.reason.trim(), at,
+      });
       const cursor = repository.appendEvent({
         eventId: randomUUID(),
         boardId,
@@ -584,7 +480,7 @@ export class GoalCommands {
           ...input,
           policy: normalizedPolicy,
           scope,
-          replaced_binding_ids: replaced.map((item) => item.policy_binding_id),
+          replaced_binding_ids: replaced,
         },
         at,
       });
@@ -661,31 +557,4 @@ function validatePolicy(policy: Partial<GoalPolicy>, context: GoalsCommandContex
   ) {
     throw context.error("policy.max_lease_invalid", "最长领取时间必须是正整数秒数");
   }
-}
-
-function contractInputFromGoal(goal: GoalRecord): CreateGoalInput {
-  return {
-    goal_id: goal.goal_id,
-    title: goal.title,
-    outcome: goal.outcome,
-    why: goal.why,
-    business_logic: goal.business_logic,
-    in_scope: goal.in_scope,
-    out_of_scope: goal.out_of_scope,
-    constraints: goal.constraints,
-    required_inputs: goal.required_inputs,
-    promised_outputs: goal.promised_outputs,
-    decomposition_review: goal.decomposition_review ?? undefined,
-    definition_state: goal.definition_state,
-    decomposition_state: goal.decomposition_state,
-    priority: goal.priority,
-    acceptance_criteria: goal.acceptance_criteria.map((criterion) => ({
-      criterion_id: criterion.criterion_id,
-      statement: criterion.statement,
-      decision_method: criterion.decision_method,
-      pass_condition: criterion.pass_condition,
-      target: criterion.target,
-      required_evidence: criterion.required_evidence,
-    })),
-  };
 }

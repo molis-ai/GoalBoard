@@ -2,6 +2,10 @@
 
 ## 白话说明
 
+DV1 的 CLI/MCP Goal 操作已全部通过 Host Client，不再从 `withProject` 拿 Coordinator 或 availability。`withScope` 只保持打开 Runtime 到响应完成的资源周期，不暴露 Store，也不把整个 callback 放进串行队列；内部具名 invoke 仍按原队列执行。Available+projection、trash+work state、planning methods+composition 分别是一个 Host 组合操作，避免异步迁移拆开原有一致性。Board/import/resume/trash-list 等声明和完整输入输出类型已归官方 Goals Plugin；root composition 仅注册原实现并保留兼容 re-export。DV1 已通过复核；逐项证据见 `specs/goalboard-architecture-reorganization/dv1-validation.md`。
+
+DV1 的 Draft、Goal Tree、旧提案组现已通过 `createGoalProposalClients` 使用正式 Host Client；原临时 runtime 的三组字段已删除。公开 capability 逐项注册到原方法，含会保存恢复记录的 Draft resume 和会保存检查记录的 Goal Tree check。App 负责 await 后展示，Host 不复制提案业务规则。
+
 Local Host 是本地产品的“总装配间”。以前 Web、CLI、MCP 各自打开数据库、创建 Store 和 Coordinator；同一个 Project 可能同时出现多份业务运行对象。AP2 把这件事收回到一个地方：入口只描述要连接哪个 Project，再通过 Host Client 调用能力。
 
 这不是新增一个总管所有业务的 Coordinator。Goal、Project、Feed 等规则仍归各自 Module；Host 只负责把实现装起来、复用同一份 Runtime，并在关闭或重启时统一释放资源。
@@ -21,7 +25,11 @@ Local Host 是本地产品的“总装配间”。以前 Web、CLI、MCP 各自�
 
 尚未迁到独立 Module 的旧调用暂时通过 `GoalBoardLocalHost.withProject` 兼容 composition 端口访问同一 Runtime。它只解决迁移期资源所有权，不是新公共业务 API；EX、WK、AP3、DV1 等 Goal 会逐步用正式 Capability 替换这些调用。
 
+DV1 已将完整 Goal Contract、项目说明和 active-goal 三项入口接到官方 Goals Plugin 的具名 Capability，由 Host 注册并调用原 owner。MCP 的 Runtime 决定参数先在 App 校验，再调用 Local Host 的 `runtimeGoalTreeDecisionAuthority` 组合宿主来源；保持原审计算法，不把模型 args 变成 Session 身份。CLI/MCP 已无 `withProject` caller；Workbench 等剩余消费者另由各自迁移任务负责。
+
 ## Single writer 的范围
+
+DV1 的 Runtime 项目入口额外通过 `RuntimeProjectCatalogProvider.withCatalog` 消费有界公开 catalog application。该 scope 覆盖异步结果组合，成功和失败都关闭原 catalog；它不是任意名称的执行总线，也没有创建第二个 Project Store。`RuntimeProjectConnection` 只维护当前进程的连接缓存，Session 身份变化后旧连接失效，继续采用只读 resolve、同幂等 key 重试的恢复规则，不自行写绑定。Panel alias 与原生 Session 关联由 Local Host 单独组合原 Desktop/Registry API，缺 Panel 的原错误由宿主识别，其他错误不隐藏。
 
 AP2 保证一个 Local Host 实例内，每个 Project storage key 只有一份 Store/Coordinator Runtime；多个本地入口可以显式注入并共享这个 Host。Host 关闭后重新创建，事实从 SQLite 恢复。
 

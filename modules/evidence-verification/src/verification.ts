@@ -12,6 +12,7 @@ import { EvidenceRepository } from "./repository.js";
 
 export class EvidenceVerificationService implements EvidenceQueryApi {
   constructor(readonly repository: EvidenceRepository) {}
+  listLifecycleEvents(boardId: string) { return this.repository.listLifecycleEvents(boardId); }
 
   getEvidence(boardId: string, evidenceId: string): EvidenceRecord | null {
     return this.repository.getEvidence(boardId, evidenceId);

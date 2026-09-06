@@ -1,42 +1,11 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-export interface DesktopPanelRecord {
-  panel_id: string;
-  project_id: string;
-  goal_id: string;
-  runtime_kind: string;
-  launch_command: string;
-  launch_args: string[];
-  cwd: string | null;
-  work_context_id: string;
-  host_session_id: string | null;
-  tab_index: number;
-  title: string;
-  status: "open" | "exited";
-  created_at: string;
-  updated_at: string;
-}
+import type { DesktopPanelApi, DesktopPanelRecord, OpenDesktopPanelInput } from "@adeptify/goalboard-contracts/platform/app-host";
+export type { DesktopPanelRecord, OpenDesktopPanelInput } from "@adeptify/goalboard-contracts/platform/app-host";
 
-export interface OpenDesktopPanelInput {
-  project_id: string;
-  goal_id: string;
-  runtime_kind: string;
-  launch_command: string;
-  launch_args?: string[];
-  cwd?: string | null;
-  title?: string;
-  actor_id: string;
-  host_session_id?: string | null;
-  user_confirmed: boolean;
-}
-
-export interface AliasDesktopPanelSessionInput {
-  panel_id: string;
-  runtime_id: string;
-  host_session_id: string;
-  actor_id: string;
-}
+import type { AliasDesktopPanelSessionInput } from "@adeptify/goalboard-contracts/platform/app-host";
+export type { AliasDesktopPanelSessionInput } from "@adeptify/goalboard-contracts/platform/app-host";
 
 export type DesktopPanelErrorCode =
   | "catalog.invalid_name"
@@ -89,7 +58,7 @@ export interface DesktopPanelServiceOptions {
  * Owns Desktop Panel lifecycle rules. Persistence and Project context binding
  * remain replaceable ports so the Desktop app never imports a database driver.
  */
-export class DesktopPanelService {
+export class DesktopPanelService implements DesktopPanelApi {
   private readonly repository: DesktopPanelRepository;
   private readonly context: DesktopPanelContextPort;
   private readonly errorFactory: DesktopPanelServiceOptions["errorFactory"];

@@ -262,7 +262,7 @@ export function extractImportSpecifiers(source: string): readonly string[] {
   const ignoredKeywordRanges = literalRanges(searchableSource);
   const specifiers = new Set<string>();
   const patterns = [
-    /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s+)?["']([^"']+)["']/gu,
+    /\b(?:import|export)\s+(?:type\s+)?(?:[^"'`;=]*?\s+from\s+)?["']([^"']+)["']/gu,
     /\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu,
     /\brequire\s*\(\s*["']([^"']+)["']\s*\)/gu,
   ];

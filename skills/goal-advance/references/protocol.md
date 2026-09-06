@@ -26,7 +26,7 @@ Read this reference before the first GoalBoard write in a flow. It contains only
 - Persist each material clarification answer before asking the next question. If the write fails, say the progress was not saved and stop.
 - Accepted Contracts and completed history are immutable through ordinary execution. New scope, changed relations, and corrective work use Candidates, Rewires, or Goal Tree Proposals.
 - A Proposal is historical pending work, not canonical Goal, Relation, Risk, Policy, or state. Only a supported user decision can materialize it.
-- Re-read affected state after every decision or lifecycle write; do not assume the requested transition succeeded.
+- Use each lifecycle write's returned `transition.projection` as its resulting state. Re-read affected Contracts only when the decision's semantic review requires them or when the response lacks the state needed for the next action; do not repeat reads merely to confirm a successful receipt.
 
 ## Persist only confirmed project guidance
 

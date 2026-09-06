@@ -3,31 +3,11 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
         const factorError = changedFactorForm.querySelector("[data-relation-error], [data-risk-error], [data-impact-error], [data-policy-error]");
         if (factorError) factorError.hidden = true;
       }
-      const statusFilter = changed.closest("[data-status-filter]");
-      if (statusFilter) {
-        if (statusFilter.checked) selectedStatuses.add(statusFilter.value);
-        else selectedStatuses.delete(statusFilter.value);
-        setSelectedStatuses([...selectedStatuses]);
-        filterTree(treeSearch.value);
-        queueSave();
-        return;
-      }
-      const relationForm = changed.closest("[data-relation-form]");
-      if (relationForm) {
-        if ((changed.name === "direction" || changed.name === "type") && relationForm.elements.relation_intent) {
-          relationForm.elements.relation_intent.value = "other";
-        } else if (changed.name === "relation_intent" && changed.value === "other") {
-          relationForm.elements.direction.value = "";
-          relationForm.elements.type.value = "";
-          const advanced = relationForm.querySelector("[data-progressive-fields]");
-          if (advanced) advanced.open = true;
-        }
-        updateRelationFormPreview(relationForm);
-      }
+      if (handleTreeStatusChange(changed)) return;
+      handleGoalRelationChange(changed);
       const riskStateForm = changed.closest("[data-risk-state-form]");
       if (riskStateForm) updateRiskStatePreview(riskStateForm);
-      const riskGoalPicker = changed.closest(".risk-goal-picker");
-      if (riskGoalPicker) updateRiskGoalCount(riskGoalPicker);
+      handleRiskPickerChange(changed);
     });
     document.addEventListener("input", (event) => {
       const changed = event.target instanceof Element ? event.target : null;
@@ -38,12 +18,7 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
         const factorError = changedFactorForm.querySelector("[data-relation-error], [data-risk-error], [data-impact-error], [data-policy-error]");
         if (factorError) factorError.hidden = true;
       }
-      const filter = changed.closest?.("[data-risk-goal-filter]");
-      if (!filter) return;
-      const query = String(filter.value || "").trim().toLocaleLowerCase();
-      filter.closest(".risk-goal-picker")?.querySelectorAll("[data-risk-goal-option]").forEach((option) => {
-        option.hidden = Boolean(query) && !String(option.dataset.search || "").includes(query);
-      });
+      handleRiskPickerFilter(changed);
     });
     treeResizer?.addEventListener("pointerdown", (event) => {
       if (matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;
@@ -95,11 +70,7 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
       });
     }
 
-    treeFilterTrigger?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setTreeFilterOpen(treeFilter?.hidden !== false, true);
-    });
+    bindTreeFilterTrigger();
     feedFilterTrigger?.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -600,4 +571,3 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
           button.disabled = false;
         }
 `;
-

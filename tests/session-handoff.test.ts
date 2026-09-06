@@ -1,16 +1,19 @@
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
+import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { CodexRuntimeSessionAdapter, RuntimeSessionAdapterRouter } from "../src/sessions/adapters.js";
-import { SessionContentService } from "../src/sessions/content.js";
-import { SessionDirectoryService } from "../src/sessions/directory.js";
-import { SessionHandoffService } from "../src/sessions/handoff.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
+import { SessionContentService } from "@adeptify/goalboard-plugin-work";
+import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
+import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardSessionError, type RuntimeSessionTransport } from "../src/sessions/types.js";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
@@ -59,7 +62,7 @@ test("Handoff package uses the canonical Goal and a minimal Session context, the
   const boardId = "project-handoff-native";
   const goalId = "goal-handoff-native";
   const { store, contract } = createContract(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   const transport: RuntimeSessionTransport = {
     async request(method, params) {
@@ -96,7 +99,7 @@ test("Handoff package uses the canonical Goal and a minimal Session context, the
       source_id: "source-tool",
       content: "SHOULD-NOT-BE-IN-HANDOFF",
     });
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     router.register(new CodexRuntimeSessionAdapter(transport));
     const content = new SessionContentService(registry, router);
     const service = new SessionHandoffService(
@@ -120,6 +123,16 @@ test("Handoff package uses the canonical Goal and a minimal Session context, the
     assert.match(prepared.handoff.content ?? "", /请从当前验收缺口继续/);
     assert.doesNotMatch(prepared.handoff.content ?? "", /SHOULD-NOT-BE-IN-HANDOFF/);
     assert.deepEqual(calls.map((item) => item.method), ["thread/read"]);
+
+    const relationDb = new Database(registry.databasePath);
+    try {
+      const ledger = createContextLedger(relationDb, { authorize: () => true });
+      const edge = ledger.query.get({ actor_id: "test-reader", scope: { kind: "personal", id: "private-work-context" } },
+        `handoff.goal:${prepared.handoff.package_id}`);
+      assert.equal(edge?.target.id, goalId);
+      assert.equal(edge?.target.project_id, boardId);
+      assert.equal(edge?.target.version, 1, "Native Work must pin the Contract revision used to build this package");
+    } finally { relationDb.close(); }
 
     const edited = `${prepared.handoff.content}\n\n用户补充：先运行定向测试。`;
     const sent = await service.send({
@@ -162,7 +175,7 @@ test("unsupported Runtime receives an honest GoalBoard fallback Session with enc
   const boardId = "project-handoff-fallback";
   const goalId = "goal-handoff-fallback";
   const { store, contract } = createContract(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
     const source = registry.createSession({
       runtime_id: "runtime-without-read",
@@ -172,7 +185,7 @@ test("unsupported Runtime receives an honest GoalBoard fallback Session with enc
       current_goal_id: goalId,
       title: "Fallback source",
     });
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     const content = new SessionContentService(registry, router);
     const service = new SessionHandoffService(
       registry,
@@ -214,7 +227,7 @@ test("a source Session without a current Goal cannot prepare a Handoff", async (
   const boardId = "project-handoff-no-goal";
   const goalId = "goal-handoff-no-goal";
   const { store, contract } = createContract(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
     const source = registry.createSession({
       runtime_id: "unknown",
@@ -222,7 +235,7 @@ test("a source Session without a current Goal cannot prepare a Handoff", async (
       user_confirmed: true,
       project_id: boardId,
     });
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     const service = new SessionHandoffService(
       registry,
       router,
@@ -284,7 +297,7 @@ test("project Handoff web API keeps the editable draft, requires confirmation, a
   );
   store.close();
 
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   const source = registry.createSession({
     runtime_id: "codex",
     actor_id: "user",
@@ -397,3 +410,4 @@ test("project Handoff web API keeps the editable draft, requires confirmation, a
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

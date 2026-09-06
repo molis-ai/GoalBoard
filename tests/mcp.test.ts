@@ -8,7 +8,7 @@ import Database from "better-sqlite3";
 import { GoalBoardCoordinator, SqliteGoalBoardStore } from "../src/index.js";
 import { GoalBoardServer, runtimeContextHostFromEnvironment } from "../src/mcp/server.js";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -410,7 +410,7 @@ describe("mcp server", () => {
       const databasePath = path.join(home, "projects", "catalog.db");
       const future = new Database(databasePath);
       try {
-        future.prepare("UPDATE catalog_meta SET value = '10' WHERE key = 'schema_version'").run();
+        future.prepare("UPDATE catalog_meta SET value = '11' WHERE key = 'schema_version'").run();
       } finally {
         future.close();
       }
@@ -432,10 +432,10 @@ describe("mcp server", () => {
       }) as { result: { isError: boolean; content: Array<{ text: string }> } };
       const errorText = response.result.content[0]?.text ?? "";
       assert.equal(response.result.isError, true);
-      assert.match(errorText, /错误: GoalBoard catalog schema=10/);
+      assert.match(errorText, /错误: GoalBoard catalog schema=11/);
       assert.match(errorText, /"code":"catalog\.reader_too_old"/);
-      assert.match(errorText, /"actual_schema_version":10/);
-      assert.match(errorText, /"supported_schema_max":9/);
+      assert.match(errorText, /"actual_schema_version":11/);
+      assert.match(errorText, /"supported_schema_max":10/);
       assert.match(errorText, /"recovery":"new_or_fork_session_then_context_resolve"/);
       assert.doesNotMatch(errorText, new RegExp(databasePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     } finally {
@@ -2593,7 +2593,7 @@ describe("mcp server", () => {
         idempotency_key: "context-select-project-goal",
       });
       assert.equal(replayedSelection.result.isError, false, replayedSelection.result.content[0]?.text);
-      const sessionRegistry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+      const sessionRegistry = await openWorkSessionRegistry({ homeDirectory: home });
       try {
         const session = sessionRegistry.findByNativeRuntimeSession("codex", "host-work-entry-42");
         assert.ok(session);
@@ -3664,7 +3664,14 @@ describe("mcp server", () => {
       };
       assert.equal(finalSnapshot.relations.find((item) => item.relation_id === relationId)?.state, "active");
       const mcpSource = fs.readFileSync(path.join(ROOT, "src/mcp/server.ts"), "utf8");
-      assert.match(mcpSource, /goalsAdapter\.lifecycle\.setTrashed/);
+      assert.match(mcpSource, /createMcpGoalTrashHandlers\(availability,/);
+      assert.match(mcpSource, /trashTools\[name\]\(arguments_\)/);
+      const trashSource = fs.readFileSync(path.join(ROOT, "apps/mcp/src/goal-trash-commands.ts"), "utf8");
+      assert.match(trashSource, /await application\.setTrashedWithWorkState\(/);
+      const hostSource = fs.readFileSync(path.join(ROOT, "src/local-host/composition.ts"), "utf8");
+      assert.match(hostSource, /register\(goalEntryCompositionCapabilities\.setTrashedWithWorkState/);
+      assert.match(hostSource, /goals\.lifecycle\.setTrashed\(\.\.\.input\)/);
+      assert.doesNotMatch(trashSource, /coordinator|\.store\.|\.db\./);
       assert.doesNotMatch(mcpSource, /coordinator\.setGoalTrashed/);
     } finally {
       fs.rmSync(directory, { recursive: true, force: true });
@@ -3801,7 +3808,7 @@ describe("mcp server", () => {
       } finally {
         reopened.close();
       }
-      const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+      const registry = await openWorkSessionRegistry({ homeDirectory: home });
       try {
         const unified = registry.findBySurface(panel.panel_id);
         assert.ok(unified);
@@ -3816,3 +3823,4 @@ describe("mcp server", () => {
     }
   });
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

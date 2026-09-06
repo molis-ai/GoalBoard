@@ -1,0 +1,65 @@
+import type { HostCapabilityDefinition } from "@adeptify/goalboard-contracts/platform/app-host";
+import type { CreateGoalInput, GoalsApplicationApi, GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { BoardSnapshot } from "./goal-entry-contract.js";
+import type { GoalActionProjection } from "./execution-validation-contract.js";
+import type { LegacyV3ImportInput, V3ImportReport } from "./board-import-contract.js";
+
+export interface InitializeBoardInput {
+  board_id: string;
+  title: string;
+  actor_id: string;
+  idempotency_key: string;
+}
+export type InitializeBoardOutput = { board_id: string; replayed: boolean; observed_event_cursor: number };
+export interface CreateGoalCapabilityInput {
+  board_id: string;
+  goal: CreateGoalInput;
+  actor_id: string;
+  idempotency_key: string;
+  reason?: string;
+}
+
+type CreateGoalCapabilityOutput = ReturnType<GoalsApplicationApi["commands"]["createGoal"]>;
+
+export interface ImportV3CapabilityInput {
+  legacy: LegacyV3ImportInput;
+  target_board_id: string;
+  actor_id: string;
+  idempotency_key: string;
+}
+
+export const importV3Capability = {
+  capability_id: "io.goalboard.local-host.board.import-v3",
+  version: 1,
+  operation: "command",
+} as HostCapabilityDefinition<ImportV3CapabilityInput, V3ImportReport>;
+
+export const projectResumeFactsCapability = {
+  capability_id: "io.goalboard.local-host.project.resume-facts",
+  version: 1,
+  operation: "query",
+} as HostCapabilityDefinition<{ board_id: string }, { goals: GoalRecord[]; projections: GoalActionProjection[] }>;
+
+export const trashedGoalsCapability = {
+  capability_id: "io.goalboard.local-host.goals.trashed",
+  version: 1,
+  operation: "query",
+} as HostCapabilityDefinition<{ board_id: string }, { goals: GoalRecord[]; observed_event_cursor: number }>;
+
+export const initializeBoardCapability = {
+  capability_id: "io.goalboard.local-host.board.initialize",
+  version: 1,
+  operation: "command",
+} as HostCapabilityDefinition<InitializeBoardInput, InitializeBoardOutput>;
+
+export const snapshotBoardCapability = {
+  capability_id: "io.goalboard.local-host.board.snapshot",
+  version: 1,
+  operation: "query",
+} as HostCapabilityDefinition<{ board_id: string }, BoardSnapshot>;
+
+export const createGoalCapability = {
+  capability_id: "io.goalboard.local-host.goals.create",
+  version: 1,
+  operation: "command",
+} as HostCapabilityDefinition<CreateGoalCapabilityInput, CreateGoalCapabilityOutput>;

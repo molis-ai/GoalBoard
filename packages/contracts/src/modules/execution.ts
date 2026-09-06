@@ -1,4 +1,4 @@
-import type { GoalPolicy } from "./goals.js";
+import type { GoalLifecycleReason, GoalPolicy, ImpactBindingRecord, GoalRevisionDependentTransition } from "./goals.js";
 import type { ContractDescriptor } from "../platform/package.js";
 
 export const modulesExecutionContract = {
@@ -19,6 +19,17 @@ export type ExecutionClaimRole =
 
 export type ExecutionClaimState = "active" | "released" | "expired" | "revoked";
 export type ExecutionRunState = "started" | "blocked" | "completed" | "failed" | "abandoned";
+
+/** Active, unexpired Claim + confirmed Goal declaration, assembled by the caller. */
+export interface ExecutionImpactOccupancy extends Pick<ImpactBindingRecord, "surface" | "access" | "input_snapshot"> {
+  claim_id: string;
+  existing_goal_id: string;
+}
+
+export interface ExecutionImpactPolicyApi {
+  conflicts(requested: readonly ImpactBindingRecord[], occupied: readonly ExecutionImpactOccupancy[]): GoalLifecycleReason[];
+  allowsParallel(existing: readonly ImpactBindingRecord[], requested: readonly ImpactBindingRecord[]): boolean;
+}
 export type ExecutionActionKind =
   | "clarify"
   | "execute"
@@ -133,14 +144,20 @@ export interface ExecutionRunWithClaim {
 }
 
 export interface ExecutionQueryApi {
+  listLifecycleEvents(boardId: string): import("../platform/storage.js").StoredModuleEvent[];
   getClaim(boardId: string, claimId: string): ExecutionClaimRecord | null;
   getRun(boardId: string, runId: string): ExecutionRunRecord | null;
   getRunWithClaim(boardId: string, runId: string): ExecutionRunWithClaim | null;
   listClaims(boardId: string): ExecutionClaimRecord[];
   listRuns(boardId: string): ExecutionRunRecord[];
+  listNonterminalRuns(boardId: string): ExecutionRunRecord[];
 }
 
 export interface ExecutionCommandApi {
+  transitionGoalContractRevision(input: GoalRevisionDependentTransition): void;
+  /** Internal close-out after application reconciliation, inside its existing transaction. */
+  releaseClaimForLifecycleFacts(boardId: string, claimId: string, actorId: string, at: string, reason: string): number;
+  completeRunForProposal(boardId: string, runId: string, proposalId: string, actorId: string, at: string): number;
   createAuthorizedClaim(input: AuthorizedExecutionClaimInput): ExecutionClaimRecord;
   renewClaim(input: RenewExecutionClaimInput): ExecutionClaimRecord;
   releaseClaim(input: EndExecutionClaimInput): ExecutionClaimEndResult;

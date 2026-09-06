@@ -397,7 +397,7 @@ export function seedDemoBoard(databasePath: string): void {
       actor_id: "runtime-interface",
       idempotency_key: "demo-interface-run",
     }).run;
-    coordinator.submitCandidate({
+    coordinator.legacyProposalSubmission.submitCandidate({
       board_id: DEMO_BOARD_ID,
       actor_id: "runtime-interface",
       discovered_in_run_id: interfaceRun.run_id,

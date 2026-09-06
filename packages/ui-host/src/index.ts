@@ -7,6 +7,8 @@ import type {
   UiRenderRequest,
 } from "@adeptify/goalboard-contracts/platform/ui";
 
+export { createPluginUiClient, PluginUiAccessError } from "./plugin-client.js";
+
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-ui-host",
   packagePath: "packages/ui-host",

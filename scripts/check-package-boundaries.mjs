@@ -74,9 +74,9 @@ function checkSourceImports(repositoryRoot, packages) {
   let importCount = 0;
 
   for (const importer of packages) {
-    const sourceFiles = filesUnder(path.join(importer.root, "src"), (filePath) =>
+    const sourceFiles = ["src", "tooling", "bin"].flatMap(directory => filesUnder(path.join(importer.root, directory), (filePath) =>
       SOURCE_EXTENSIONS.has(path.extname(filePath)),
-    );
+    ));
     sourceFileCount += sourceFiles.length;
 
     for (const sourceFile of sourceFiles) {
@@ -320,6 +320,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
   const coordinatorPath = "src/v1/coordinator.ts";
   const coordinator = read(coordinatorPath);
+  errors.push(...checkDraftProposalOwnerSql(read("modules/goals/src/goal-commands.ts")));
   if (!coordinator.includes('from "@adeptify/goalboard-module-goals"')) {
     errors.push(`${coordinatorPath}: Goal application composition must use the Goals Module public entrypoint`);
   }
@@ -419,56 +420,47 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   if (legacyPlanningMethodAssets.length > 0) {
     errors.push("skills/goal-advance/methods: source assets must not duplicate Goals-owned Planning methods");
   }
-  const homeInstaller = read("src/install/home.ts");
+  const homeInstaller = read("apps/local-host/src/installer/home-release.ts");
   if (
     !homeInstaller.includes('"goalboard-module-goals"')
     || !homeInstaller.includes("skillMethodsDirectory")
     || !homeInstaller.includes("fs.symlink(")
   ) {
-    errors.push("src/install/home.ts: installed GoalBoard Skill must link to packaged Goals method assets");
+    errors.push("apps/local-host/src/installer/home-release.ts: installed GoalBoard Skill must link to packaged Goals method assets");
   }
 
-  const lifecycleMethods = [
-    ["private materializeAcceptedGoalContractRevision", "private materializeGoalTreeRelations", "this.goalsModule.lifecycle.applyAcceptedContractRevision"],
-  ];
-  for (const [method, nextMethod, expectedCall] of lifecycleMethods) {
-    const start = coordinator.indexOf(`  ${method}(`);
-    const end = coordinator.indexOf(`  ${nextMethod}(`, start + method.length + 3);
-    if (start < 0 || end < 0) {
-      errors.push(`${coordinatorPath}: cannot locate migrated ${method} lifecycle method`);
-      continue;
-    }
-    const body = coordinator.slice(start, end);
-    if (!body.includes(expectedCall)) {
-      errors.push(`${coordinatorPath}: ${method} must delegate through ${expectedCall}`);
-    }
-    if (/\bthis\.store\b|\b(?:INSERT INTO|UPDATE|DELETE FROM)\b/iu.test(body)) {
-      errors.push(`${coordinatorPath}: ${method} still owns Goal lifecycle facts or SQL`);
-    }
+  const factMaterializerPath = "plugins/native/goals/src/goal-tree-fact-materializer.ts";
+  const factMaterializer = read(factMaterializerPath);
+  if (coordinator.includes("private materializeAcceptedGoalContractRevision(")
+      || coordinator.includes("private materializeGoalTreeGoal(")
+      || !factMaterializer.includes("this.goals.lifecycle.applyAcceptedContractRevision(")
+      || /\bthis\.store\b|\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/iu.test(factMaterializer)) {
+    errors.push(`${factMaterializerPath}: confirmed Goal materialization must use public owner lifecycle, not legacy methods or SQL`);
   }
-  const decideContractStart = coordinator.indexOf("  decideContractProposal(");
-  const decideContractEnd = coordinator.indexOf("  submitCandidate(", decideContractStart);
+  const decideContractPath = "plugins/native/goals/src/legacy-contract-decision.ts";
+  const decideContract = read(decideContractPath);
   if (
-    decideContractStart < 0
-    || decideContractEnd < 0
-    || !coordinator.slice(decideContractStart, decideContractEnd).includes("this.goalsModule.lifecycle.acceptDraft")
+    coordinator.includes("  decideContractProposal(")
+    || !decideContract.includes("this.ports.goals.lifecycle.acceptDraft")
+    || /\bthis\.store\b|\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/iu.test(decideContract)
   ) {
-    errors.push(`${coordinatorPath}: accepted Draft materialization must use Goals lifecycle public API`);
+    errors.push(`${decideContractPath}: accepted Draft materialization must use Goals lifecycle public API`);
   }
   for (const match of coordinator.matchAll(/UPDATE goals SET[\s\S]{0,500}?(?:archived_at|trashed_at|validity_state|fulfillment_state|current_contract_revision)/giu)) {
     errors.push(`${coordinatorPath}: Goal lifecycle state writes must use GoalsModule.lifecycle (${match[0].split(/\r?\n/u)[0]})`);
   }
-  const reconcileStart = coordinator.indexOf("  private reconcileLifecycle(");
-  const reconcileEnd = coordinator.indexOf("  getResolvedGoalPolicy(", reconcileStart);
-  const reconcileBody = reconcileStart >= 0 && reconcileEnd >= 0
-    ? coordinator.slice(reconcileStart, reconcileEnd)
-    : "";
+  const reconciliationPath = "plugins/native/goals/src/lifecycle-application.ts";
+  const reconcileBody = read(reconciliationPath);
   if (
-    !reconcileBody.includes("this.goalsModule.lifecycle.reopenForLifecycleFacts")
-    || !reconcileBody.includes("this.goalsModule.lifecycle.satisfyForLifecycleFacts")
-    || /UPDATE goals SET/iu.test(reconcileBody)
+    coordinator.includes("private reconcileLifecycle(")
+    || coordinator.includes("this.reconcileLifecycle(")
+    || !coordinator.includes("new LifecycleReconciliationApplication(")
+    || !reconcileBody.includes("this.ports.goals.reopenForLifecycleFacts")
+    || !reconcileBody.includes("this.ports.goals.satisfyForLifecycleFacts")
+    || !reconcileBody.includes("this.ports.execution.releaseClaimForLifecycleFacts")
+    || /\b(?:store|repository)\b|UPDATE goals SET/iu.test(reconcileBody)
   ) {
-    errors.push(`${coordinatorPath}: lifecycle reconciliation must orchestrate through GoalsModule.lifecycle without Goal SQL`);
+    errors.push(`${reconciliationPath}: lifecycle reconciliation must compose public owner APIs without legacy callbacks or persistence`);
   }
 
   const storePath = "src/v1/store.ts";
@@ -521,11 +513,11 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   }
 
   const queryDelegates = [
-    ["readProjectGuidance", "addImpact", "this.goalQueries.readProjectGuidance"],
-    ["listTrashedGoals", "private goalTreeSemanticReview", "this.goalQueries.listTrashedGoals"],
+    ["readProjectGuidance", "private authorizeGoalRiskUpdate", "this.goalQueries.readProjectGuidance"],
+    ["listTrashedGoals", "queryReady", "this.goalQueries.listTrashedGoals"],
     ["queryReady", "queryAvailable", "this.goalsModule.query.listGoals"],
     ["getResolvedGoalPolicy", "explainGoal", "this.goalQueries.getResolvedGoalPolicy"],
-    ["readGoalContract", "startDraftDialogue", "this.goalQueries.readGoalContract"],
+    ["readGoalContract", "private ensureReviewObligations", "this.goalQueries.readGoalContract"],
   ];
   for (const [method, nextMethod, expectedCall] of queryDelegates) {
     const start = coordinator.indexOf(`  ${method}(`);
@@ -579,17 +571,32 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   ) {
     errors.push(`${goalReadApplicationPath}: compatibility composition must not own Goal persistence or bypass Goals Query`);
   }
+  for (const relativePath of ["src/v1/store.ts", "src/v1/migration.ts"]) {
+    errors.push(...checkGoalStorageOwnership(read(relativePath)).map(error => `${relativePath}: ${error}`));
+  }
+  errors.push(...checkGoalReadOwnerSql(read("src/feed/store.ts")).map(error => `src/feed/store.ts: ${error}`));
   for (const relativePath of ["src/web/server.ts", "src/mcp/server.ts", "src/v1/cli.ts"]) {
     const source = read(relativePath);
+    errors.push(...checkGoalReadOwnerSql(source).map(error => `${relativePath}: ${error}`));
     if (
       /\bcoordinator(?:ForResume)?\.(?:readGoalContract|readProjectGuidance|listTrashedGoals|getResolvedGoalPolicy)\b/u.test(source)
     ) {
       errors.push(`${relativePath}: Goal read callers must use the public Goal query application boundary`);
     }
-    if (!source.includes(".goalQueries.")) {
-      errors.push(`${relativePath}: migrated Goal read caller is missing goalQueries public usage`);
+    if (relativePath === "src/web/server.ts") {
+      if (!source.includes(".goalQueries.")) errors.push(`${relativePath}: migrated Goal read caller is missing goalQueries public usage`);
+    } else {
+      const hostSource = read("src/local-host/composition.ts");
+      if (!source.includes("client.invoke(readGoalContractCapability,")
+        || !source.includes('from "@adeptify/goalboard-plugin-goals"')
+        || !hostSource.includes("this.host.register(readGoalContractCapability,")
+        || !hostSource.includes("runtime.coordinator.goalQueries.readGoalContract(input.board_id, input.goal_id)")) {
+        errors.push(`${relativePath}: Goal Contract reads must invoke the public capability registered against the existing query owner`);
+      }
+      if (source.includes(".goalQueries.")) errors.push(`${relativePath}: migrated Goal reads must not bypass the Host Client`);
     }
   }
+  errors.push(...checkGoalReadOwnerSql(coordinator).map(error => `${coordinatorPath}: ${error}`));
 
   const appAdapters = [
     {
@@ -603,15 +610,21 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
       callerPath: "src/mcp/server.ts",
       factory: "createMcpGoalsAdapter",
       capability: "mcp.goals-command-adapter.v1",
+      commandHandlerPath: "apps/mcp/src/goal-commands.ts",
+      commandHandlerFactory: "createMcpGoalToolHandlers",
+      commandDispatch: "goalTools[name](arguments_)",
     },
     {
       appPath: "apps/cli/src/index.ts",
       callerPath: "src/v1/cli.ts",
       factory: "createCliGoalsAdapter",
       capability: "cli.goals-command-adapter.v1",
+      commandHandlerPath: "apps/cli/src/goal-commands.ts",
+      commandHandlerFactory: "createCliGoalCommandHandlers",
+      commandDispatch: "goalCommands[operation](input)",
     },
   ];
-  for (const { appPath, callerPath, factory, capability } of appAdapters) {
+  for (const { appPath, callerPath, factory, capability, commandHandlerPath, commandHandlerFactory, commandDispatch } of appAdapters) {
     const app = read(appPath);
     const caller = read(callerPath);
     if (
@@ -628,12 +641,33 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     ) {
       errors.push(`${appPath}: App adapter must not import the Goal implementation, Store, or business rules`);
     }
+    const commandHandler = commandHandlerPath ? read(commandHandlerPath) : null;
+    const hasCommandPath = commandHandler !== null
+      ? app.includes(`export { ${commandHandlerFactory} }`)
+        && caller.includes(`${commandHandlerFactory}(goalsAdapter`)
+        && caller.includes(commandDispatch)
+        && commandHandler.includes(`function ${commandHandlerFactory}`)
+        && commandHandler.includes("GoalsEntryApi")
+        && commandHandler.includes("goals.commands.")
+      : caller.includes("goalsAdapter.commands.");
     if (
       !caller.includes(`from "@adeptify/goalboard-app-${appPath.split("/")[1]}"`)
-      || !caller.includes(`${factory}(coordinator.goals)`)
-      || !caller.includes("goalsAdapter.commands.")
+      || !(commandHandler !== null
+        ? caller.includes("createGoalsEntryClient(client)")
+          && caller.includes("client.withScope(")
+          && !caller.includes(".withProject(")
+          && !caller.includes("coordinator.goals")
+        : caller.includes(`${factory}(coordinator.goals)`))
+      || !hasCommandPath
     ) {
-      errors.push(`${callerPath}: Goal writes must enter through ${factory} and the public commands port`);
+      errors.push(`${callerPath}: Goal writes must enter through the public App commands and its Host Client (or unmigrated Workbench adapter)`);
+    }
+    if (commandHandler !== null && (
+      commandHandler.includes("@adeptify/goalboard-module-goals")
+      || /\b(?:SELECT|INSERT INTO|UPDATE|DELETE FROM)\b/iu.test(commandHandler)
+      || /\b(?:SqliteGoalBoardStore|GoalsRepository|GoalBoardCoordinator)\b/u.test(commandHandler)
+    )) {
+      errors.push(`${commandHandlerPath}: command handlers must not own Module implementations, Store, or copied business rules`);
     }
   }
   const appAdapterTestPath = "tests/goals-app-adapters.test.ts";
@@ -692,6 +726,7 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
     "modules/governance-collaboration/src/repository.ts",
     "modules/governance-collaboration/src/review-lifecycle.ts",
     "modules/governance-collaboration/src/record-store.ts",
+    "modules/governance-collaboration/src/goal-tree-records.ts",
     "modules/governance-collaboration/src/state-machine.ts",
     "tests/governance-collaboration-module.test.ts",
   ];
@@ -905,12 +940,15 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     ) {
       errors.push(`${appPath}: execution adapter must not import Module implementations, Store, or copied rules`);
     }
-    if (
-      !caller.includes(factory)
-      || !caller.includes(`${factory}(coordinator.executionValidation)`)
-      || !caller.includes("executionAdapter.")
-    ) {
-      errors.push(`${callerPath}: execution-validation calls must enter through ${factory}`);
+    const usesClient = callerPath !== "src/web/server.ts";
+    const hostClientPath = caller.includes("createExecutionEntryClient(client)")
+      && caller.includes("client.withScope(")
+      && !caller.includes(".withProject(")
+      && !caller.includes("coordinator.executionValidation");
+    const workbenchPath = caller.includes(`${factory}(coordinator.executionValidation)`)
+      && caller.includes("executionAdapter.");
+    if (usesClient ? !hostClientPath : !workbenchPath) {
+      errors.push(`${callerPath}: execution-validation must use the public Host Client or the existing Workbench adapter`);
     }
     if (/coordinator(?:ForResume)?\.executionValidation\.(?:query|commands)\./u.test(caller)) {
       errors.push(`${callerPath}: direct execution-validation calls bypass the App adapter`);
@@ -1039,7 +1077,6 @@ function checkArtifactsOwnership(repositoryRoot) {
   const pluginPath = "plugins/native/artifacts/src/index.ts";
   const nativePlugin = read(pluginPath);
   for (const required of [
-    'maturity: "contract-only"',
     'contract: "@adeptify/goalboard-contracts/platform/plugin"',
     '"goal-reorg-ar1"',
     '"goal-reorg-ar3"',
@@ -1049,7 +1086,7 @@ function checkArtifactsOwnership(repositoryRoot) {
     }
   }
   if (/modules\/artifacts|ArtifactsModule|ArtifactRepository/u.test(nativePlugin)) {
-    errors.push(`${pluginPath}: Native Plugin Contract must not own or import Artifact facts before AR3`);
+    errors.push(`${pluginPath}: Native Plugin entrypoint must not own Artifact facts or construct its Repository`);
   }
 
   const store = read("src/v1/store.ts");
@@ -1146,20 +1183,10 @@ function checkPrivateWorkContextOwnership(repositoryRoot) {
     }
   }
 
-  const registryCompatibility = read("src/sessions/registry.ts");
-  if (
-    !registryCompatibility.includes("@adeptify/goalboard-module-private-work-context")
-    || registryCompatibility.includes("class GoalBoardSessionRegistry")
-    || registryCompatibility.includes("better-sqlite3")
-  ) {
-    errors.push("src/sessions/registry.ts: must remain a thin public-entrypoint compatibility shell");
-  }
-  const contentCompatibility = read("src/sessions/content-store.ts");
-  if (
-    !contentCompatibility.includes("@adeptify/goalboard-module-private-work-context")
-    || /createCipheriv|content\.key|AES/iu.test(contentCompatibility)
-  ) {
-    errors.push("src/sessions/content-store.ts: private content storage must stay inside the owner package");
+  for (const retired of ["src/sessions/registry.ts","src/sessions/content-store.ts"]) {
+    if (fs.existsSync(path.join(repositoryRoot, retired))) {
+      errors.push(`${retired}: retired after WK3 caller cutover; use the public owner entrypoint`);
+    }
   }
   const legacyTypes = read("src/sessions/types.ts");
   for (const forbidden of [
@@ -1253,7 +1280,6 @@ function checkRuntimeHostOwnership(repositoryRoot) {
   }
 
   for (const compatibility of [
-    { path: "src/sessions/codex-transport.ts", required: "@adeptify/goalboard-service-runtime-host", forbidden: "node:child_process" },
     { path: "src/web/pty-host.ts", required: "@adeptify/goalboard-service-runtime-host", forbidden: "node-pty" },
   ]) {
     const source = read(compatibility.path);
@@ -1262,13 +1288,10 @@ function checkRuntimeHostOwnership(repositoryRoot) {
     }
   }
 
-  const adaptersCompatibility = read("src/sessions/adapters.ts");
-  if (
-    !adaptersCompatibility.includes("@adeptify/goalboard-service-runtime-host")
-    || adaptersCompatibility.includes("class CodexRuntimeSessionAdapter")
-    || adaptersCompatibility.includes("CODEX_METHODS")
-  ) {
-    errors.push("src/sessions/adapters.ts: Provider implementation must stay inside Runtime Host");
+  for (const retired of ["src/sessions/adapters.ts","src/sessions/codex-transport.ts"]) {
+    if (fs.existsSync(path.join(repositoryRoot, retired))) {
+      errors.push(`${retired}: retired after WK3 caller cutover; use the public owner entrypoint`);
+    }
   }
   if (!read("src/web/server.ts").includes('from "@adeptify/goalboard-service-runtime-host"')) {
     errors.push("src/web/server.ts: Runtime composition must consume the public Runtime Host entrypoint");
@@ -1289,6 +1312,70 @@ function checkRuntimeHostOwnership(repositoryRoot) {
   return { errors };
 }
 
+export function checkGoalReadOwnerSql(source) {
+  return /\b(?:FROM|JOIN|UPDATE|INTO)\s+["`\[]?(?:goals|goal_relations|goal_risks|risks|policy_bindings|goal_contract_revisions|project_guidance_entries|project_guidance_revisions|planning_method_packs|coverage_items|coverage_contract_revisions|acceptance_criteria|goal_trash_records|goal_trash_relation_records)\b/iu.test(source)
+    ? ["Goal-owned fact SQL must remain behind the public Goals Query/Command API"] : [];
+}
+
+export function checkGoalStorageOwnership(source) {
+  const tables = "(?:goals|goal_relations|goal_risks|risks|policy_bindings|goal_contract_revisions|project_guidance_entries|project_guidance_revisions|planning_method_packs|coverage_items|coverage_contract_revisions|acceptance_criteria|goal_trash_records|goal_trash_relation_records|input_bindings|impact_bindings)";
+  const ddl = new RegExp(`\\b(?:CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?|ALTER\\s+TABLE\\s+|DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?)["\x60\\[]?${tables}\\b`, "iu");
+  const index = new RegExp(`\\bCREATE\\s+(?:UNIQUE\\s+)?INDEX\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\\S+\\s+ON\\s+["\x60\\[]?${tables}\\b`, "iu");
+  return [...checkGoalReadOwnerSql(source), ...(ddl.test(source) || index.test(source)
+    ? ["Goal schema and migration SQL must remain in the Goals owner; Host only composes public migrations"] : [])];
+}
+
+export function checkDraftProposalOwnerSql(goalCommands) {
+  return /\b(?:FROM|INTO|UPDATE)\s+contract_proposals\b/iu.test(goalCommands)
+    ? ["modules/goals/src/goal-commands.ts: Draft proposal supersession must call Governance records, not its table"]
+    : [];
+}
+
+export function checkDraftDialogueOwnership(coordinator, host, application) {
+  const errors = [];
+  for (const method of ["startDraftDialogue", "recordDraftDialogueTurn", "resumeDraftDialogue"]) {
+    if (new RegExp(`^  ${method}\\(`, "m").test(coordinator)) {
+      errors.push(`src/v1/coordinator.ts: DD1 forbids legacy ${method} implementation or facade`);
+    }
+    if (host.includes(`coordinator.${method}(`)) {
+      errors.push(`src/local-host/composition.ts: ${method} must use the public draftDialogue application`);
+    }
+  }
+  if (/\b(?:SELECT|INSERT INTO|UPDATE|DELETE FROM)\s+(?:clarification_sessions|clarification_turns|goals|claims|runs)\b/iu.test(application)) {
+    errors.push("plugins/native/goals/src/draft-dialogue-application.ts: persistence belongs to public Module owners");
+  }
+  return errors;
+}
+
+export function checkGoalTreeApplicationOwnership(coordinator, host, application, method = "submitGoalTreeProposal", port = "goalTreeSubmission") {
+  const errors = [];
+  if (new RegExp(`^  ${method}\\(`, "mu").test(coordinator)) {
+    errors.push(`src/v1/coordinator.ts: DD2 forbids legacy ${method} implementation or facade`);
+  }
+  if (host.includes(`coordinator.${method}(`)
+      || !host.includes(`coordinator.${port}.${method}(`)) {
+    errors.push(`src/local-host/composition.ts: ${method} must use the public ${port} application`);
+  }
+  if (/\b(?:store|repository|coordinator)\s*[.:]|\b(?:SELECT|INSERT INTO|UPDATE|DELETE FROM)\b/u.test(application)) {
+    errors.push(`plugins/native/goals: ${method} must compose Module owners without SQL or legacy callbacks`);
+  }
+  return errors;
+}
+
+export function checkProposalUiOwnership(renderer, workbench, proposalMount, legacyMount, clientDispatch) {
+  const errors = [];
+  for (const name of ["proposedGoalName", "goalTreeProposalItemCopy", "goalTreeDecompositionIssueCopy", "renderGoalTreeProposalDecision", "renderRewireDecision", "renderContractProposal", "renderCandidateDecision", "buildDecisionGroups", "recentDecisionResults"]) {
+    if (new RegExp(`function\\s+${name}\\s*\\(`, "u").test(renderer)) errors.push(`src/web/render.ts: DD2 ${name} belongs to the Goals contribution`);
+  }
+  for (const name of ["goalsProposalUiContribution", "goalsLegacyProposalUiContribution", "goalsDecisionResultsUiContribution"]) {
+    if (!workbench.includes(`host.register(${name})`)) errors.push(`apps/workbench: DD2 ${name} must be registered with UiHost`);
+  }
+  if (!proposalMount.includes("host.mount(") || !legacyMount.includes("host.mount(")) errors.push("apps/workbench: proposal renderers must mount the native contributions");
+  if (/const (?:goalTreeDecisionForm|contractDecisionForm|candidateDecisionForm|rewireDecisionForm) =/u.test(clientDispatch)
+      || !clientDispatch.includes("handleGoalProposalSubmit(submittedForm, event)")) errors.push("apps/workbench: proposal submission behavior belongs to the Goals client factory");
+  return errors;
+}
+
 export function checkPackageBoundaries(repositoryRoot) {
   const inventory = checkWorkspacePackages(repositoryRoot);
   const packages = packageInfos(repositoryRoot);
@@ -1304,7 +1391,32 @@ export function checkPackageBoundaries(repositoryRoot) {
   const artifactsOwnership = checkArtifactsOwnership(repositoryRoot);
   const privateWorkContextOwnership = checkPrivateWorkContextOwnership(repositoryRoot);
   const runtimeHostOwnership = checkRuntimeHostOwnership(repositoryRoot);
+  const dialogueOwnership = checkDraftDialogueOwnership(...[
+    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/draft-dialogue-application.ts",
+  ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
+  const submissionOwnership = checkGoalTreeApplicationOwnership(...[
+    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-submission.ts",
+  ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
+  const proposalCheckOwnership = checkGoalTreeApplicationOwnership(...[
+    "src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-check.ts",
+  ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), "checkGoalTreeProposal", "goalTreeCheck");
   const errors = [
+    ...checkProposalUiOwnership(...["src/web/render.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
+      .map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8"))).map(message => `[proposal-ui-owner] ${message}`),
+    ...proposalCheckOwnership.map(message => `[proposal-check-owner] ${message}`),
+    ...[
+      ["decideGoalTreeProposal", "goalTreeDecision", "goal-tree-decision"],
+      ["decideContractProposal", "legacyContractDecision", "legacy-contract-decision"],
+      ["decideCandidate", "legacyCandidateDecision", "legacy-candidate-decision"],
+      ["confirmRewire", "legacyRewireDecision", "legacy-rewire-decision"],
+      ["submitContractProposal", "legacyProposalSubmission", "legacy-proposal-submission"],
+      ["submitCandidate", "legacyProposalSubmission", "legacy-proposal-submission"],
+      ["submitDependencyProposal", "legacyProposalSubmission", "legacy-proposal-submission"],
+    ].flatMap(([method, port, file]) => checkGoalTreeApplicationOwnership(...[
+      "src/v1/coordinator.ts", "src/local-host/composition.ts", `plugins/native/goals/src/${file}.ts`,
+    ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), method, port)
+      .map(message => `[proposal-decision-owner] ${message}`)),
+    ...submissionOwnership.map(message => `[proposal-submission-owner] ${message}`),
     ...inventory.errors.map((message) => `[workspace-inventory] ${message}`),
     ...sourceImports.errors,
     ...dependencyGraph.errors,
@@ -1318,6 +1430,7 @@ export function checkPackageBoundaries(repositoryRoot) {
     ...artifactsOwnership.errors.map((message) => `[artifacts-owner] ${message}`),
     ...privateWorkContextOwnership.errors.map((message) => `[private-work-context-owner] ${message}`),
     ...runtimeHostOwnership.errors.map((message) => `[runtime-host-owner] ${message}`),
+    ...dialogueOwnership.map(message => `[draft-dialogue-owner] ${message}`),
   ];
 
   return {

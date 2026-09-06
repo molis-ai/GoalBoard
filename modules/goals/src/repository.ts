@@ -1,4 +1,8 @@
+import type { StoredModuleEvent } from "@adeptify/goalboard-contracts/platform/storage";
 import type {
+  AcceptedRiskFacts,
+  GoalContractRevisionRecord,
+  CoverageContractRevisionRecord,
   GoalAcceptanceCriterion,
   GoalPolicyBindingRecord,
   GoalRecord,
@@ -52,6 +56,15 @@ export interface GoalsIdempotencyInput {
 export class GoalsRepository {
   constructor(readonly db: GoalsSqliteDatabase) {}
 
+  listLifecycleEvents(boardId: string): StoredModuleEvent[] {
+    return (this.db.prepare(`SELECT seq, type, object_type, object_id, payload_json, at FROM events
+      WHERE board_id = ? AND type IN ('goal.rework_requested', 'goal.reopened', 'goal.satisfied', 'goal.auto_satisfied', 'risk.created', 'risk.updated', 'risk.resolved', 'risk.accepted', 'contract.revision_applied') ORDER BY seq`)
+      .all(boardId) as Row[]).map(row => ({
+      seq: Number(row.seq ?? 0), type: text(row.type), object_type: text(row.object_type), object_id: text(row.object_id),
+      payload: parseJson<Record<string, unknown>>(row.payload_json, {}), at: text(row.at),
+    }));
+  }
+
   immediate<T>(operation: () => T): T {
     return this.db.transaction(operation).immediate();
   }
@@ -69,6 +82,12 @@ export class GoalsRepository {
       created_at: text(row.created_at),
       updated_at: text(row.updated_at),
     } : null;
+  }
+
+  criterionGoalId(criterionId: string): string | null {
+    const row = this.db.prepare("SELECT goal_id FROM acceptance_criteria WHERE criterion_id = ?")
+      .get(criterionId) as { goal_id: string } | undefined;
+    return row?.goal_id ?? null;
   }
 
   getGoal(goalId: string): GoalRecord | null {
@@ -131,6 +150,63 @@ export class GoalsRepository {
       goal_id: text(row.goal_id),
       risk_id: text(row.risk_id),
     }));
+  }
+
+  insertOpenRisk(facts: AcceptedRiskFacts, at: string): void {
+    this.db.prepare(`INSERT INTO risks (
+      risk_id, board_id, description, probability, impact, affected_surfaces_json, trigger, treatment,
+      treatment_plan, blocking_mode, revisit_condition, owner, state, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`).run(
+      facts.risk_id, facts.board_id, facts.description, facts.probability, facts.impact, sqliteJson(facts.affected_surfaces),
+      facts.trigger, facts.treatment, facts.treatment_plan, facts.blocking_mode, facts.revisit_condition, facts.owner, at, at);
+    const link = this.db.prepare("INSERT INTO goal_risks (goal_id, risk_id) VALUES (?, ?)");
+    for (const goalId of facts.goal_ids) link.run(goalId, facts.risk_id);
+  }
+
+  listContractRevisions(boardId: string): GoalContractRevisionRecord[] {
+    return (this.db.prepare("SELECT * FROM goal_contract_revisions WHERE board_id = ? ORDER BY goal_id, revision")
+      .all(boardId) as Row[]).map(row => ({
+      goal_id: text(row.goal_id), board_id: text(row.board_id), revision: Math.max(1, number(row.revision) || 1),
+      contract: parseJson<GoalContractRevisionRecord["contract"]>(row.contract_json, {} as GoalContractRevisionRecord["contract"]),
+      effect: text(row.effect) as GoalContractRevisionRecord["effect"], source_proposal_id: nullableText(row.source_proposal_id),
+      changed_by: text(row.changed_by), reason: text(row.reason), created_at: text(row.created_at),
+    }));
+  }
+
+  listCoverageRevisions(boardId: string): CoverageContractRevisionRecord[] {
+    return (this.db.prepare(`SELECT coverage.* FROM coverage_contract_revisions coverage
+      JOIN goals parent ON parent.goal_id = coverage.parent_goal_id
+      WHERE parent.board_id = ? ORDER BY coverage.parent_goal_id, coverage.child_goal_id, coverage.parent_contract_revision`)
+      .all(boardId) as Row[]).map(row => ({
+      parent_goal_id: text(row.parent_goal_id), child_goal_id: text(row.child_goal_id),
+      parent_contract_revision: Math.max(1, number(row.parent_contract_revision) || 1),
+      child_contract_revision: Math.max(1, number(row.child_contract_revision) || 1), recorded_at: text(row.recorded_at),
+    }));
+  }
+
+  replacePolicyBinding(input: {
+    board_id: string; goal_id: string | null; policy_binding_id: string;
+    policy: GoalPolicyBindingRecord["policy"]; actor_id: string; reason: string; at: string;
+  }): string[] {
+    const { board_id: boardId, goal_id: goalId } = input;
+    const replaced = (goalId
+      ? this.db.prepare("SELECT policy_binding_id FROM policy_bindings WHERE board_id = ? AND goal_id = ? AND scope = 'goal' AND state = 'active'").all(boardId, goalId)
+      : this.db.prepare("SELECT policy_binding_id FROM policy_bindings WHERE board_id = ? AND goal_id IS NULL AND scope = 'project_default' AND state = 'active'").all(boardId)) as Row[];
+    if (goalId) {
+      this.db.prepare("UPDATE policy_bindings SET state = 'replaced' WHERE board_id = ? AND goal_id = ? AND scope = 'goal' AND state = 'active'").run(boardId, goalId);
+    } else {
+      this.db.prepare("UPDATE policy_bindings SET state = 'replaced' WHERE board_id = ? AND goal_id IS NULL AND scope = 'project_default' AND state = 'active'").run(boardId);
+    }
+    this.db.prepare(`INSERT INTO policy_bindings (
+      policy_binding_id, board_id, goal_id, scope, policy_json, state, created_by, reason, created_at
+    ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`).run(input.policy_binding_id, boardId, goalId,
+      goalId ? "goal" : "project_default", sqliteJson(input.policy), input.actor_id, input.reason, input.at);
+    return replaced.map(row => text(row.policy_binding_id));
+  }
+
+  deactivatePolicyBinding(boardId: string, bindingId: string): boolean {
+    return this.db.prepare("UPDATE policy_bindings SET state = 'replaced' WHERE board_id = ? AND policy_binding_id = ? AND state = 'active'")
+      .run(boardId, bindingId).changes === 1;
   }
 
   listActivePolicyBindings(boardId: string, goalId?: string): GoalPolicyBindingRecord[] {
@@ -352,7 +428,7 @@ function mapRelation(row: Row): GoalRelationRecord {
   };
 }
 
-function mapRisk(row: Row): RiskRecord {
+export function mapRisk(row: Row): RiskRecord {
   return {
     risk_id: text(row.risk_id),
     board_id: text(row.board_id),

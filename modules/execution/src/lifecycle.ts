@@ -14,6 +14,7 @@ import type {
 } from "@adeptify/goalboard-contracts/modules/execution";
 
 import { ExecutionError, type ExecutionErrorFactory } from "./errors.js";
+import { transitionExecutionContractRevision } from "./contract-revision.js";
 import {
   ExecutionRepository,
   type ExecutionEventInput,
@@ -243,6 +244,29 @@ export class ExecutionLifecycle implements ExecutionCommandApi {
     return this.expirePastClaimsAt(boardId, actorId, this.now());
   }
 
+  transitionGoalContractRevision(input: Parameters<ExecutionCommandApi["transitionGoalContractRevision"]>[0]): void {
+    transitionExecutionContractRevision(this.repository, this.options.appendEvent, this.id, input);
+  }
+
+  releaseClaimForLifecycleFacts(
+    boardId: string, claimId: string, actorId: string, at: string, reason: string,
+  ): number {
+    const claim = this.requireClaim(boardId, claimId);
+    this.repository.updateClaimState(claimId, "released", at, reason);
+    return this.options.appendEvent({
+      eventId: this.id(), boardId, actorId,
+      type: "claim.auto_released", objectType: "claim", objectId: claimId,
+      reason,
+      payload: {
+        goal_id: claim.goal_id,
+        contract_revision: claim.contract_revision,
+        action_kind: claim.action_kind,
+        action_target_id: claim.action_target_id,
+      },
+      at,
+    });
+  }
+
   completeRunForRevalidation(boardId: string, runId: string, actorId: string): ExecutionRunRecord {
     return this.repository.immediate(() => {
       const run = this.repository.getRun(boardId, runId);
@@ -261,6 +285,18 @@ export class ExecutionLifecycle implements ExecutionCommandApi {
         at: now,
       });
       return this.repository.getRun(boardId, runId)!;
+    });
+  }
+
+  completeRunForProposal(boardId: string, runId: string, proposalId: string, actorId: string, at: string): number {
+    const run = this.repository.getRun(boardId, runId);
+    if (!run) throw this.errorFactory("run.not_found", `Run 不存在: ${runId}`);
+    this.repository.completeRun(runId, at);
+    return this.options.appendEvent({
+      eventId: this.id(), boardId, actorId, type: "run.completed", objectType: "run", objectId: runId,
+      reason: "完整 Proposal 已提交，Clarifier Run 自动结束",
+      payload: { goal_id: run.goal_id, proposal_id: proposalId },
+      at,
     });
   }
 

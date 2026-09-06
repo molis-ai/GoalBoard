@@ -44,6 +44,9 @@ importers:
       '@adeptify/goalboard-module-attention-resumption':
         specifier: workspace:*
         version: link:modules/attention-resumption
+      '@adeptify/goalboard-module-context-ledger':
+        specifier: workspace:*
+        version: link:modules/context-ledger
       '@adeptify/goalboard-module-evidence-verification':
         specifier: workspace:*
         version: link:modules/evidence-verification
@@ -71,21 +74,33 @@ importers:
       '@adeptify/goalboard-module-sources':
         specifier: workspace:*
         version: link:modules/sources
+      '@adeptify/goalboard-plugin-artifacts':
+        specifier: workspace:*
+        version: link:plugins/native/artifacts
       '@adeptify/goalboard-plugin-feed':
         specifier: workspace:*
         version: link:plugins/native/feed
+      '@adeptify/goalboard-plugin-cli':
+        specifier: workspace:*
+        version: link:tooling/plugin-cli
       '@adeptify/goalboard-plugin-goals':
         specifier: workspace:*
         version: link:plugins/native/goals
       '@adeptify/goalboard-plugin-runtime':
         specifier: workspace:*
         version: link:packages/plugin-runtime
+      '@adeptify/goalboard-plugin-work':
+        specifier: workspace:*
+        version: link:plugins/native/work
       '@adeptify/goalboard-service-connector-host':
         specifier: workspace:*
         version: link:horizontal/connector-host
       '@adeptify/goalboard-service-listener-host':
         specifier: workspace:*
         version: link:horizontal/listener-host
+      '@adeptify/goalboard-service-runtime-host':
+        specifier: workspace:*
+        version: link:horizontal/runtime-host
       '@adeptify/goalboard-ui-host':
         specifier: workspace:*
         version: link:packages/ui-host
@@ -132,12 +147,6 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
-      '@xterm/addon-fit':
-        specifier: ^0.11.0
-        version: 0.11.0
-      '@xterm/xterm':
-        specifier: ^6.0.0
-        version: 6.0.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -159,6 +168,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@adeptify/goalboard-app-local-host':
+        specifier: workspace:*
+        version: link:../local-host
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -168,12 +180,30 @@ importers:
 
   apps/local-host:
     dependencies:
+      '@adeptify/goalboard-app-mcp':
+        specifier: workspace:*
+        version: link:../mcp
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@adeptify/goalboard-kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@adeptify/goalboard-module-context-ledger':
+        specifier: workspace:*
+        version: link:../../modules/context-ledger
+      '@adeptify/goalboard-module-private-work-context':
+        specifier: workspace:*
+        version: link:../../modules/private-work-context
+      '@adeptify/goalboard-plugin-artifacts':
+        specifier: workspace:*
+        version: link:../../plugins/native/artifacts
+      '@adeptify/goalboard-plugin-runtime':
+        specifier: workspace:*
+        version: link:../../packages/plugin-runtime
+      '@adeptify/goalboard-ui-host':
+        specifier: workspace:*
+        version: link:../../packages/ui-host
 
   apps/mcp:
     dependencies:
@@ -195,12 +225,18 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@adeptify/goalboard-plugin-artifacts':
+        specifier: workspace:*
+        version: link:../../plugins/native/artifacts
       '@adeptify/goalboard-plugin-feed':
         specifier: workspace:*
         version: link:../../plugins/native/feed
       '@adeptify/goalboard-plugin-goals':
         specifier: workspace:*
         version: link:../../plugins/native/goals
+      '@adeptify/goalboard-plugin-work':
+        specifier: workspace:*
+        version: link:../../plugins/native/work
       '@adeptify/goalboard-ui-host':
         specifier: workspace:*
         version: link:../../packages/ui-host
@@ -222,6 +258,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      node-pty:
+        specifier: 1.1.0
+        version: 1.1.0
 
   horizontal/scheduler:
     dependencies:
@@ -429,6 +468,12 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../../packages/contracts
+      '@xterm/addon-fit':
+        specifier: ^0.11.0
+        version: 0.11.0
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
 
   plugins/official-integrations/github:
     dependencies:
@@ -480,6 +525,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@adeptify/goalboard-plugin-runtime':
+        specifier: workspace:*
+        version: link:../../packages/plugin-runtime
 
 packages:
 

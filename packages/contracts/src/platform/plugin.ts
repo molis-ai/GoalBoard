@@ -1,6 +1,31 @@
 import type { ConnectorDriver } from "../services/connector-host.js";
 import type { RawEventAdapter } from "../services/listener-host.js";
 import type { ContractDescriptor } from "./package.js";
+import type { UiContribution } from "./ui.js";
+import type { PluginArtifactClient } from "./plugin-artifacts.js";
+
+export { parsePluginManifest, PluginManifestError } from "./plugin-manifest.js";
+export type { PluginArtifactClient, PluginArtifactPublishInput } from "./plugin-artifacts.js";
+export type { PluginPackageFile, PluginPackagePayload, PluginPackageBundle, PluginPackageSigner } from "./plugin-package.js";
+
+/** Opaque, personal installation data. The author owns serialization, not storage paths or SQL. */
+export interface PluginPrivateStorage {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  delete(key: string): boolean;
+}
+
+export interface PluginUiClient {
+  register<TModel>(contribution: UiContribution<TModel>): void;
+  unregister(contributionId: string): void;
+}
+
+export interface PluginHostServices {
+  /** Present only when the Manifest declares private storage. Actual grant is checked on each operation. */
+  readonly storage?: PluginPrivateStorage;
+  readonly artifacts: PluginArtifactClient;
+  readonly ui: PluginUiClient;
+}
 
 export const platformPluginContract = {
   contractId: "io.goalboard.platform.plugin.v1",
@@ -91,6 +116,8 @@ export interface PluginStartContext {
   version: string;
   deployment: PluginDeployment;
   grants: readonly string[];
+  /** Available when running through the application Host, not a bare reference executor. */
+  readonly services?: PluginHostServices;
   requireGrant(permission: string): void;
 }
 

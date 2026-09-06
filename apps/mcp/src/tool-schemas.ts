@@ -1,0 +1,533 @@
+export const V1_COMMON = {
+  database_path: { type: "string", description: "管理入口使用的共享 SQLite 文件路径" },
+  board_id: { type: "string" },
+};
+
+export const V1_CLAIM_ROLE = {
+  type: "string",
+  enum: ["clarifier", "executor", "self_verifier", "cross_reviewer", "adversarial_reviewer", "revalidator"],
+};
+
+export const V1_STRING = { type: "string" };
+export const V1_STRING_ARRAY = { type: "array", items: V1_STRING };
+export const V1_LEASE_SECONDS = {
+  type: "integer",
+  minimum: 1,
+  description:
+    "可选；通常省略以采用当前动态策略（由项目与 Goal 共同解析）。显式值只用于缩短租约，必须是正整数且不能超过当前 resolved policy 的 max_lease_seconds；不要通过失败调用探测上限。",
+};
+export const V1_RENEW_LEASE_SECONDS = {
+  type: "integer",
+  minimum: 1,
+  description:
+    "可选；省略时采用领取时确认的策略上限。显式值必须是正整数且不能超过该 Claim 领取时 resolved policy 的 max_lease_seconds。",
+};
+export const DRAFT_DIALOGUE_FACT = {
+  type: "object",
+  properties: {
+    statement: V1_STRING,
+    source_kind: { type: "string", enum: ["user_answer", "repository_fact", "document_fact"] },
+    source_refs: V1_STRING_ARRAY,
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    confirmed_by_user: { type: "boolean" },
+  },
+  required: ["statement", "source_kind"],
+};
+export const DRAFT_DIALOGUE_ASSUMPTION = {
+  type: "object",
+  properties: {
+    statement: V1_STRING,
+    source_refs: V1_STRING_ARRAY,
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+  },
+  required: ["statement"],
+};
+const GOAL_TREE_AFFECTED_OBJECT = {
+  type: "object",
+  properties: {
+    object_type: { type: "string", enum: ["goal", "relation", "risk", "policy", "candidate", "rewire"] },
+    object_id: V1_STRING,
+  },
+  required: ["object_type", "object_id"],
+};
+const GOAL_TREE_ACCEPTANCE_CRITERION = {
+  type: "object",
+  properties: {
+    criterion_id: V1_STRING,
+    statement: V1_STRING,
+    decision_method: {
+      type: "string",
+      enum: ["automated_check", "inspection", "measurement", "human_decision"],
+    },
+    pass_condition: V1_STRING,
+    target: { type: ["object", "null"] },
+    required_evidence: V1_STRING_ARRAY,
+  },
+  required: ["statement", "decision_method", "pass_condition", "required_evidence"],
+};
+const GOAL_TREE_CONTRACT_COVERAGE_STATUS = {
+  type: "string",
+  enum: ["complete", "partial", "integration_required", "uncovered"],
+};
+const GOAL_TREE_CONTRACT_COVERAGE = {
+  type: "object",
+  description:
+    "逐项把父 Goal Contract 的 promised_outputs 与 acceptance_criteria 映射到后代 Goal 的真实 Contract 字段。closed_compound 只接受 complete；partial、integration_required 或 uncovered 必须保持父 Goal 开放。",
+  properties: {
+    promised_outputs: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          parent_promised_output: V1_STRING,
+          status: GOAL_TREE_CONTRACT_COVERAGE_STATUS,
+          child_outputs: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              properties: { goal_id: V1_STRING, promised_output: V1_STRING },
+              required: ["goal_id", "promised_output"],
+            },
+          },
+          reason: V1_STRING,
+        },
+        required: ["parent_promised_output", "status", "child_outputs", "reason"],
+      },
+    },
+    acceptance_criteria: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          parent_criterion_id: V1_STRING,
+          status: GOAL_TREE_CONTRACT_COVERAGE_STATUS,
+          child_criteria: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "object",
+              properties: { goal_id: V1_STRING, criterion_id: V1_STRING },
+              required: ["goal_id", "criterion_id"],
+            },
+          },
+          reason: V1_STRING,
+        },
+        required: ["parent_criterion_id", "status", "child_criteria", "reason"],
+      },
+    },
+  },
+  required: ["promised_outputs", "acceptance_criteria"],
+};
+const GOAL_TREE_DECOMPOSITION_REVIEW = {
+  type: "object",
+  description:
+    "拆分检查。complete + closed_compound 必须提供 contract_coverage，并逐项覆盖父 Contract；GoalBoard 只验证明确引用，不猜测自然语言语义等价。",
+  properties: {
+    status: { type: "string", enum: ["complete", "paused"] },
+    method_pack_ids: V1_STRING_ARRAY,
+    task_context: { type: "string", enum: ["game", "app", "ai_data", "content_research", "operations", "other"] },
+    product_context: { type: "string", enum: ["game", "app", "other"] },
+    coverage: { type: "array", items: { type: "object" } },
+    open_goal_ids: V1_STRING_ARRAY,
+    next_step: V1_STRING,
+    contract_coverage: GOAL_TREE_CONTRACT_COVERAGE,
+  },
+  required: ["status", "coverage", "open_goal_ids", "next_step"],
+};
+const GOAL_TREE_GOAL_PROPERTIES = {
+  goal_id: {
+    type: "string",
+    description: "稳定 Goal ID。新建 Goal 必填；更新 Contract 时用于定位目标 Goal。",
+  },
+  title: V1_STRING,
+  outcome: V1_STRING,
+  why: V1_STRING,
+  business_logic: V1_STRING,
+  in_scope: V1_STRING_ARRAY,
+  out_of_scope: V1_STRING_ARRAY,
+  constraints: V1_STRING_ARRAY,
+  required_inputs: V1_STRING_ARRAY,
+  promised_outputs: V1_STRING_ARRAY,
+  definition_state: { type: "string", enum: ["draft", "accepted"] },
+  decomposition_state: {
+    type: "string",
+    enum: ["abstract", "frontier_open", "closed_leaf", "closed_compound"],
+  },
+  decomposition_review: GOAL_TREE_DECOMPOSITION_REVIEW,
+  leaf_readiness: {
+    type: "object",
+    description:
+      "叶子粒度判断。规范路径是 items[].payload.leaf_readiness；不要放在 item 顶层。accepted + closed_leaf 必须完整提供全部字段。",
+    properties: {
+      verdict: { type: "string", enum: ["ready", "split_required"] },
+      primary_deliverable: V1_STRING,
+      output_coverage: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            promised_output: V1_STRING,
+            role: { type: "string", enum: ["primary", "supporting", "independent"] },
+            reason: V1_STRING,
+          },
+          required: ["promised_output", "role", "reason"],
+        },
+      },
+      split_candidates: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            work_item: V1_STRING,
+            separately_deliverable: { type: "boolean" },
+            separately_acceptable: { type: "boolean" },
+            independently_reworkable: { type: "boolean" },
+            decision: {
+              type: "string",
+              enum: ["keep", "split"],
+              description:
+                "只允许 keep 或 split。明确延期且本轮不做的工作不要放进 split_candidates；写入 out_of_scope/提案 non_goals。可独立交付的工作选择 split 并新建 Goal。",
+            },
+            reason: V1_STRING,
+          },
+          required: [
+            "work_item",
+            "separately_deliverable",
+            "separately_acceptable",
+            "independently_reworkable",
+            "decision",
+            "reason",
+          ],
+        },
+      },
+      rationale: V1_STRING,
+      unresolved_decisions: V1_STRING_ARRAY,
+      independent_deliverables: V1_STRING_ARRAY,
+      acceptance_criterion_ids: V1_STRING_ARRAY,
+    },
+    required: [
+      "verdict",
+      "primary_deliverable",
+      "output_coverage",
+      "split_candidates",
+      "rationale",
+      "unresolved_decisions",
+      "independent_deliverables",
+      "acceptance_criterion_ids",
+    ],
+  },
+  priority: { type: "number" },
+  acceptance_criteria: { type: "array", items: GOAL_TREE_ACCEPTANCE_CRITERION },
+};
+const GOAL_TREE_GOAL_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=goal 的规范 payload。Draft 最少提供 goal_id、title；accepted Goal 还应给出完整 Contract 和验收条件。parent_goal_id 不会创建层级，父子关系必须另提 relation 条目。",
+  properties: GOAL_TREE_GOAL_PROPERTIES,
+  required: ["goal_id", "title"],
+  examples: [{ goal_id: "child-goal", title: "交付可验收的子结果", definition_state: "draft" }],
+};
+const GOAL_TREE_CONTRACT_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=contract 的规范 payload。goal_id 指向现有 Goal，其余 Contract 字段直接放在 payload 内；不要再包一层 proposed_goal。accepted + closed_leaf 的叶子判断路径是 items[].payload.leaf_readiness。",
+  properties: GOAL_TREE_GOAL_PROPERTIES,
+  required: ["goal_id"],
+  examples: [{ goal_id: "existing-goal", title: "更新后的目标标题", definition_state: "draft" }],
+};
+const CONTRACT_PROPOSAL_ACCEPTANCE_CRITERION = {
+  ...GOAL_TREE_ACCEPTANCE_CRITERION,
+  description:
+    "完整 Contract Proposal 的验收条件必须是对象，不能写成字符串。criterion_id 还必须与 leaf_readiness.acceptance_criterion_ids 一一对应。",
+  required: ["criterion_id", "statement", "decision_method", "pass_condition"],
+};
+export const CONTRACT_PROPOSAL_GOAL_PAYLOAD = {
+  type: "object",
+  description:
+    "同一 Draft 的完整 accepted / closed_leaf Contract。goal_id 必须是原 Draft ID；acceptance_criteria 是对象数组；leaf_readiness 位于 proposed_goal.leaf_readiness。",
+  properties: {
+    ...GOAL_TREE_GOAL_PROPERTIES,
+    acceptance_criteria: { type: "array", minItems: 1, items: CONTRACT_PROPOSAL_ACCEPTANCE_CRITERION },
+  },
+  required: [
+    "goal_id",
+    "title",
+    "outcome",
+    "why",
+    "business_logic",
+    "in_scope",
+    "out_of_scope",
+    "required_inputs",
+    "promised_outputs",
+    "leaf_readiness",
+    "definition_state",
+    "decomposition_state",
+    "priority",
+    "acceptance_criteria",
+  ],
+};
+const GOAL_TREE_RELATION_PROPERTIES = {
+  action: { type: "string", enum: ["add", "deactivate"] },
+  relation_id: {
+    type: "string",
+    description: "停用已有关系时可直接提供；新增关系不使用。",
+  },
+  from_goal_id: V1_STRING,
+  to_goal_id: V1_STRING,
+  type: {
+    type: "string",
+    enum: [
+      "part_of",
+      "depends_on",
+      "conflicts_with",
+      "mitigates",
+      "extends",
+      "replaces",
+      "corrects",
+      "invalidates",
+      "migrates_from",
+    ],
+  },
+  reason: V1_STRING,
+};
+const GOAL_TREE_RELATION_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=relation 的规范 payload。create/update 需要 from_goal_id、to_goal_id、type；deactivate 可用 relation_id，或完整三元组。方向语义：part_of 为子 Goal → 父 Goal；depends_on 为消费方/依赖方 Goal → 提供方/前置 Goal。",
+  properties: GOAL_TREE_RELATION_PROPERTIES,
+  anyOf: [
+    { required: ["from_goal_id", "to_goal_id", "type"] },
+    { required: ["relation_id"] },
+  ],
+  examples: [{ from_goal_id: "child-goal", to_goal_id: "parent-goal", type: "part_of" }],
+};
+const GOAL_TREE_DEPENDENCY_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=dependency 专用于 depends_on。create/update 需要 from_goal_id、to_goal_id；type 可省略，若提供只能是 depends_on。方向固定为消费方/依赖方 Goal → 提供方/前置 Goal。deactivate 可用 relation_id 或同一方向的端点。",
+  properties: {
+    ...GOAL_TREE_RELATION_PROPERTIES,
+    type: { type: "string", enum: ["depends_on"] },
+  },
+  anyOf: [
+    { required: ["from_goal_id", "to_goal_id"] },
+    { required: ["relation_id"] },
+  ],
+  examples: [{ from_goal_id: "consumer-goal", to_goal_id: "provider-goal", type: "depends_on" }],
+};
+const GOAL_TREE_RISK_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=risk。create/update 需要关联 Goal 与完整风险事实；update/deactivate 还需要 risk_id。treatment 是处理策略，state 是生命周期。",
+  properties: {
+    risk_id: V1_STRING,
+    goal_ids: V1_STRING_ARRAY,
+    description: V1_STRING,
+    probability: V1_STRING,
+    impact: V1_STRING,
+    affected_surfaces: V1_STRING_ARRAY,
+    trigger: V1_STRING,
+    treatment: { type: "string", enum: ["accept", "mitigate", "avoid", "defer"] },
+    treatment_plan: V1_STRING,
+    blocking_mode: {
+      type: "string",
+      enum: ["none", "claim", "completion", "invalidate_on_trigger"],
+    },
+    revisit_condition: V1_STRING,
+    owner: V1_STRING,
+    state: { type: "string", enum: ["open", "triggered", "resolved", "accepted", "expired"] },
+  },
+  examples: [{
+    goal_ids: ["goal-a"],
+    description: "关键输入可能不可用",
+    probability: "medium",
+    impact: "high",
+    trigger: "输入连续两次读取失败",
+    treatment: "mitigate",
+    blocking_mode: "completion",
+    revisit_condition: "替代输入完成验证后复查",
+    owner: "runtime-clarifier",
+  }],
+};
+export const GOAL_TREE_POLICY_FIELDS = {
+  goal_mode: { type: "string", enum: ["disabled", "preferred", "required"] },
+  required_capabilities: V1_STRING_ARRAY,
+  self_verification: { type: "boolean" },
+  cross_reviewers: { type: "integer", minimum: 0 },
+  adversarial_reviewers: { type: "integer", minimum: 0 },
+  human_approval: { type: "boolean" },
+  max_lease_seconds: { type: "integer", minimum: 1 },
+};
+const GOAL_TREE_POLICY_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=policy。create/update 可提供 goal_id（省略表示项目默认）和 policy 对象；兼容直接平铺 policy 字段。deactivate 需要 policy_binding_id。",
+  properties: {
+    goal_id: V1_STRING,
+    policy_binding_id: V1_STRING,
+    policy: { type: "object", properties: GOAL_TREE_POLICY_FIELDS },
+    ...GOAL_TREE_POLICY_FIELDS,
+  },
+  examples: [{ goal_id: "goal-a", policy: { goal_mode: "required", self_verification: true } }],
+};
+const GOAL_TREE_CANDIDATE_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=candidate。create 提供 candidate_id（可选）与 proposed_goal；晋升已有 pending Candidate 时使用 update，并提供 candidate_id、最终 proposed_goal、proposed_relations（可为空列表）。",
+  properties: {
+    candidate_id: V1_STRING,
+    proposed_goal: GOAL_TREE_GOAL_PAYLOAD,
+    proposed_relations: { type: "array", items: GOAL_TREE_RELATION_PAYLOAD },
+    proposed_impacts: { type: "array", items: { type: "object" } },
+    proposed_risks: { type: "array", items: { type: "object" } },
+    blocking_mode: { type: "string", enum: ["none", "current_run", "dependent_claims"] },
+    formal_goal_id: V1_STRING,
+    materialized_by_proposal_id: V1_STRING,
+  },
+  examples: [{
+    candidate_id: "candidate-a",
+    proposed_goal: { goal_id: "goal-a", title: "晋升后的 Goal" },
+    proposed_relations: [],
+  }],
+};
+const GOAL_TREE_REWIRE_PAYLOAD = {
+  type: "object",
+  description:
+    "kind=rewire。create/update 提供 relations 数组；update/deactivate 需要 rewire_id。每条关系沿用 relation 的方向语义。",
+  properties: {
+    rewire_id: V1_STRING,
+    relations: { type: "array", items: GOAL_TREE_RELATION_PAYLOAD },
+  },
+  examples: [{
+    rewire_id: "rewire-a",
+    relations: [{ from_goal_id: "child-goal", to_goal_id: "parent-goal", type: "part_of" }],
+  }],
+};
+const GOAL_TREE_PAYLOAD_BY_KIND = [
+  ["goal", GOAL_TREE_GOAL_PAYLOAD],
+  ["contract", GOAL_TREE_CONTRACT_PAYLOAD],
+  ["relation", GOAL_TREE_RELATION_PAYLOAD],
+  ["dependency", GOAL_TREE_DEPENDENCY_PAYLOAD],
+  ["risk", GOAL_TREE_RISK_PAYLOAD],
+  ["policy", GOAL_TREE_POLICY_PAYLOAD],
+  ["candidate", GOAL_TREE_CANDIDATE_PAYLOAD],
+  ["rewire", GOAL_TREE_REWIRE_PAYLOAD],
+] as const;
+const GOAL_TREE_ITEM_EXPLANATION = {
+  type: "object",
+  description:
+    "面向审批人的逐项语义解释：problem 是主要解决的问题；expected_effect 是确认后会改变什么；non_goals 明确不改变什么；depends_on_item_ids 指向同一 Proposal 内先行或共同构成主链路的 item_id。包含 5 项及以上变化时每项必填。",
+  properties: {
+    problem: V1_STRING,
+    expected_effect: V1_STRING,
+    non_goals: V1_STRING_ARRAY,
+    depends_on_item_ids: V1_STRING_ARRAY,
+  },
+  required: ["problem", "expected_effect", "non_goals", "depends_on_item_ids"],
+};
+export const GOAL_TREE_PROPOSAL_NARRATIVE = {
+  type: "object",
+  description:
+    "整份变更的用户语义摘要。包含 5 项及以上变化时必填，用原问题 → 修改后的主链路 → 预期效果解释整份方案，而不是复述字段 diff。",
+  properties: {
+    why_now: V1_STRING,
+    problem: V1_STRING,
+    main_path: { type: "array", minItems: 1, items: V1_STRING },
+    expected_effect: V1_STRING,
+    non_goals: V1_STRING_ARRAY,
+  },
+  required: ["why_now", "problem", "main_path", "expected_effect", "non_goals"],
+};
+const GOAL_TREE_ITEM_PROPERTIES = {
+    item_id: V1_STRING,
+    operation: { type: "string", enum: ["create", "update", "deactivate"] },
+    source_refs: V1_STRING_ARRAY,
+    reason: V1_STRING,
+    explanation: GOAL_TREE_ITEM_EXPLANATION,
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    affected_objects: { type: "array", items: GOAL_TREE_AFFECTED_OBJECT },
+    requires_user_confirmation: { type: "boolean" },
+    supersedes_item_id: { type: ["string", "null"] },
+};
+export const GOAL_TREE_ITEM = {
+  oneOf: GOAL_TREE_PAYLOAD_BY_KIND.map(([kind, payload]) => ({
+    type: "object",
+    properties: {
+      ...GOAL_TREE_ITEM_PROPERTIES,
+      kind: { type: "string", const: kind },
+      payload,
+    },
+    required: ["kind", "operation", "payload", "source_refs", "reason", "confidence", "affected_objects"],
+  })),
+};
+export const GOAL_TREE_ITEM_DECISION = {
+  type: "object",
+  properties: {
+    item_id: V1_STRING,
+    decision: { type: "string", enum: ["confirm", "reject", "revise"] },
+    reason: V1_STRING,
+    revised_item: GOAL_TREE_ITEM,
+  },
+  required: ["item_id", "decision"],
+};
+export const PLANNING_METHOD_PACK = {
+  type: "object",
+  properties: {
+    method_id: V1_STRING,
+    kind: { type: "string", enum: ["meta", "work_type", "domain", "industry", "overlay", "custom"] },
+    name: V1_STRING,
+    summary: V1_STRING,
+    instructions: V1_STRING,
+    applies_to: V1_STRING_ARRAY,
+    domain_tags: V1_STRING_ARRAY,
+    steps: V1_STRING_ARRAY,
+    required_coverage: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { area: V1_STRING, label: V1_STRING, question: V1_STRING },
+        required: ["area", "label", "question"],
+      },
+    },
+    dependency_rules: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { rule_id: V1_STRING, statement: V1_STRING, direction_hint: V1_STRING },
+        required: ["rule_id", "statement", "direction_hint"],
+      },
+    },
+    evidence_requirements: V1_STRING_ARRAY,
+    completion_checks: V1_STRING_ARRAY,
+    failure_modes: V1_STRING_ARRAY,
+    source_refs: V1_STRING_ARRAY,
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    enabled: { type: "boolean" },
+  },
+  required: [
+    "method_id", "kind", "name", "summary", "applies_to", "domain_tags", "steps",
+    "required_coverage", "dependency_rules", "evidence_requirements", "completion_checks",
+    "failure_modes", "source_refs", "confidence", "enabled",
+  ],
+};
+
+export function v1PayloadTool(
+  name: string,
+  description: string,
+  properties: Record<string, unknown>,
+  required: string[],
+) {
+  return {
+    name,
+    description,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...V1_COMMON,
+        payload: { type: "object", properties, required },
+      },
+      required: ["board_id", "payload"],
+    },
+  };
+}

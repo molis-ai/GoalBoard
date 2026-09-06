@@ -11,8 +11,8 @@ import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
 import { GoalBoardProjectCatalog, normalizeRuntimeWorkContext } from "../src/projects/catalog.js";
-import { RuntimeIntegrationService } from "../src/install/runtime-integration.js";
-import { GoalBoardWebServiceManager } from "../src/install/web-service.js";
+import { RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardWebServiceManager } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
 import {
   GOAL_TREE_STATUS_ORDER,
@@ -1404,7 +1404,7 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
       "test-user",
       now,
     );
-  coordinator.addImpact(
+  coordinator.goals.impacts.add(
     DEMO_BOARD_ID,
     {
       goal_id: "CORE",
@@ -1464,7 +1464,7 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   }
   const coreRun = store.snapshot(DEMO_BOARD_ID).runs.find((run) => run.goal_id === "CORE");
   assert.ok(coreRun);
-  coordinator.submitDependencyProposal({
+  coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: DEMO_BOARD_ID,
     actor_id: coreRun.actor_id,
     discovered_in_run_id: coreRun.run_id,
@@ -1520,7 +1520,7 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   assert.ok(core.events.some((item) => item.type === "rewire.proposed"));
   const interfaces = view.goals.find((item) => item.goal.goal_id === "INTERFACES");
   assert.ok(interfaces?.events.some((item) => item.type === "candidate.submitted"));
-  const historyDialogue = coordinator.startDraftDialogue({
+  const historyDialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: DEMO_BOARD_ID,
     actor_id: "runtime-history-clarifier",
     goal_id: "RELEASE",
@@ -1528,7 +1528,7 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
     idempotency_key: "web-history-dialogue",
   });
   assert.ok(historyDialogue.run);
-  coordinator.submitGoalTreeProposal({
+  coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: DEMO_BOARD_ID,
     actor_id: "runtime-history-clarifier",
     discovered_in_run_id: historyDialogue.run.run_id,
@@ -1827,7 +1827,8 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   assert.match(html, /data-goal-status="waiting_user"/);
   assert.match(html, /data-clear-status-filter/);
   assert.match(html, /data-clear-tree-filter/);
-  assert.match(html, /statuses: \[\.\.\.selectedStatuses\]/);
+  assert.match(html, /statuses: getSelectedStatuses\(\)/);
+  assert.match(html, /const getSelectedStatuses = \(\) => \[\.\.\.selectedStatuses\]/);
   assert.match(html, /selectedStatuses\.size === 0 \|\| selectedStatuses\.has\(item\.dataset\.goalStatus\)/);
   assert.match(html, /if \(event\.key === "Escape" && !treeFilter\?\.hidden\)/);
   assert.match(html, /treeFilterTrigger\?\.addEventListener\("click", \(event\) =>/);
@@ -1872,7 +1873,7 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   );
   assert.match(
     html,
-    /await fetch\(decisionView \? pagePath : compactRefreshPath[\s\S]*const ui = readUiState\(\);[\s\S]*const createDraft/,
+    /await fetch\(decisionView \? pagePath : compactRefreshPath[\s\S]*const ui = readUiState\(\);[\s\S]*goalRefresh\.apply\(/,
   );
   assert.doesNotMatch(html, /const ui = readUiState\(\);\s*const pageBase/);
   assert.match(html, /const currentGoalUiStorageKey = goalUiStorageKey \+ ":current"/);
@@ -1889,9 +1890,9 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   assert.doesNotMatch(html, /globalThis\.open\(result\.authorizationUrl/);
   assert.doesNotMatch(html, /const nextDesktopSurface = decisionView \? "feed"/);
   assert.doesNotMatch(html, /activeFeedPreset = decisionView \? "inbox_message"/);
-  assert.match(html, /const movedToCurrent = nextState\.goals\.some/);
-  assert.match(html, /const movedToArchive = nextState\.archived_goals\.some/);
-  assert.match(html, /const movedToTrash = nextState\.trashed_goals\.some/);
+  assert.match(html, /const movedToCurrent = navigation\.goals\.some/);
+  assert.match(html, /const movedToArchive = navigation\.archived_goals\.some/);
+  assert.match(html, /const movedToTrash = navigation\.trashed_goals\.some/);
   assert.match(html, /location\.replace\(globalThis\.goalboardNavigationUrl\(route\(movedPath\)\)\)/);
   assert.match(html, /\^\\\/\(\?:archive\\\/\|trash\\\/\)\?goals\\\/\[\^\\\/\]\+\\\/\?\$/);
   assert.match(html, /surface === "goal" && \(decisionView \|\| !available\)/);
@@ -1911,7 +1912,8 @@ test("Web view derives understandable Goal states from canonical SQLite facts", 
   assert.doesNotMatch(html, /fetch\(route\("\/api\/board"\)/);
   assert.doesNotMatch(html, /document\.hidden \|\| dialog\.open/);
   assert.match(html, /const createDraft = dialog\.open \? readCreateDraft\(\) : null/);
-  assert.match(html, /applyCreateDraft\(createDraft\)/);
+  assert.match(html, /refreshCreateChoices\(nextDialog, createDraft\)/);
+  assert.match(html, /applyCreateDraft\(draft\)/);
   assert.match(html, /const liveUiInteractionActive = \(\) =>/);
   assert.match(html, /active\?\.closest\?\.\("\[data-live-form\]"\)/);
   assert.match(html, /data-live-form\]\[data-live-dirty=/);
@@ -2207,7 +2209,7 @@ test("Decision Center keeps canonical risk and rewire results visible after pend
   );
   const coreRun = store.snapshot(DEMO_BOARD_ID).runs.find((run) => run.goal_id === "CORE");
   assert.ok(coreRun);
-  const rewire = coordinator.submitDependencyProposal({
+  const rewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: DEMO_BOARD_ID,
     actor_id: coreRun.actor_id,
     discovered_in_run_id: coreRun.run_id,
@@ -2227,7 +2229,7 @@ test("Decision Center keeps canonical risk and rewire results visible after pend
     ],
     idempotency_key: "web-result-rewire-propose",
   }).rewire;
-  const applied = coordinator.confirmRewire({
+  const applied = coordinator.legacyRewireDecision.confirmRewire({
     board_id: DEMO_BOARD_ID,
     rewire_id: rewire.rewire_id,
     actor_id: "test-user",
@@ -2260,7 +2262,7 @@ test("Decision Center keeps canonical risk and rewire results visible after pend
     { risk_id: "RISK-RESULT-NOOP", state: "open", reason: "接受现状，后续再看" },
     { actor_id: "test-user", idempotency_key: "web-result-noop-risk-open" },
   );
-  const newRewire = coordinator.submitDependencyProposal({
+  const newRewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: DEMO_BOARD_ID,
     actor_id: coreRun.actor_id,
     discovered_in_run_id: coreRun.run_id,
@@ -3884,6 +3886,8 @@ test("Web diagnostics previews and confirms the same managed Web service lifecyc
   writeFileSync(join(fixture.homeDirectory, "bin", "goalboard-web"), "#!/bin/sh\nexit 0\n");
   let loaded = false;
   let healthy = true;
+  let servicePid = 4242;
+  const mutations: string[] = [];
   const service = new GoalBoardWebServiceManager({
     homeDirectory: fixture.homeDirectory,
     userHomeDirectory: userHome,
@@ -3892,7 +3896,9 @@ test("Web diagnostics previews and confirms the same managed Web service lifecyc
     async portCheck() { return false; },
     async healthCheck() { return healthy; },
     async runCommand(_file, args) {
-      if (args[0] === "print") return { code: loaded ? 0 : 113, stdout: loaded ? "state = running\npid = 4242\n" : "", stderr: loaded ? "" : "not found" };
+      if (args[0] === "print") return { code: loaded ? 0 : 113, stdout: loaded ? `state = running\npid = ${servicePid}\n` : "", stderr: loaded ? "" : "not found" };
+      mutations.push(args[0]!);
+      if (args[0] === "kickstart") servicePid += 1;
       if (args[0] === "bootstrap") loaded = true;
       if (args[0] === "bootout") loaded = false;
       return { code: 0, stdout: "", stderr: "" };
@@ -3934,6 +3940,18 @@ test("Web diagnostics previews and confirms the same managed Web service lifecyc
 
     const status = (await (await webFetch(`${origin}/api/settings/web-service`)).json()) as { state: string };
     assert.equal(status.state, "running");
+
+    servicePid = process.pid;
+    const restartPlan = await service.prepare("restart");
+    mutations.length = 0;
+    const restartResponse = await webFetch(`${origin}/api/settings/web-service/confirm`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ plan_id: restartPlan.plan_id, decision: "confirmed" }),
+    });
+    assert.equal(restartResponse.status, 202);
+    const pending = await restartResponse.json() as { status: string; previous_process_id: number };
+    assert.equal(pending.status, "restarting"); assert.equal(pending.previous_process_id, process.pid);
+    assert.deepEqual(mutations, ["kickstart"]); assert.equal(loaded, true); assert.equal(servicePid, process.pid + 1);
 
     const outdatedPlist = `${readFileSync(service.plistPath, "utf8")}\n<!-- stale GoalBoard configuration -->\n`;
     writeFileSync(service.plistPath, outdatedPlist);
@@ -4757,14 +4775,14 @@ test("Web uses the named Goal Tree decision page for atomic whole confirmation",
     actor_id: "web-user",
     idempotency_key: "web-tree-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-tree-board",
     actor_id: "runtime-clarifier",
     goal_id: "web-tree-root",
     rough_idea: "用户可以在当前 Runtime 或 Web 选择确认 Goal Tree 项。",
     idempotency_key: "web-tree-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-tree-board",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -4822,14 +4840,14 @@ test("Web uses the named Goal Tree decision page for atomic whole confirmation",
     ],
     idempotency_key: "web-tree-propose",
   }).proposal;
-  const otherDialogue = coordinator.startDraftDialogue({
+  const otherDialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-tree-board",
     actor_id: "runtime-other-clarifier",
     goal_id: "web-tree-other-root",
     rough_idea: "另一份同时等待决定的方案不能让当前 Web 页面确认变得含糊。",
     idempotency_key: "web-tree-other-dialogue",
   });
-  const otherProposal = coordinator.submitGoalTreeProposal({
+  const otherProposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-tree-board",
     actor_id: "runtime-other-clarifier",
     discovered_in_run_id: otherDialogue.run!.run_id,
@@ -5020,14 +5038,14 @@ test("Web explains a materialization conflict before the user confirms a whole G
     },
     { actor_id: "web-user", idempotency_key: "web-tree-existing-child-link" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-tree-preflight-board",
     actor_id: "runtime-tree-preflight",
     goal_id: "web-tree-preflight-context",
     rough_idea: "需求变化后尝试改写一个已经接受的父 Goal。",
     idempotency_key: "web-tree-preflight-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-tree-preflight-board",
     actor_id: "runtime-tree-preflight",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5093,7 +5111,7 @@ test("Web explains a materialization conflict before the user confirms a whole G
     ],
     idempotency_key: "web-tree-preflight-propose",
   }).proposal;
-  const checked = coordinator.checkGoalTreeProposal({
+  const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "web-tree-preflight-board",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-tree-preflight",
@@ -5164,7 +5182,7 @@ test("Web shows and confirms one existing Candidate promotion without a duplicat
     actor_id: "web-user",
     idempotency_key: "web-candidate-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-candidate-board",
     actor_id: "runtime-candidate-planner",
     goal_id: "web-candidate-root",
@@ -5202,14 +5220,14 @@ test("Web shows and confirms one existing Candidate promotion without a duplicat
       acceptance_criterion_ids: ["web-candidate-child-c1"],
     },
   };
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "web-candidate-board",
     actor_id: "runtime-candidate-planner",
     discovered_in_run_id: dialogue.run!.run_id,
     proposed_goal: { ...finalGoal, title: "晋升前的 Candidate 标题" },
     idempotency_key: "web-candidate-submit",
   }).candidate;
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-candidate-board",
     actor_id: "runtime-candidate-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5305,7 +5323,7 @@ test("Web lets the user repair a historical Goal Tree Risk without rewriting the
     actor_id: "web-user",
     idempotency_key: "web-invalid-risk-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-invalid-risk-board",
     actor_id: "runtime-clarifier",
     goal_id: "web-invalid-risk-root",
@@ -5318,7 +5336,7 @@ test("Web lets the user repair a historical Goal Tree Risk without rewriting the
     ["本地存档可能与新版本不兼容", "升级后无法读取旧存档", "发布前验证两个历史版本的迁移"],
     ["多 Runtime 同步可能覆盖用户修改", "同一字段出现不同版本", "逐条确认冲突后再写入"],
   ] as const;
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-invalid-risk-board",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5529,7 +5547,7 @@ test("Web explains incomplete product decomposition and shows who owns each prod
     actor_id: "web-user",
     idempotency_key: "web-decomposition-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-decomposition-board",
     actor_id: "runtime-game-planner",
     goal_id: "web-footballnia",
@@ -5546,7 +5564,7 @@ test("Web explains incomplete product decomposition and shows who owns each prod
     "quality",
     "delivery_release",
   ];
-  const decompositionProposal = coordinator.submitGoalTreeProposal({
+  const decompositionProposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-decomposition-board",
     actor_id: "runtime-game-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5741,14 +5759,14 @@ test("Web explains why a historical pseudo-leaf must be split before the user ca
     actor_id: "web-user",
     idempotency_key: "web-leaf-readiness-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-leaf-readiness-board",
     actor_id: "runtime-clarifier",
     goal_id: "web-pseudo-leaf",
     rough_idea: "把一组仍然混在一起的工作误当成叶子。",
     idempotency_key: "web-leaf-readiness-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-leaf-readiness-board",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5840,7 +5858,7 @@ test("Web presents the shared result chain, AI-specific checks, and foundation d
     actor_id: "web-user",
     idempotency_key: "web-task-chain-init",
   });
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "web-task-chain-board",
     actor_id: "runtime-task-planner",
     goal_id: "web-ai-parent",
@@ -5890,7 +5908,7 @@ test("Web presents the shared result chain, AI-specific checks, and foundation d
       acceptance_criterion_ids: [`${goalId}-criterion`],
     },
   });
-  coordinator.submitGoalTreeProposal({
+  coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "web-task-chain-board",
     actor_id: "runtime-task-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6468,7 +6486,7 @@ test("Web lets a user save a minimal Draft and confirm a readable Contract Propo
     },
     { actor_id: "web-user", idempotency_key: "draft-product-dependency" },
   );
-  const dependencyRewire = coordinator.submitDependencyProposal({
+  const dependencyRewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "contract-board",
     actor_id: "clarifier-runtime",
     discovered_in_run_id: run.run_id,
@@ -6501,7 +6519,7 @@ test("Web lets a user save a minimal Draft and confirm a readable Contract Propo
     "acceptance_criteria",
     "review_policy",
   ] as const;
-  const proposal = coordinator.submitContractProposal({
+  const proposal = coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "contract-board",
     goal_id: draft.goal_id,
     actor_id: "clarifier-runtime",
@@ -7547,7 +7565,8 @@ test("Web edits project and Goal Policy and submits a user-only Human Review", a
       /ensureWorkTab\(goalId\);\s+document\.dispatchEvent\(new CustomEvent\("goalboard:goal-document-loaded"/,
     );
     assert.match(WORKBENCH_CLIENT_SCRIPT, /history\.replaceState\(\{ \.\.\.initialHistoryState, goalId: selected \}/);
-    assert.match(WORKBENCH_CLIENT_SCRIPT, /event\.state\?\.goalId \|\| state\.active_goal_id/);
+    assert.match(WORKBENCH_CLIENT_SCRIPT, /event\.state\?\.goalId \|\| getActiveGoalId\(\)/);
+    assert.match(WORKBENCH_CLIENT_SCRIPT, /getActiveGoalId: \(\) => state\.active_goal_id/);
     assert.doesNotMatch(WORKBENCH_CLIENT_SCRIPT, /documentPane\.innerHTML = nextDocument\.innerHTML/);
     assert.match(WORKBENCH_STYLES, /policy-mode-options, \.policy-control--split, \.policy-toggle-list, \.policy-review-counts \{ grid-template-columns: 1fr; \}/);
     assert.match(page, /value="browser"/);

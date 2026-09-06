@@ -9,6 +9,7 @@ import type {
 } from "./contract-aliases.js";
 import { GoalBoardSessionError } from "./errors.js";
 import { optionalAbsolutePath, optionalText, requiredText } from "./session-schema.js";
+import type { HandoffAssociationRepository } from "./handoff-associations.js";
 
 const HANDOFF_SEND_LEASE_MS = 5 * 60 * 1000;
 
@@ -22,9 +23,14 @@ export class SessionHandoffRepository {
     private readonly now: () => Date,
     private readonly contentStore: SessionContentStore,
     private readonly sessions: HandoffSessionLookup,
+    private readonly associations: HandoffAssociationRepository,
   ) {}
 
   createDraft(input: CreateSessionHandoffDraftInput): GoalBoardSessionHandoffRecord {
+    return this.db.transaction(() => this.createDraftRecord(input)).immediate();
+  }
+
+  private createDraftRecord(input: CreateSessionHandoffDraftInput): GoalBoardSessionHandoffRecord {
     const sourceSessionId = requiredText(input.source_session_id, "来源 Session 不能为空");
     const sourceProjectId = requiredText(input.source_project_id, "来源 Project 不能为空");
     const sourceGoalId = requiredText(input.source_goal_id, "来源 Goal 不能为空");
@@ -52,11 +58,11 @@ export class SessionHandoffRepository {
     `).run(
       packageId,
       sourceSessionId,
-      sourceProjectId,
-      sourceGoalId,
+      "",
+      "",
       targetRuntimeId,
-      targetProjectId,
-      optionalText(input.target_workspace_id),
+      "",
+      null,
       targetWorkspacePath,
       contentRef,
       contentDigest,
@@ -64,6 +70,8 @@ export class SessionHandoffRepository {
       now,
       now,
     );
+    this.associations.recordSource(packageId, sourceProjectId, sourceGoalId, input.source_goal_version ?? null, actorId, now);
+    this.associations.setTarget(packageId, targetProjectId, optionalText(input.target_workspace_id), actorId, now);
     return this.get(packageId);
   }
 
@@ -95,6 +103,10 @@ export class SessionHandoffRepository {
   }
 
   updateDraft(input: UpdateSessionHandoffDraftInput): GoalBoardSessionHandoffRecord {
+    return this.db.transaction(() => this.updateDraftRecord(input)).immediate();
+  }
+
+  private updateDraftRecord(input: UpdateSessionHandoffDraftInput): GoalBoardSessionHandoffRecord {
     const current = this.get(input.package_id);
     if (current.state !== "draft" && current.state !== "failed") {
       throw new GoalBoardSessionError("session.handoff_invalid_state", "只有草稿或失败的 Handoff 可以修改");
@@ -127,14 +139,12 @@ export class SessionHandoffRepository {
     const now = this.now().toISOString();
     const updated = this.db.prepare(`
       UPDATE session_handoffs
-      SET target_runtime_id = ?, target_project_id = ?, target_workspace_id = ?,
+      SET target_runtime_id = ?,
           target_workspace_path = ?, state = 'draft', content_ref = ?, content_digest = ?,
           error_code = NULL, error_message = NULL, retryable = 1, updated_at = ?
       WHERE package_id = ? AND state IN ('draft', 'failed')
     `).run(
       targetRuntimeId,
-      targetProjectId,
-      targetWorkspaceId,
       targetWorkspacePath,
       contentRef,
       contentDigest,
@@ -144,6 +154,7 @@ export class SessionHandoffRepository {
     if (updated.changes !== 1) {
       throw new GoalBoardSessionError("session.handoff_invalid_state", "Handoff 状态已经变化，请刷新后再操作");
     }
+    this.associations.setTarget(current.package_id, targetProjectId, targetWorkspaceId, input.actor_id, now);
     return this.get(current.package_id);
   }
 
@@ -309,11 +320,8 @@ export class SessionHandoffRepository {
     return {
       package_id: String(row.package_id),
       source_session_id: String(row.source_session_id),
-      source_project_id: String(row.source_project_id),
-      source_goal_id: String(row.source_goal_id),
+      ...this.associations.read(String(row.package_id)),
       target_runtime_id: String(row.target_runtime_id),
-      target_project_id: String(row.target_project_id),
-      target_workspace_id: row.target_workspace_id == null ? null : String(row.target_workspace_id),
       target_workspace_path: row.target_workspace_path == null ? null : String(row.target_workspace_path),
       destination_session_id: row.destination_session_id == null ? null : String(row.destination_session_id),
       state: String(row.state) as GoalBoardSessionHandoffRecord["state"],

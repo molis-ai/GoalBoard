@@ -1,5 +1,33 @@
+export { createMcpContextPresenter } from "./context-presentation.js";
+export type { McpContextPresentationPorts } from "./context-presentation.js";
+export { createMcpGoalTrashHandlers } from "./goal-trash-commands.js";
+export { mcpWebUrl, mcpGoalContractResponse } from "./goal-presentation.js";
+export { createMcpDraftDialogueHandlers } from "./draft-dialogue-commands.js";
+export { createMcpGoalTreeHandlers, runtimeGoalTreeDecisionInput } from "./goal-tree-commands.js";
+export { createMcpLegacyProposalHandlers } from "./legacy-proposal-commands.js";
 import type { GoalsApplicationApi } from "@adeptify/goalboard-contracts/modules/goals";
 import type { ExecutionValidationApplicationApi } from "@adeptify/goalboard-plugin-goals";
+
+export { handleMcpMessage } from "./protocol.js";
+export { mcpRuntimeSessionActivity } from "./session-activity.js";
+export { createMcpRuntimeContextHandlers } from "./runtime-context-tools.js";
+export type { McpRuntimeContextPorts } from "./runtime-context-tools.js";
+export { planningMethodResponse, availableResponse, draftDialogueHistoryOptions, draftDialogueResponse } from "./query-presentation.js";
+export type { McpPresentationErrorFactory, DraftDialogueHistoryOptions } from "./query-presentation.js";
+export { createMcpExecutionToolHandlers } from "./execution-commands.js";
+export { createMcpGoalToolHandlers } from "./goal-commands.js";
+export { createMcpAvailabilityToolHandlers } from "./availability-queries.js";
+export { mcpBoardPayload } from "./payload.js";
+export { buildMcpResumeView } from "./resume-view.js";
+export type { McpResumeFacts } from "./resume-view.js";
+export {
+  MCP_TOOLS,
+  RUNTIME_MCP_TOOLS,
+  MCP_SERVER_INFO,
+  isRuntimeMcpTool,
+  isRuntimeContextMcpTool,
+} from "./tool-catalog.js";
+export type { McpProtocolPorts, McpToolCallContext, McpToolDefinition } from "./protocol.js";
 
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-app-mcp",
@@ -21,6 +49,7 @@ export function createMcpGoalsAdapter<TTransition>(
   goals: GoalsApplicationApi<TTransition>,
 ): McpGoalsAdapter<TTransition> {
   return {
+    impacts: goals.impacts,
     commands: goals.commands,
     lifecycle: goals.lifecycle,
     planning: goals.planning,
@@ -36,3 +65,5 @@ export function createMcpExecutionValidationAdapter<TSnapshot>(
 ): McpExecutionValidationAdapter<TSnapshot> {
   return { query: application.query, commands: application.commands };
 }
+export { validateGoalBoardMcpLauncher } from "./launcher-validation.js";
+export type { McpLauncherValidationContext } from "./launcher-validation.js";

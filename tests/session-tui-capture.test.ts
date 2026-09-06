@@ -5,15 +5,15 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
-import { SessionTuiRecorder } from "../src/sessions/tui-recorder.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
+import { SessionTuiRecorder } from "@adeptify/goalboard-plugin-work";
 import { attachGoalBoardPtySocket } from "../src/web/pty-socket.js";
 
 test("Goal TUI output survives Registry restart and remains linked to Session, project and Goal", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-tui-"));
   const home = path.join(directory, ".goalboard");
   let sessionId = "";
-  const first = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const first = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     const session = first.createSession({
       runtime_id: "codex",
@@ -33,7 +33,7 @@ test("Goal TUI output survives Registry restart and remains linked to Session, p
     first.close();
   }
 
-  const reopened = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const reopened = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     const session = reopened.get(sessionId);
     assert.equal(session.project_id, "project-a");
@@ -53,7 +53,7 @@ test("Goal TUI output survives Registry restart and remains linked to Session, p
 test("PTY socket carries session_id into the persistent TUI recorder", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-tui-socket-"));
   const home = path.join(directory, ".goalboard");
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   const session = registry.createSession({
     runtime_id: "generic",
     actor_id: "desktop-user",
@@ -120,3 +120,4 @@ test("PTY socket carries session_id into the persistent TUI recorder", async () 
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

@@ -4,6 +4,8 @@
 
 ## macOS Desktop 安装包
 
+当前重组工作树提示：安装实现已迁至 Local Host；从源码安装前需完整构建，包括所有 workspace 包。旧构建会被拒绝，已有安装不受这次拒绝影响。以下发布流程仍是待 DV4 完整复验的分发流程，当前切片测试不代表新工作树的 DMG/供应链产物已验收。
+
 普通 macOS 用户优先从 [GitHub Releases](https://github.com/adeptify/GoalBoard/releases) 下载 `macos-arm64`（Apple Silicon）或 `macos-x64`（Intel）DMG，把 GoalBoard 拖入 Applications 后启动。App 内含匹配架构的 Node、GoalBoard Core 和生产依赖；首次打开才调用同一套 `goalboard install` 服务写入 `~/.goalboard`，随后启动本地 Web。它不会在首次启动时创建项目、接入 Runtime、创建 demo 或修改用户项目。
 
 开发者可以从仓库运行：
@@ -16,9 +18,13 @@ pnpm desktop:start:macos    # 启动已安装 App
 
 自动化或验收时可设置 `GOALBOARD_SKIP_OPEN=1`，只安装、不立即打开窗口；也可以用 `GOALBOARD_APP_DIR` 指定其他用户级安装目录。
 
-构建脚本下载固定的 Node LTS，并使用 Node 官方 `SHASUMS256.txt` 校验后再生成 payload。Apple Silicon 与 Intel 分别构建，不能把两个架构的 native addon 混成一个伪 universal 包。没有 Developer ID 与 notarization credentials 时，本地构建和手动触发的工作流只能生成会触发 Gatekeeper 的内部 ad-hoc 包；脚本不会替用户删除 quarantine 标记。公开的 `v*` tag Release 必须先配置完整 Apple Secrets，由 Tauri 完成签名、公证与 stapling 后才会发布两种架构的产物。
+构建脚本下载固定的 Node LTS，并使用 Node 官方 `SHASUMS256.txt` 校验后再生成 payload。Apple Silicon 与 Intel 分别构建，不能把两个架构的 native addon 混成一个伪 universal 包。未显式提供 `APPLE_SIGNING_IDENTITY` 时，脚本固定使用 `-`（内部 ad-hoc），避免 Tauri 自动选择本机其他开发证书；指定身份则原样保留。产物通过 codesign 完整性验证后，输出实际签名信息。签名完整不代表 Apple 公证或 Gatekeeper 放行；脚本不会替用户删除 quarantine 标记。
+
+当前 [发布 workflow](../.github/workflows/release-macos.yml) 仅手动触发，自动 tag 触发已暂停。恢复自动 `v*` 发布前需要另行修改触发器，并配置完整 Apple Secrets；既有公开发布条件要求 Developer ID 签名与 Apple 公证。此重组不修改触发器、不上传发行物，也不把内部验证产物视为公开可发布版本。
 
 ## 安装边界
+
+开发者分发 npm 安装包时，先在仓库执行 `pnpm package:npm`，产物在 `release/npm/`。消费者在自己的目录运行 `npm install /absolute/adeptify-goalboard-版本.tgz`，然后使用 `npx --no-install goalboard --help` 或 `npx --no-install goalboard install`。npm 路径要求已有 Node 24+，会正常安装当前平台的原生依赖；不要使用 `--ignore-scripts`。它不依赖源码仓库，也不要求单独发布私有 workspace 子包。安装 npm 包本身不会启动服务或连接 Runtime；`goalboard install` 才写入下面说明的 Home。
 
 `goalboard install` 只维护 `~/.goalboard`：版本化程序与共享 Skill、MCP/Web/CLI 启动入口、项目 DB 根目录、日志和安装清单。它不会创建或启动项目，不会写入用户项目，也不会修改任何 Runtime 的用户级配置。之后若要把 MCP 入口注册到某个 Runtime，必须走用户确认的 Runtime 集成流程。
 

@@ -1,5 +1,9 @@
-import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import type { ExecutionValidationSnapshot as BoardSnapshot } from "./execution-validation-contract.js";
+import type { GoalRecord, GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
+
+export interface ParentCompletionSnapshot {
+  goals: readonly Pick<GoalRecord, "goal_id" | "fulfillment_state">[];
+  relations: readonly Pick<GoalRelationRecord, "type" | "state" | "to_goal_id" | "from_goal_id">[];
+}
 
 /**
  * An open parent with all currently known children complete still needs a
@@ -7,8 +11,8 @@ import type { ExecutionValidationSnapshot as BoardSnapshot } from "./execution-v
  * user's whole parent outcome has been covered.
  */
 export function requiresParentCompletionConfirmation(
-  goal: GoalRecord,
-  snapshot: BoardSnapshot,
+  goal: Pick<GoalRecord, "goal_id" | "fulfillment_state" | "decomposition_state">,
+  snapshot: ParentCompletionSnapshot,
 ): boolean {
   if (
     goal.fulfillment_state !== "unmet" ||

@@ -1394,7 +1394,7 @@ test("metadata-only Contract revisions preserve the active Run, action token, Ev
   );
   assert.ok(obligationBefore);
 
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-metadata-clarifier",
     rough_idea: "只更新目标标题、说明和优先级，不改变正在执行的工作。",
@@ -1402,7 +1402,7 @@ test("metadata-only Contract revisions preserve the active Run, action token, Ev
     idempotency_key: "metadata-continuity-dialogue",
   });
   const current = store.getGoal("metadata-continuity")!;
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-metadata-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -1437,7 +1437,7 @@ test("metadata-only Contract revisions preserve the active Run, action token, Ev
     })],
     idempotency_key: "metadata-continuity-proposal",
   }).proposal;
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-metadata-clarifier",
@@ -1546,7 +1546,7 @@ test("metadata-only Contract revisions preserve the active Run, action token, Ev
 
 test("migration 12 reconciles historical Runs and clarification sessions exactly once", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-migration",
     rough_idea: "模拟旧版本留下的澄清生命周期记录。",
@@ -1638,14 +1638,14 @@ test("migration 13 clears a historical completed Active Goal exactly once", () =
 
 test("migration 14 converts the removed trusted-host authority to Runtime dialogue provenance", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-migration",
     rough_idea: "模拟旧版 Runtime 确认记录。",
     goal_id: "migration-authority-root",
     idempotency_key: "migration-authority-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-migration",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -1666,7 +1666,7 @@ test("migration 14 converts the removed trusted-host authority to Runtime dialog
     })],
     idempotency_key: "migration-authority-proposal",
   });
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal.proposal_id,
     runtime_actor_id: "runtime-migration",
@@ -1803,7 +1803,7 @@ test("Goal trash preserves history, deactivates only active relations, and resto
     actor_id: "runtime-trash",
     idempotency_key: "trash-history-run",
   }).run;
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-trash",
     discovered_in_run_id: run.run_id,
@@ -2822,7 +2822,7 @@ test("lease omission uses the resolved policy while over-limit Draft startup lea
 
   const before = store.snapshot("board-1");
   assert.throws(
-    () => coordinator.startDraftDialogue({
+    () => coordinator.draftDialogue.startDraftDialogue({
       board_id: "board-1",
       actor_id: "runtime-over-limit",
       rough_idea: "验证超限租约不留下 Draft 或对话记录",
@@ -3014,7 +3014,7 @@ test("confirmed impact bindings prevent two active writers", () => {
   createLeaf(coordinator, "writer-a");
   createLeaf(coordinator, "writer-b");
   for (const goalId of ["writer-a", "writer-b"]) {
-    coordinator.addImpact(
+    coordinator.goals.impacts.add(
       "board-1",
       {
         goal_id: goalId,
@@ -3049,7 +3049,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
   const { store, coordinator, setNow } = fixture();
   createLeaf(coordinator, "impact-maintenance");
   createLeaf(coordinator, "impact-maintenance-target");
-  const created = coordinator.addImpact(
+  const created = coordinator.goals.impacts.add(
     "board-1",
     {
       goal_id: "impact-maintenance",
@@ -3074,7 +3074,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
     state: "confirmed" as const,
     reason: "实现会写入 Goal 文档渲染区域",
   };
-  const updated = coordinator.updateImpact(
+  const updated = coordinator.goals.impacts.update(
     "board-1",
     updateInput,
     {
@@ -3088,7 +3088,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
   assert.equal(updated.impact.state, "confirmed");
   assert.equal(updated.impact.updated_at, "2026-08-15T01:00:00.000Z");
   assert.equal(
-    coordinator.updateImpact(
+    coordinator.goals.impacts.update(
       "board-1",
       updateInput,
       {
@@ -3100,7 +3100,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
     true,
   );
   assert.throws(
-    () => coordinator.updateImpact(
+    () => coordinator.goals.impacts.update(
       "board-1",
       updateInput,
       { actor_id: "user-1", idempotency_key: "impact-maintenance-no-audit", reason: "" },
@@ -3108,7 +3108,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
     /必须说明修改原因/,
   );
   assert.throws(
-    () => coordinator.updateImpact(
+    () => coordinator.goals.impacts.update(
       "board-1",
       { ...updateInput, goal_id: "impact-maintenance-target" },
       {
@@ -3121,7 +3121,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
   );
 
   setNow("2026-08-15T02:00:00.000Z");
-  const deactivated = coordinator.deactivateImpact(
+  const deactivated = coordinator.goals.impacts.deactivate(
     "board-1",
     { binding_id: created.binding_id, reason: "该渲染区域已由新的 Goal 接管" },
     { actor_id: "user-1", idempotency_key: "impact-maintenance-deactivate" },
@@ -3132,7 +3132,7 @@ test("Impact bindings can be updated and deactivated without erasing their histo
   assert.equal(deactivated.impact.reason, "实现会写入 Goal 文档渲染区域");
   assert.ok(store.snapshot("board-1").impacts.some((item) => item.binding_id === created.binding_id));
   assert.throws(
-    () => coordinator.updateImpact(
+    () => coordinator.goals.impacts.update(
       "board-1",
       updateInput,
       {
@@ -3976,7 +3976,7 @@ test("Runtime can submit a Candidate Goal but only a user can decide it", () => 
     actor_id: "runtime-a",
     idempotency_key: "candidate-run",
   }).run;
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -3999,7 +3999,7 @@ test("Runtime can submit a Candidate Goal but only a user can decide it", () => 
   assert.equal(candidate.state, "pending");
   assert.throws(
     () =>
-      coordinator.decideCandidate({
+      coordinator.legacyCandidateDecision.decideCandidate({
         board_id: "board-1",
         candidate_id: candidate.candidate_id,
         actor_id: "runtime-a",
@@ -4011,7 +4011,7 @@ test("Runtime can submit a Candidate Goal but only a user can decide it", () => 
     (error) =>
       error instanceof GoalBoardV1Error && error.code === "candidate.user_decision_required",
   );
-  const decided = coordinator.decideCandidate({
+  const decided = coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: candidate.candidate_id,
     actor_id: "user-1",
@@ -4107,7 +4107,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
     max_lease_seconds: 1200,
   };
   assert.throws(
-    () => coordinator.submitContractProposal({
+    () => coordinator.legacyProposalSubmission.submitContractProposal({
       board_id: "board-1",
       goal_id: "rough-draft",
       actor_id: "runtime-clarifier",
@@ -4132,7 +4132,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   assert.equal(store.snapshot("board-1").contract_proposals.length, 0);
   assert.throws(
     () =>
-      coordinator.submitContractProposal({
+      coordinator.legacyProposalSubmission.submitContractProposal({
         board_id: "board-1",
         goal_id: "rough-draft",
         actor_id: "runtime-clarifier",
@@ -4147,7 +4147,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   );
   assert.equal(store.snapshot("board-1").contract_proposals.length, 0);
 
-  const firstProposal = coordinator.submitContractProposal({
+  const firstProposal = coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "board-1",
     goal_id: "rough-draft",
     actor_id: "runtime-clarifier",
@@ -4180,7 +4180,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   assert.equal(store.snapshot("board-1").risks.length, 0);
   assert.throws(
     () =>
-      coordinator.decideContractProposal({
+      coordinator.legacyContractDecision.decideContractProposal({
         board_id: "board-1",
         proposal_id: firstProposal.proposal_id,
         actor_id: "runtime-clarifier",
@@ -4193,7 +4193,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
       error instanceof GoalBoardV1Error &&
       error.code === "contract_proposal.user_decision_required",
   );
-  const rejected = coordinator.decideContractProposal({
+  const rejected = coordinator.legacyContractDecision.decideContractProposal({
     board_id: "board-1",
     proposal_id: firstProposal.proposal_id,
     actor_id: "user-1",
@@ -4205,7 +4205,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   assert.equal(rejected.proposal.state, "rejected");
   assert.deepEqual(rejected.goal, draft);
 
-  const dependency = coordinator.submitDependencyProposal({
+  const dependency = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: run.run_id,
@@ -4218,7 +4218,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
     ],
     idempotency_key: "draft-contract-dependency",
   }).rewire;
-  const secondProposal = coordinator.submitContractProposal({
+  const secondProposal = coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "board-1",
     goal_id: "rough-draft",
     actor_id: "runtime-clarifier",
@@ -4248,7 +4248,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   }).proposal;
   assert.throws(
     () =>
-      coordinator.decideContractProposal({
+      coordinator.legacyContractDecision.decideContractProposal({
         board_id: "board-1",
         proposal_id: secondProposal.proposal_id,
         actor_id: "user-1",
@@ -4261,7 +4261,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
       error instanceof GoalBoardV1Error && error.code === "contract_proposal.dependency_pending",
   );
   assert.equal(store.getGoal("rough-draft")?.definition_state, "draft");
-  coordinator.confirmRewire({
+  coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: dependency.rewire_id,
     actor_id: "user-1",
@@ -4270,7 +4270,17 @@ test("clarifier completes the same Draft only through a user-approved Contract P
     reason: "当前 Draft 不需要这项上游依赖",
     idempotency_key: "reject-draft-dependency",
   });
-  const approved = coordinator.decideContractProposal({
+  const beforeImpactApproval = store.snapshot("board-1");
+  store.db.exec(`CREATE TRIGGER reject_contract_impact_apply BEFORE INSERT ON events
+    WHEN NEW.type = 'contract_proposal.approved'
+    BEGIN SELECT RAISE(ABORT, 'injected contract apply failure'); END;`);
+  assert.throws(() => coordinator.legacyContractDecision.decideContractProposal({
+    board_id: "board-1", proposal_id: secondProposal.proposal_id, actor_id: "user-1", actor_kind: "user",
+    decision: "approved", reason: "字段来源、验收和 Review policy 已确认", idempotency_key: "approve-draft-contract",
+  }), /injected contract apply failure/);
+  assert.deepEqual(store.snapshot("board-1"), beforeImpactApproval);
+  store.db.exec("DROP TRIGGER reject_contract_impact_apply");
+  const approved = coordinator.legacyContractDecision.decideContractProposal({
     board_id: "board-1",
     proposal_id: secondProposal.proposal_id,
     actor_id: "user-1",
@@ -4295,6 +4305,8 @@ test("clarifier completes the same Draft only through a user-approved Contract P
   assert.equal(after.resolved_policy.max_lease_seconds, 1200);
   assert.equal(after.impacts[0]?.surface, "src/onboarding");
   assert.equal(after.impacts[0]?.state, "confirmed");
+  assert.equal(coordinator.goals.impacts.list("board-1").length, 1);
+  assert.deepEqual(store.db.prepare("SELECT type FROM events WHERE object_type = 'impact'").all(), []);
   assert.equal(after.risks[0]?.risk_id, "risk-first-use-copy");
   coordinator.executionValidation.commands.reportRun({
     board_id: "board-1",
@@ -4331,7 +4343,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
 
 test("current Runtime persists a Draft dialogue and can resume it without canonizing its inferences", () => {
   const { store, coordinator } = fixture();
-  const started = coordinator.startDraftDialogue({
+  const started = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-current-session",
     rough_idea: "我想让新用户第一次就能理解 GoalBoard，并完成一项自己的工作。",
@@ -4350,7 +4362,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
   assert.equal(started.turns[0]?.turn_kind, "rough_idea");
   assert.equal(started.turns[0]?.user_message, started.dialogue.rough_idea);
 
-  const replayedStart = coordinator.startDraftDialogue({
+  const replayedStart = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-current-session",
     rough_idea: "我想让新用户第一次就能理解 GoalBoard，并完成一项自己的工作。",
@@ -4360,7 +4372,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
   assert.equal(replayedStart.replayed, true);
   assert.equal(replayedStart.dialogue.session_id, started.dialogue.session_id);
 
-  const answered = coordinator.recordDraftDialogueTurn({
+  const answered = coordinator.draftDialogue.recordDraftDialogueTurn({
     board_id: "board-1",
     goal_id: started.goal.goal_id,
     run_id: started.run!.run_id,
@@ -4393,7 +4405,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
 
   assert.throws(
     () =>
-      coordinator.recordDraftDialogueTurn({
+      coordinator.draftDialogue.recordDraftDialogueTurn({
         board_id: "board-1",
         goal_id: started.goal.goal_id,
         run_id: started.run!.run_id,
@@ -4427,7 +4439,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
     reason: "当前 Session 被中断，下一次从保存的澄清记录恢复",
     idempotency_key: "draft-dialogue-release",
   });
-  const resumed = coordinator.resumeDraftDialogue({
+  const resumed = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: started.goal.goal_id,
     actor_id: "runtime-current-session",
@@ -4442,7 +4454,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
 
   assert.throws(
     () =>
-      coordinator.resumeDraftDialogue({
+      coordinator.draftDialogue.resumeDraftDialogue({
         board_id: "board-1",
         goal_id: started.goal.goal_id,
         actor_id: "other-runtime-session",
@@ -4451,7 +4463,7 @@ test("current Runtime persists a Draft dialogue and can resume it without canoni
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "draft_dialogue.active_elsewhere",
   );
 
-  const readyForProposal = coordinator.recordDraftDialogueTurn({
+  const readyForProposal = coordinator.draftDialogue.recordDraftDialogueTurn({
     board_id: "board-1",
     goal_id: started.goal.goal_id,
     run_id: resumed.run!.run_id,
@@ -4494,7 +4506,7 @@ test("current Runtime can begin clarification for an existing Draft without crea
   );
   const goalCountBeforeStart = store.snapshot("board-1").goals.length;
 
-  const started = coordinator.startDraftDialogue({
+  const started = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     goal_id: "existing-draft-dialogue",
     actor_id: "runtime-current-session",
@@ -4510,7 +4522,7 @@ test("current Runtime can begin clarification for an existing Draft without crea
 
   assert.throws(
     () =>
-      coordinator.startDraftDialogue({
+      coordinator.draftDialogue.startDraftDialogue({
         board_id: "board-1",
         goal_id: "existing-draft-dialogue",
         actor_id: "runtime-current-session",
@@ -4521,7 +4533,7 @@ test("current Runtime can begin clarification for an existing Draft without crea
       error instanceof GoalBoardV1Error && error.code === "draft_dialogue.already_open",
   );
 
-  const resumed = coordinator.resumeDraftDialogue({
+  const resumed = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "existing-draft-dialogue",
     actor_id: "runtime-current-session",
@@ -4547,7 +4559,7 @@ test("accepted frontier Goal initializes dialogue on its selected clarifier Run"
   assert.equal(selected.allowed, true);
   assert.equal(selected.work_state?.work_state, "clarifying");
 
-  const started = coordinator.startDraftDialogue({
+  const started = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     goal_id: "accepted-frontier-dialogue",
     actor_id: "runtime-frontier-clarifier",
@@ -4563,7 +4575,7 @@ test("accepted frontier Goal initializes dialogue on its selected clarifier Run"
   assert.equal(started.run?.run_id, selected.run?.run_id);
   assert.equal(started.turns.length, 1);
 
-  const continued = coordinator.recordDraftDialogueTurn({
+  const continued = coordinator.draftDialogue.recordDraftDialogueTurn({
     board_id: "board-1",
     goal_id: "accepted-frontier-dialogue",
     run_id: selected.run!.run_id,
@@ -4581,7 +4593,7 @@ test("accepted frontier Goal initializes dialogue on its selected clarifier Run"
 test("accepted frontier Goal resumes its persisted clarification in a new Run", () => {
   const { store, coordinator } = fixture();
   createAcceptedCompoundParent(coordinator, "accepted-frontier-resume", "frontier_open");
-  const started = coordinator.startDraftDialogue({
+  const started = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     goal_id: "accepted-frontier-resume",
     actor_id: "runtime-frontier-first",
@@ -4596,7 +4608,7 @@ test("accepted frontier Goal resumes its persisted clarification in a new Run", 
     idempotency_key: "accepted-frontier-resume-release",
   });
 
-  const resumed = coordinator.resumeDraftDialogue({
+  const resumed = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "accepted-frontier-resume",
     actor_id: "runtime-frontier-second",
@@ -4623,7 +4635,7 @@ test("a denied Draft dialogue start rolls back its draft, claim, run, and dialog
   const before = store.snapshot("board-1");
   assert.throws(
     () =>
-      coordinator.startDraftDialogue({
+      coordinator.draftDialogue.startDraftDialogue({
         board_id: "board-1",
         actor_id: "runtime-current-session",
         rough_idea: "这次没有声明 Goal Mode，不能留下半条 Draft。",
@@ -4643,7 +4655,7 @@ test("a denied Draft dialogue start rolls back its draft, claim, run, and dialog
 
 test("only an approved Contract closes its Draft clarification session", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-contract-dialogue",
     rough_idea: "把这条粗略想法澄清成可执行的叶子 Goal。",
@@ -4668,7 +4680,7 @@ test("only an approved Contract closes its Draft clarification session", () => {
     human_approval: false,
     max_lease_seconds: 1800,
   };
-  const submit = (idempotencyKey: string) => coordinator.submitContractProposal({
+  const submit = (idempotencyKey: string) => coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "board-1",
     goal_id: "contract-dialogue-lifecycle",
     actor_id: "runtime-contract-dialogue",
@@ -4680,7 +4692,7 @@ test("only an approved Contract closes its Draft clarification session", () => {
   }).proposal;
 
   const rejectedProposal = submit("contract-dialogue-lifecycle-propose-rejected");
-  coordinator.decideContractProposal({
+  coordinator.legacyContractDecision.decideContractProposal({
     board_id: "board-1",
     proposal_id: rejectedProposal.proposal_id,
     actor_id: "user-1",
@@ -4706,7 +4718,7 @@ test("only an approved Contract closes its Draft clarification session", () => {
     reason: "Contract 的结果、边界和验收已经确认。",
     idempotency_key: "contract-dialogue-lifecycle-approve",
   };
-  coordinator.decideContractProposal(decisionInput);
+  coordinator.legacyContractDecision.decideContractProposal(decisionInput);
   const closed = store.snapshot("board-1").clarification_sessions.find(
     (session) => session.session_id === dialogue.dialogue.session_id,
   );
@@ -4716,14 +4728,14 @@ test("only an approved Contract closes its Draft clarification session", () => {
     .prepare("SELECT COUNT(*) AS count FROM events WHERE type = 'clarification.closed' AND object_id = ?")
     .get(dialogue.dialogue.session_id) as { count: number }).count;
   assert.equal(closeEventCount(), 1);
-  coordinator.decideContractProposal(decisionInput);
+  coordinator.legacyContractDecision.decideContractProposal(decisionInput);
   assert.equal(closeEventCount(), 1);
   store.close();
 });
 
 test("a clarifier submits one atomic, versioned Goal Tree proposal without touching canonical facts", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "我想把首次使用体验拆成几个能独立推进的 Goal。",
@@ -4835,7 +4847,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
     idempotency_key: "tree-proposal-submit",
   };
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       ...proposalInput,
       narrative: undefined,
       idempotency_key: "tree-proposal-missing-narrative",
@@ -4843,7 +4855,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.narrative_required",
   );
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       ...proposalInput,
       items: proposalInput.items.map((item, index) => index === 0 ? { ...item, explanation: undefined } : item),
       idempotency_key: "tree-proposal-missing-item-explanation",
@@ -4851,7 +4863,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.item_explanation_required",
   );
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       ...proposalInput,
       items: proposalInput.items.map((item, index) => index === 0
         ? { ...item, explanation: { ...item.explanation, depends_on_item_ids: ["missing-item"] } }
@@ -4860,7 +4872,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
     }),
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.item_dependency_unknown",
   );
-  const submitted = coordinator.submitGoalTreeProposal(proposalInput);
+  const submitted = coordinator.goalTreeSubmission.submitGoalTreeProposal(proposalInput);
   assert.equal(submitted.replayed, false);
   assert.equal(submitted.proposal.origin, "native");
   assert.equal(submitted.proposal.state, "pending");
@@ -4892,7 +4904,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
   );
   assert.ok(submitted.proposal.items.every((item) => item.baseline_versions.length >= 1));
   assert.equal(submitted.proposal.base_event_cursor, dialogue.observed_event_cursor);
-  const replay = coordinator.submitGoalTreeProposal(proposalInput);
+  const replay = coordinator.goalTreeSubmission.submitGoalTreeProposal(proposalInput);
   assert.equal(replay.replayed, true);
   assert.equal(replay.proposal.proposal_id, submitted.proposal.proposal_id);
   assert.equal(store.snapshot("board-1").goal_tree_proposals.length, 1);
@@ -4909,7 +4921,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
   store.db
     .prepare("UPDATE goals SET title = ?, updated_at = ? WHERE goal_id = ?")
     .run("另一个 Runtime 已更新的 Draft 标题", "2026-08-15T00:10:00.000Z", "tree-root");
-  const checked = coordinator.checkGoalTreeProposal({
+  const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: submitted.proposal.proposal_id,
     actor_id: "runtime-clarifier",
@@ -4930,13 +4942,13 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
     "pending",
   );
 
-  const revisionDialogue = coordinator.resumeDraftDialogue({
+  const revisionDialogue = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "tree-root",
     actor_id: "runtime-clarifier",
     idempotency_key: "tree-proposal-revision-dialogue",
   });
-  const revised = coordinator.submitGoalTreeProposal({
+  const revised = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     ...proposalInput,
     discovered_in_run_id: revisionDialogue.run!.run_id,
     summary: "按最新 Draft 标题修订后的同一组首次使用 Goal Tree 变更。",
@@ -4962,7 +4974,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
   assert.equal(revised.proposal.version, 2);
   assert.equal(revised.proposal.supersedes_proposal_id, submitted.proposal.proposal_id);
   assert.equal(revised.proposal.items[0]?.supersedes_item_id, "item-root-contract");
-  const history = coordinator.listGoalTreeProposals({
+  const history = coordinator.goalTree.listGoalTreeProposals({
     board_id: "board-1",
     root_goal_id: "tree-root",
     include_legacy: false,
@@ -4973,7 +4985,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
   store.close();
   const recoveredStore = new SqliteGoalBoardStore(databasePath);
   const recoveredCoordinator = new GoalBoardCoordinator(recoveredStore);
-  const recovered = recoveredCoordinator.listGoalTreeProposals({
+  const recovered = recoveredCoordinator.goalTree.listGoalTreeProposals({
     board_id: "board-1",
     proposal_id: revised.proposal.proposal_id,
     include_legacy: false,
@@ -4987,7 +4999,7 @@ test("a clarifier submits one atomic, versioned Goal Tree proposal without touch
 
 test("Goal Tree proposal rejects an invalid Risk before it enters the decision queue", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-risk-validation",
     rough_idea: "补充一条需要用户确认的风险。",
@@ -4998,7 +5010,7 @@ test("Goal Tree proposal rejects an invalid Risk before it enters the decision q
   const riskCountBefore = store.snapshot("board-1").risks.length;
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-validation",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5061,7 +5073,7 @@ test("Goal Tree Risk updates reject unsupported lifecycle states before user dec
     },
     { actor_id: "user-1", idempotency_key: "risk-state-validation-add" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-risk-validation",
     rough_idea: "确认已有 Risk 的处置结果。",
@@ -5071,7 +5083,7 @@ test("Goal Tree Risk updates reject unsupported lifecycle states before user dec
   const proposalCountBefore = store.snapshot("board-1").goal_tree_proposals.length;
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-validation",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5137,7 +5149,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
     riskFacts,
     { actor_id: "user-1", idempotency_key: "risk-lifecycle-atomic-add" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-risk-lifecycle",
     rough_idea: "修复并关闭关键回归风险。",
@@ -5162,7 +5174,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
   });
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-lifecycle",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5176,7 +5188,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
   );
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-lifecycle",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5203,7 +5215,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
     object_type: "goal",
     object_id: "risk-lifecycle-goal",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-risk-lifecycle",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5214,7 +5226,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
   assert.equal(proposal.root_goal_id, "risk-lifecycle-goal");
 
   assert.throws(
-    () => coordinator.decideGoalTreeProposal({
+    () => coordinator.goalTreeDecision.decideGoalTreeProposal({
       board_id: "board-1",
       proposal_id: proposal.proposal_id,
       runtime_actor_id: "runtime-risk-lifecycle",
@@ -5237,7 +5249,7 @@ test("a Draft Risk lifecycle Goal cannot leave its Contract behind", () => {
   );
   assert.equal(store.getGoal("risk-lifecycle-goal")?.definition_state, "draft");
   assert.equal(coordinator.readGoalContract("board-1", "risk-lifecycle-subject").risks[0]?.state, "open");
-  assert.equal(coordinator.listGoalTreeProposals({ board_id: "board-1", proposal_id: proposal.proposal_id }).proposals[0]?.state, "pending");
+  assert.equal(coordinator.goalTree.listGoalTreeProposals({ board_id: "board-1", proposal_id: proposal.proposal_id }).proposals[0]?.state, "pending");
   store.close();
 });
 
@@ -5285,7 +5297,7 @@ test("an executor can propose only the same Goal's evidenced Risk lifecycle resu
   });
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-executor",
       discovered_in_run_id: execution.run!.run_id,
@@ -5328,7 +5340,7 @@ test("an executor can propose only the same Goal's evidenced Risk lifecycle resu
     source_refs: ["test://executor-risk-mitigation"],
   });
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-executor",
       discovered_in_run_id: execution.run!.run_id,
@@ -5341,7 +5353,7 @@ test("an executor can propose only the same Goal's evidenced Risk lifecycle resu
       error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.root_goal_mismatch",
   );
 
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-risk-executor",
     discovered_in_run_id: execution.run!.run_id,
@@ -5350,7 +5362,7 @@ test("an executor can propose only the same Goal's evidenced Risk lifecycle resu
     idempotency_key: "executor-risk-result-submit",
   }).proposal;
   assert.equal(proposal.root_goal_id, "executor-risk-goal");
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-risk-executor",
@@ -5404,7 +5416,7 @@ test("a confirmed Risk update materializes a supported state and clears the comp
   });
   assert.ok(before.reasons.some((reason) => reason.code === "risk.blocks_completion"));
 
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-risk-closure",
     rough_idea: "确认来源覆盖风险已经按计划处置。",
@@ -5412,7 +5424,7 @@ test("a confirmed Risk update materializes a supported state and clears the comp
     idempotency_key: "risk-completion-dialogue",
   });
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-risk-closure",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5431,7 +5443,7 @@ test("a confirmed Risk update materializes a supported state and clears the comp
     (error: unknown) => error instanceof GoalBoardV1Error &&
       error.code === "goal_tree_proposal.risk_resolution_basis_required",
   );
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-risk-closure",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5470,7 +5482,7 @@ test("a confirmed Risk update materializes a supported state and clears the comp
     ],
     idempotency_key: "risk-completion-state-proposal",
   }).proposal;
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-risk-closure",
@@ -5549,14 +5561,14 @@ test("checking a pending Risk proposal exposes an unsupported lifecycle state as
     riskFacts,
     { actor_id: "user-1", idempotency_key: "risk-state-check-add" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-risk-check",
     rough_idea: "确认已有 Risk 的处置结果。",
     goal_id: "risk-state-check-context",
     idempotency_key: "risk-state-check-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-risk-check",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5606,7 +5618,7 @@ test("checking a pending Risk proposal exposes an unsupported lifecycle state as
       "risk-state-check-item",
     );
 
-  const checked = coordinator.checkGoalTreeProposal({
+  const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-risk-check",
@@ -5622,7 +5634,7 @@ test("checking a pending Risk proposal exposes an unsupported lifecycle state as
 
 test("Goal Tree proposals require one primary result and split work that passes two independence signals", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-leaf-planner",
     rough_idea: "把一个过大的工作拆成真正可以独立执行的 Goal。",
@@ -5638,7 +5650,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
   const { leaf_readiness: _readiness, ...withoutReadiness } = base;
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-leaf-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5663,7 +5675,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
   );
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-leaf-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5700,7 +5712,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
   );
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-leaf-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5753,7 +5765,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
 
   const { rationale: _rationale, ...withoutRationale } = base.leaf_readiness;
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-leaf-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5801,7 +5813,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
     },
   };
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-leaf-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5842,7 +5854,7 @@ test("Goal Tree proposals require one primary result and split work that passes 
       ],
     },
   };
-  const accepted = coordinator.submitGoalTreeProposal({
+  const accepted = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-leaf-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -5868,7 +5880,7 @@ test("Goal Tree proposals explain how to recover a missing clarification Run", (
   const proposalCountBefore = store.snapshot("board-1").goal_tree_proposals.length;
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-missing-clarifier",
       discovered_in_run_id: "run-that-does-not-exist",
@@ -5912,7 +5924,7 @@ test("Goal Tree proposals explain how to recover a missing clarification Run", (
 
 test("Goal Tree proposals cannot call a game plan complete while product paths or executable descendants are missing", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-game-planner",
     rough_idea: "设计一款完整的足球经营游戏，而不是只确认足球资料内容。",
@@ -5970,7 +5982,7 @@ test("Goal Tree proposals cannot call a game plan complete while product paths o
   ];
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-game-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -5991,7 +6003,7 @@ test("Goal Tree proposals cannot call a game plan complete while product paths o
   );
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-game-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -6051,7 +6063,7 @@ test("Goal Tree proposals cannot close a compound Goal without mapping every par
     },
     { actor_id: "user-1", idempotency_key: "contract-coverage-parent-child" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "contract-coverage-parent",
@@ -6060,7 +6072,7 @@ test("Goal Tree proposals cannot close a compound Goal without mapping every par
   });
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-clarifier",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -6117,7 +6129,7 @@ test("Goal Tree proposals cannot close a compound Goal without mapping every par
       ],
     },
   });
-  const submitClosure = (review: DecompositionReview, suffix: string) => coordinator.submitGoalTreeProposal({
+  const submitClosure = (review: DecompositionReview, suffix: string) => coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6152,7 +6164,7 @@ test("Goal Tree proposals cannot close a compound Goal without mapping every par
   );
 
   const proposal = submitClosure(coverageReview("complete"), "complete").proposal;
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -6253,14 +6265,14 @@ test("Goal Tree proposals cover complete game and App paths without forcing one 
     productContext: "game" | "app",
     review: DecompositionReview,
   ) => {
-    const dialogue = coordinator.startDraftDialogue({
+    const dialogue = coordinator.draftDialogue.startDraftDialogue({
       board_id: "board-1",
       actor_id: "runtime-product-planner",
       rough_idea: productContext === "game" ? "做一款完整可玩的足球游戏。" : "做一个可以端到端完成任务的 App。",
       goal_id: rootGoalId,
       idempotency_key: `${rootGoalId}-dialogue`,
     });
-    return coordinator.submitGoalTreeProposal({
+    return coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-product-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -6383,14 +6395,14 @@ test("new task decomposition checks the shared result chain before each task-spe
       decomposition_state: "closed_leaf",
     });
     const reviewed = withCompleteContractCoverage(review, parentPayload, [childPayload]);
-    const dialogue = coordinator.startDraftDialogue({
+    const dialogue = coordinator.draftDialogue.startDraftDialogue({
       board_id: "board-1",
       actor_id: "runtime-task-planner",
       rough_idea: `把 ${taskContext} 任务从最终结果拆到支撑基础和持续交付。`,
       goal_id: rootGoalId,
       idempotency_key: `${rootGoalId}-dialogue`,
     });
-    return coordinator.submitGoalTreeProposal({
+    return coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-task-planner",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -6469,7 +6481,7 @@ test("new task decomposition checks the shared result chain before each task-spe
 
 test("Goal Tree proposals reject incomplete relation payloads before storing them", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-relation-author",
     rough_idea: "把子 Goal 和依赖方向写进一份可确认的 Goal Tree。",
@@ -6480,7 +6492,7 @@ test("Goal Tree proposals reject incomplete relation payloads before storing the
     kind: "relation" | "dependency",
     payload: Record<string, unknown>,
     idempotencyKey: string,
-  ) => coordinator.submitGoalTreeProposal({
+  ) => coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-relation-author",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6528,7 +6540,7 @@ test("separate foundation Goals need an explicit dependency from core work to fo
   const rootGoalId = "foundation-path-root";
   const coreGoalId = "foundation-path-core";
   const foundationGoalId = "foundation-path-infrastructure";
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-task-planner",
     rough_idea: "把核心工作和支撑它的基础能力拆清，并连对依赖方向。",
@@ -6586,7 +6598,7 @@ test("separate foundation Goals need an explicit dependency from core work to fo
       }),
     ]),
   ];
-  const submit = (items: typeof baseItems, idempotencyKey: string) => coordinator.submitGoalTreeProposal({
+  const submit = (items: typeof baseItems, idempotencyKey: string) => coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-task-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6631,7 +6643,7 @@ test("separate foundation Goals need an explicit dependency from core work to fo
 
 test("trusted partial Goal Tree decisions materialize a hierarchy and derive parent, leaf, and draft states", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "把 Runtime 内的提案确认后变成可推进的父子 Goal。",
@@ -6671,7 +6683,7 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
     state: "active",
     reason: "消费者内部叶子不应因上游变化被自动误报。",
   }, { actor_id: "user-1", idempotency_key: "tree-decision-consumer-child-link" });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6814,7 +6826,22 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
     ],
     idempotency_key: "tree-decision-apply",
   };
-  const applied = coordinator.decideGoalTreeProposal(decisionInput);
+  const beforeInvalidSource = store.snapshot("board-1");
+  for (const override of [{ source_refs: [" "] }, { requires_user_confirmation: false }]) {
+    const invalidDecision = structuredClone(decisionInput);
+    const revision = invalidDecision.decisions.find((decision) => decision.revised_item)?.revised_item;
+    assert.ok(revision);
+    Object.assign(revision, override);
+    assert.throws(() => coordinator.goalTreeDecision.decideGoalTreeProposal(invalidDecision), (error) =>
+      error instanceof GoalBoardV1Error && error.code === ("source_refs" in override
+        ? "goal_tree_proposal.source_required" : "goal_tree_proposal.user_confirmation_required"));
+    assert.deepEqual(store.snapshot("board-1"), beforeInvalidSource,
+      "invalid revision provenance cannot save decisions or partially apply the other confirmed items");
+  }
+  const validRevision = decisionInput.decisions.find((decision) => decision.revised_item)?.revised_item;
+  assert.ok(validRevision);
+  validRevision.source_refs = [" repo:z ", "message:a", "repo:z"];
+  const applied = coordinator.goalTreeDecision.decideGoalTreeProposal(decisionInput);
   assert.deepEqual(applied.applied_item_ids.sort(), [
     "draft-child",
     "draft-parent-relation",
@@ -6838,6 +6865,8 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
   assert.equal(applied.proposal.state, "closed");
   assert.equal(applied.revision_proposals.length, 1);
   assert.equal(applied.revision_proposals[0]?.items[0]?.state, "pending");
+  assert.deepEqual(applied.revision_proposals[0]?.items[0]?.source_refs, ["message:a", "repo:z"]);
+  assert.equal(applied.revision_proposals[0]?.items[0]?.requires_user_confirmation, true);
   assert.equal(store.getGoal("tree-decision-future-child"), null);
   assert.equal(store.getGoal("tree-decision-parent")?.definition_state, "accepted");
   assert.equal(
@@ -6873,7 +6902,7 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
   assert.equal(persisted?.decision?.runtime_actor_id, "runtime-clarifier");
   assert.equal(persisted?.decision?.conversation_ref, "conversation://current-session");
   assert.equal(persisted?.materialized_objects[0]?.object_type, "goal");
-  const replay = coordinator.decideGoalTreeProposal(decisionInput);
+  const replay = coordinator.goalTreeDecision.decideGoalTreeProposal(decisionInput);
   assert.equal(replay.replayed, true);
   assert.deepEqual(replay.semantic_review, applied.semantic_review);
   assert.deepEqual(replay.applied_item_ids.sort(), applied.applied_item_ids.sort());
@@ -6882,7 +6911,7 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
   store.close();
   const recoveredStore = new SqliteGoalBoardStore(databasePath);
   const recoveredCoordinator = new GoalBoardCoordinator(recoveredStore);
-  const recovered = recoveredCoordinator.listGoalTreeProposals({
+  const recovered = recoveredCoordinator.goalTree.listGoalTreeProposals({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     include_legacy: false,
@@ -6895,14 +6924,14 @@ test("trusted partial Goal Tree decisions materialize a hierarchy and derive par
 
 test("an existing pending Candidate can be revised and promoted atomically in one Goal Tree decision", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-candidate-planner",
     rough_idea: "把已经记录的 Candidate 修订成正式 Goal，并一次确认它在 Goal Tree 中的位置。",
     goal_id: "candidate-promotion-root",
     idempotency_key: "candidate-promotion-dialogue",
   });
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-candidate-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6935,7 +6964,7 @@ test("an existing pending Candidate can be revised and promoted atomically in on
     type: "part_of",
     reason: "修订后的 Goal 仍属于当前根 Goal。",
   };
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-candidate-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -6965,7 +6994,7 @@ test("an existing pending Candidate can be revised and promoted atomically in on
     idempotency_key: "candidate-promotion-proposal",
   }).proposal;
 
-  const applied = coordinator.decideGoalTreeProposal({
+  const applied = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-candidate-planner",
@@ -7016,14 +7045,14 @@ test("an existing pending Candidate can be revised and promoted atomically in on
 
 test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pending Candidate", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-bootstrap-planner",
     rough_idea: "先用正式 Goal 修复 Candidate 晋升能力，再把这次启动例外对账回原 Candidate。",
     goal_id: "candidate-bootstrap-root",
     idempotency_key: "candidate-bootstrap-dialogue",
   });
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-bootstrap-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7044,7 +7073,7 @@ test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pend
     }),
     business_logic: "仅在同一 Board、稳定 goal_id 和原统一提案均可追溯时，把已创建的启动 Goal 对账回原 Candidate。",
   };
-  const bootstrap = coordinator.submitGoalTreeProposal({
+  const bootstrap = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-bootstrap-planner",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7064,7 +7093,7 @@ test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pend
     })],
     idempotency_key: "candidate-bootstrap-goal-proposal",
   }).proposal;
-  const bootstrapApplied = coordinator.decideGoalTreeProposal({
+  const bootstrapApplied = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: bootstrap.proposal_id,
     runtime_actor_id: "runtime-bootstrap-planner",
@@ -7087,13 +7116,13 @@ test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pend
     type: "part_of",
     reason: "启动 Goal 属于当前根 Goal。",
   };
-  const resumed = coordinator.resumeDraftDialogue({
+  const resumed = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "candidate-bootstrap-root",
     actor_id: "runtime-bootstrap-planner",
     idempotency_key: "candidate-bootstrap-dialogue-resume",
   });
-  const reconciliation = coordinator.submitGoalTreeProposal({
+  const reconciliation = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-bootstrap-planner",
     discovered_in_run_id: resumed.run!.run_id,
@@ -7123,7 +7152,7 @@ test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pend
     })],
     idempotency_key: "candidate-bootstrap-reconcile-proposal",
   }).proposal;
-  const reconciled = coordinator.decideGoalTreeProposal({
+  const reconciled = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: reconciliation.proposal_id,
     runtime_actor_id: "runtime-bootstrap-planner",
@@ -7161,7 +7190,7 @@ test("a bootstrap Goal Tree proposal can be strictly reconciled back to its pend
 
 test("Candidate bootstrap reconciliation rejects an unproven existing Goal without partial writes", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-unproven-bootstrap",
     rough_idea: "验证任意同名 Goal 不能被收编为 Candidate 的正式结果。",
@@ -7174,7 +7203,7 @@ test("Candidate bootstrap reconciliation rejects an unproven existing Goal witho
     definition_state: "accepted",
     decomposition_state: "closed_leaf",
   });
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-unproven-bootstrap",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7185,7 +7214,7 @@ test("Candidate bootstrap reconciliation rejects an unproven existing Goal witho
     actor_id: "user-1",
     idempotency_key: "unproven-bootstrap-direct-goal",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-unproven-bootstrap",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7216,7 +7245,7 @@ test("Candidate bootstrap reconciliation rejects an unproven existing Goal witho
     })],
     idempotency_key: "unproven-bootstrap-proposal",
   }).proposal;
-  const result = coordinator.decideGoalTreeProposal({
+  const result = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-unproven-bootstrap",
@@ -7250,7 +7279,7 @@ test("Candidate bootstrap reconciliation rejects an unproven existing Goal witho
 
 test("Candidate promotion keeps the original decision when its proposal baseline becomes stale", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-stale-candidate",
     rough_idea: "验证另一条用户决定先发生时，旧晋升提案不会生成重复 Goal。",
@@ -7263,14 +7292,14 @@ test("Candidate promotion keeps the original decision when its proposal baseline
     definition_state: "accepted",
     decomposition_state: "closed_leaf",
   });
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-stale-candidate",
     discovered_in_run_id: dialogue.run!.run_id,
     proposed_goal: proposedGoal,
     idempotency_key: "stale-candidate-submit",
   }).candidate;
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-stale-candidate",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7290,7 +7319,7 @@ test("Candidate promotion keeps the original decision when its proposal baseline
     })],
     idempotency_key: "stale-candidate-proposal",
   }).proposal;
-  coordinator.decideCandidate({
+  coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: candidate.candidate_id,
     actor_id: "user-1",
@@ -7299,7 +7328,7 @@ test("Candidate promotion keeps the original decision when its proposal baseline
     reason: "用户在另一入口先拒绝了这条 Candidate。",
     idempotency_key: "stale-candidate-rejected",
   });
-  const result = coordinator.decideGoalTreeProposal({
+  const result = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-stale-candidate",
@@ -7325,6 +7354,63 @@ test("Candidate promotion keeps the original decision when its proposal baseline
   assert.equal(snapshot.goals.some((goal) => goal.goal_id === "stale-candidate-child"), false);
   assert.equal(snapshot.rewires.length, 0);
   store.close();
+});
+
+test("one proposal creates a child, connects it and closes its accepted parent atomically", () => {
+  const { store, coordinator } = fixture();
+  try {
+    createAcceptedCompoundParent(coordinator, "batch-parent");
+    const parent = store.getGoal("batch-parent")!;
+    const dialogue = coordinator.draftDialogue.startDraftDialogue({ board_id: "board-1", goal_id: "batch-parent",
+      actor_id: "runtime", rough_idea: "同一份确认新增子目标和关系，结束父目标拆分", idempotency_key: "batch-start" });
+    const output = "batch-child 有可检查的完成结果";
+    const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({ board_id: "board-1", root_goal_id: "batch-parent",
+      actor_id: "runtime", discovered_in_run_id: dialogue.run!.run_id, summary: "新增子结果与关系后收口父目标", items: [
+        goalTreeProposalItem({ item_id: "batch-close", kind: "contract", operation: "update", object_type: "goal", object_id: "batch-parent",
+          payload: acceptedCompoundClosurePayload(parent, "batch-child") }),
+        goalTreeProposalItem({ item_id: "batch-create", kind: "goal", operation: "create", object_type: "goal", object_id: "batch-child",
+          payload: { goal_id: "batch-child", title: "完成子结果", outcome: output, why: "覆盖父级结果", business_logic: "提交可检查的结果供父目标汇总",
+            in_scope: ["交付子结果"], out_of_scope: ["修改父目标需求"], required_inputs: ["已确认的父目标要求"],
+            promised_outputs: [output], definition_state: "accepted", decomposition_state: "closed_leaf",
+            leaf_readiness: readyLeafReadiness(output, ["batch-child-criterion"]),
+            acceptance_criteria: [{ criterion_id: "batch-child-criterion", statement: "结果存在", decision_method: "inspection", pass_condition: "结果可检查", required_evidence: ["结果"] }] } }),
+        goalTreeProposalItem({ item_id: "batch-link", kind: "relation", operation: "create", object_type: "goal", object_id: "batch-parent",
+          payload: { from_goal_id: "batch-child", to_goal_id: "batch-parent", type: "part_of", reason: "子结果覆盖父结果" } }),
+      ], idempotency_key: "batch-proposal" }).proposal;
+    const beforeCheck = store.snapshot("board-1");
+    const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({ board_id: "board-1", proposal_id: proposal.proposal_id, actor_id: "runtime", idempotency_key: "batch-check" });
+    assert.deepEqual(checked.conflict_item_ids, [], "preflight must see relations from the same batch before parent closure");
+    const afterCheck = store.snapshot("board-1");
+    assert.deepEqual(afterCheck.goals, beforeCheck.goals, "preflight does not create the child or close its parent");
+    assert.deepEqual(afterCheck.relations, beforeCheck.relations);
+    assert.deepEqual(afterCheck.goal_contract_revisions, beforeCheck.goal_contract_revisions);
+    const decision: Parameters<GoalBoardCoordinator["decideGoalTreeProposal"]>[0] = { board_id: "board-1", proposal_id: proposal.proposal_id, runtime_actor_id: "runtime",
+      authority: { actor_id: "user-1", actor_kind: "user" as const, authority_source: "runtime_dialogue" as const,
+        conversation_ref: "conversation://batch-closure", message_ref: "message://confirm-batch",
+        whole_confirmation_prompted: true, prompted_proposal_id: proposal.proposal_id },
+      confirm_all_pending: true, reason: "确认这整份提案", idempotency_key: "batch-decide" };
+    const closeParent = coordinator.goals.lifecycle.closeAcceptedCompound;
+    coordinator.goals.lifecycle.closeAcceptedCompound = () => {
+      assert.ok(store.getGoal("batch-child"), "fault happens after the actual child write");
+      assert.ok(store.snapshot("board-1").relations.some(relation => relation.from_goal_id === "batch-child"), "fault happens after the actual relation write");
+      throw new GoalBoardV1Error("test.closure_interrupted", "父目标保存中断");
+    };
+    try {
+      assert.throws(() => coordinator.goalTreeDecision.decideGoalTreeProposal(decision), (error: unknown) =>
+        error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.whole_confirmation_conflict" &&
+        error.details?.original_code === "test.closure_interrupted");
+      assert.deepEqual(store.snapshot("board-1"), afterCheck, "failed closure rolls back child, relation, decisions, events and revisions together");
+    } finally { coordinator.goals.lifecycle.closeAcceptedCompound = closeParent; }
+    const decided = coordinator.goalTreeDecision.decideGoalTreeProposal(decision);
+    assert.deepEqual([...decided.applied_item_ids].sort(), ["batch-close", "batch-create", "batch-link"]);
+    const saved = store.snapshot("board-1");
+    assert.equal(saved.goals.find(goal => goal.goal_id === "batch-parent")?.decomposition_state, "closed_compound");
+    assert.equal(saved.goals.filter(goal => goal.goal_id === "batch-child").length, 1);
+    assert.equal(saved.relations.filter(relation => relation.from_goal_id === "batch-child" && relation.to_goal_id === "batch-parent" && relation.state === "active").length, 1);
+    assert.equal(saved.goals.find(goal => goal.goal_id === "batch-parent")?.outcome, parent.outcome);
+    assert.equal(coordinator.goalTreeDecision.decideGoalTreeProposal(decision).replayed, true);
+    assert.deepEqual(store.snapshot("board-1"), saved, "replay cannot add another child, relation, revision or event");
+  } finally { store.close(); }
 });
 
 test("a user can close an accepted parent without changing its Contract", () => {
@@ -7363,14 +7449,14 @@ test("a user can close an accepted parent without changing its Contract", () => 
     "clarification_pending",
   );
 
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "accepted-closure-context",
     rough_idea: "用户正在确认一个已有 accepted 父 Goal 的完整子树。",
     idempotency_key: "accepted-closure-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7388,7 +7474,7 @@ test("a user can close an accepted parent without changing its Contract", () => 
     ],
     idempotency_key: "accepted-closure-proposal",
   }).proposal;
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -7467,14 +7553,14 @@ test("closing an accepted parent reconciles completed children and compound ance
     },
     { actor_id: "user-1", idempotency_key: "accepted-closure-complete-child-relation" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "accepted-closure-complete-context",
     rough_idea: "确认已完成子树的已接受父 Goal 正式结束拆分。",
     idempotency_key: "accepted-closure-complete-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7495,7 +7581,7 @@ test("closing an accepted parent reconciles completed children and compound ance
     ],
     idempotency_key: "accepted-closure-complete-proposal",
   }).proposal;
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -7611,14 +7697,14 @@ test("Goal Tree decisions reconcile newly accepted and historical compound paren
   ].map(immutableGoal);
   const relationsBefore = store.snapshot("board-1").relations;
 
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "compound-reconciliation-context",
     rough_idea: "确认复合父 Goal 后统一结算当前与历史派生状态。",
     idempotency_key: "compound-reconciliation-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -7662,7 +7748,7 @@ test("Goal Tree decisions reconcile newly accepted and historical compound paren
     conversation_ref: "conversation://compound-reconciliation",
     message_ref: "message://compound-reconciliation-confirm",
   };
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -7716,14 +7802,14 @@ test("Goal Tree decisions reconcile newly accepted and historical compound paren
     "incomplete-compound-parent": 0,
   });
 
-  const secondDialogue = coordinator.startDraftDialogue({
+  const secondDialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "compound-reconciliation-trigger-context",
     rough_idea: "用另一条澄清工作触发复合状态幂等结算。",
     idempotency_key: "compound-reconciliation-second-dialogue",
   });
-  const secondProposal = coordinator.submitGoalTreeProposal({
+  const secondProposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: secondDialogue.run!.run_id,
@@ -7745,7 +7831,7 @@ test("Goal Tree decisions reconcile newly accepted and historical compound paren
     ],
     idempotency_key: "compound-reconciliation-second-proposal",
   }).proposal;
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: secondProposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -7770,7 +7856,7 @@ test("Goal Tree decisions reconcile newly accepted and historical compound paren
 
 test("accepted compound closure rejects structural gaps and versions material Contract edits", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     goal_id: "accepted-closure-rejection-context",
@@ -7788,13 +7874,13 @@ test("accepted compound closure rejects structural gaps and versions material Co
   const submitAndConfirm = (goalId: string, itemId: string, payload: Record<string, unknown>) => {
     const currentRun = submittedProposalCount === 0
       ? dialogue.run!
-      : coordinator.resumeDraftDialogue({
+      : coordinator.draftDialogue.resumeDraftDialogue({
           board_id: "board-1",
           goal_id: "accepted-closure-rejection-context",
           actor_id: "runtime-clarifier",
           idempotency_key: `accepted-closure-resume-${submittedProposalCount}`,
         }).run!;
-    const proposal = coordinator.submitGoalTreeProposal({
+    const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-clarifier",
       discovered_in_run_id: currentRun.run_id,
@@ -7813,7 +7899,7 @@ test("accepted compound closure rejects structural gaps and versions material Co
       idempotency_key: `accepted-closure-rejection-proposal-${goalId}`,
     }).proposal;
     submittedProposalCount += 1;
-    return coordinator.decideGoalTreeProposal({
+    return coordinator.goalTreeDecision.decideGoalTreeProposal({
       board_id: "board-1",
       proposal_id: proposal.proposal_id,
       runtime_actor_id: "runtime-clarifier",
@@ -7826,7 +7912,7 @@ test("accepted compound closure rejects structural gaps and versions material Co
   createAcceptedCompoundParent(coordinator, "accepted-closure-no-child");
   const proposalCountBeforeMissingChild = store.snapshot("board-1").goal_tree_proposals.length;
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-clarifier",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -7916,7 +8002,7 @@ test("accepted compound closure rejects structural gaps and versions material Co
 
 test("Goal Tree decisions keep independent items, conflicts, cycles, and short confirmations safe", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "验证用户确认在并发和循环拆分下仍只应用安全条目。",
@@ -7929,7 +8015,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
     runId = dialogue.run!.run_id,
     rootGoalId = "decision-conflict-root",
   ) =>
-    coordinator.submitGoalTreeProposal({
+    coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-clarifier",
       discovered_in_run_id: runId,
@@ -7989,7 +8075,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
     conversation_ref: "conversation://conflict",
     message_ref: "message://conflict-confirm",
   };
-  const result = coordinator.decideGoalTreeProposal({
+  const result = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -8007,7 +8093,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
   assert.equal(store.getGoal("decision-conflict-root")?.title, "另一个 Session 已修改的根 Goal");
   assert.ok(store.getGoal("decision-conflict-child"));
 
-  const cycleDialogue = coordinator.resumeDraftDialogue({
+  const cycleDialogue = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "decision-conflict-root",
     actor_id: "runtime-clarifier",
@@ -8028,7 +8114,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
       object_id: "relation:new:decision-conflict-root:decision-conflict-child:part_of",
     }),
   ], cycleDialogue.run!.run_id);
-  const cycle = coordinator.decideGoalTreeProposal({
+  const cycle = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: cycleProposal.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -8048,7 +8134,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
     false,
   );
 
-  const confirmationADialogue = coordinator.resumeDraftDialogue({
+  const confirmationADialogue = coordinator.draftDialogue.resumeDraftDialogue({
     board_id: "board-1",
     goal_id: "decision-conflict-root",
     actor_id: "runtime-clarifier",
@@ -8071,7 +8157,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
   ], confirmationADialogue.run!.run_id);
   assert.throws(
     () =>
-      coordinator.decideGoalTreeProposal({
+      coordinator.goalTreeDecision.decideGoalTreeProposal({
         board_id: "board-1",
         proposal_id: confirmationA.proposal_id,
         runtime_actor_id: "runtime-clarifier",
@@ -8083,7 +8169,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
   );
   assert.throws(
     () =>
-      coordinator.decideGoalTreeProposal({
+      coordinator.goalTreeDecision.decideGoalTreeProposal({
         board_id: "board-1",
         proposal_id: confirmationA.proposal_id,
         runtime_actor_id: "runtime-clarifier",
@@ -8094,7 +8180,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
       }),
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.whole_confirmation_ambiguous",
   );
-  const confirmationBDialogue = coordinator.startDraftDialogue({
+  const confirmationBDialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "从另一条独立 Goal 提交第二份待确认方案，验证整份确认不会串单。",
@@ -8118,7 +8204,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
   ], confirmationBDialogue.run!.run_id, "decision-ambiguity-b-context");
   assert.throws(
     () =>
-      coordinator.decideGoalTreeProposal({
+      coordinator.goalTreeDecision.decideGoalTreeProposal({
         board_id: "board-1",
         proposal_id: confirmationB.proposal_id,
         runtime_actor_id: "runtime-clarifier",
@@ -8133,7 +8219,7 @@ test("Goal Tree decisions keep independent items, conflicts, cycles, and short c
       }),
     (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.whole_confirmation_ambiguous",
   );
-  const exactWholeConfirmation = coordinator.decideGoalTreeProposal({
+  const exactWholeConfirmation = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: confirmationB.proposal_id,
     runtime_actor_id: "runtime-clarifier",
@@ -8168,14 +8254,14 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
       },
       { actor_id: "user-1", idempotency_key: "atomic-confirm-existing-child-relation" },
     );
-    const dialogue = coordinator.startDraftDialogue({
+    const dialogue = coordinator.draftDialogue.startDraftDialogue({
       board_id: "board-1",
       actor_id: "runtime-atomic-confirm",
       rough_idea: "一次确认整份 Goal Tree 时，任何冲突都不能留下半棵树。",
       goal_id: "atomic-confirm-context",
       idempotency_key: "atomic-confirm-dialogue",
     });
-    const proposal = coordinator.submitGoalTreeProposal({
+    const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-atomic-confirm",
       discovered_in_run_id: dialogue.run!.run_id,
@@ -8216,7 +8302,7 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
 
   const checkedFixture = buildInvalidProposal();
   const cursorBeforeCheck = checkedFixture.store.snapshot("board-1").cursor;
-  const checked = checkedFixture.coordinator.checkGoalTreeProposal({
+  const checked = checkedFixture.coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: checkedFixture.proposal.proposal_id,
     actor_id: "runtime-atomic-confirm",
@@ -8235,7 +8321,7 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
 
   const decidedFixture = buildInvalidProposal();
   assert.throws(
-    () => decidedFixture.coordinator.decideGoalTreeProposal({
+    () => decidedFixture.coordinator.goalTreeDecision.decideGoalTreeProposal({
       board_id: "board-1",
       proposal_id: decidedFixture.proposal.proposal_id,
       runtime_actor_id: "runtime-atomic-confirm",
@@ -8261,7 +8347,7 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
     },
   );
   assert.equal(decidedFixture.store.getGoal("atomic-confirm-child"), null);
-  const unchanged = decidedFixture.coordinator.listGoalTreeProposals({
+  const unchanged = decidedFixture.coordinator.goalTree.listGoalTreeProposals({
     board_id: "board-1",
     proposal_id: decidedFixture.proposal.proposal_id,
     include_legacy: false,
@@ -8271,7 +8357,7 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
   decidedFixture.store.close();
 
   const partialFixture = buildInvalidProposal();
-  const partial = partialFixture.coordinator.decideGoalTreeProposal({
+  const partial = partialFixture.coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: partialFixture.proposal.proposal_id,
     runtime_actor_id: "runtime-atomic-confirm",
@@ -8287,7 +8373,7 @@ test("whole Goal Tree confirmation preflights invariants and never leaves a part
   });
   assert.equal(partial.proposal.state, "partially_applied");
   assert.throws(
-    () => partialFixture.coordinator.decideGoalTreeProposal({
+    () => partialFixture.coordinator.goalTreeDecision.decideGoalTreeProposal({
       board_id: "board-1",
       proposal_id: partialFixture.proposal.proposal_id,
       runtime_actor_id: "runtime-atomic-confirm",
@@ -8338,14 +8424,14 @@ test("accepted leaf Contract changes keep the Goal ID and preserve relation hist
     },
     { actor_id: "user-1", idempotency_key: "accepted-leaf-depends-on" },
   );
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-leaf-revision",
     rough_idea: "用户纠正已接受叶子 Goal 的业务边界。",
     goal_id: "accepted-leaf-revision-context",
     idempotency_key: "accepted-leaf-revision-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-leaf-revision",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8368,7 +8454,7 @@ test("accepted leaf Contract changes keep the Goal ID and preserve relation hist
   }).proposal;
   const snapshotBefore = store.snapshot("board-1");
 
-  const checked = coordinator.checkGoalTreeProposal({
+  const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-leaf-revision",
@@ -8376,7 +8462,7 @@ test("accepted leaf Contract changes keep the Goal ID and preserve relation hist
   });
   assert.deepEqual(checked.conflict_item_ids, []);
   assert.equal(checked.proposal.items[0]?.conflict, null);
-  const decided = coordinator.decideGoalTreeProposal({
+  const decided = coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     runtime_actor_id: "runtime-leaf-revision",
@@ -8421,7 +8507,7 @@ test("accepted leaf Contract changes keep the Goal ID and preserve relation hist
 test("Goal Tree preflight reports acceptance criterion ID collisions before confirmation", () => {
   const { store, coordinator } = fixture();
   createLeaf(coordinator, "criterion-owner");
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-criterion-conflict",
     rough_idea: "新增一个不能复用其他 Goal 验收条件 ID 的 Goal。",
@@ -8436,7 +8522,7 @@ test("Goal Tree preflight reports acceptance criterion ID collisions before conf
   });
   conflictingGoal.acceptance_criteria[0]!.criterion_id = "criterion-owner-criterion";
   conflictingGoal.leaf_readiness!.acceptance_criterion_ids = ["criterion-owner-criterion"];
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-criterion-conflict",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8455,7 +8541,7 @@ test("Goal Tree preflight reports acceptance criterion ID collisions before conf
     idempotency_key: "criterion-conflict-proposal",
   }).proposal;
 
-  const checked = coordinator.checkGoalTreeProposal({
+  const checked = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-criterion-conflict",
@@ -8475,7 +8561,7 @@ test("Goal Tree preflight reports acceptance criterion ID collisions before conf
 
 test("Goal Tree proposal rejects cross-proposal item ID reuse with a structured recovery", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-item-id-conflict",
     rough_idea: "两份提案不能复用同一个全局 item ID。",
@@ -8495,7 +8581,7 @@ test("Goal Tree proposal rejects cross-proposal item ID reuse with a structured 
     object_type: "goal",
     object_id: goalId,
   });
-  const first = coordinator.submitGoalTreeProposal({
+  const first = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-item-id-conflict",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8507,7 +8593,7 @@ test("Goal Tree proposal rejects cross-proposal item ID reuse with a structured 
   const proposalCountBefore = (store.db
     .prepare("SELECT COUNT(*) AS count FROM goal_tree_proposals WHERE board_id = ?")
     .get("board-1") as { count: number }).count;
-  const secondDialogue = coordinator.startDraftDialogue({
+  const secondDialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-item-id-conflict",
     rough_idea: "从另一条独立 Goal 提交第二份提案，验证 item ID 在 Board 内仍全局唯一。",
@@ -8516,7 +8602,7 @@ test("Goal Tree proposal rejects cross-proposal item ID reuse with a structured 
   });
 
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-item-id-conflict",
       discovered_in_run_id: secondDialogue.run!.run_id,
@@ -8545,14 +8631,14 @@ test("Goal Tree proposal rejects cross-proposal item ID reuse with a structured 
 
 test("Goal Tree baselines ignore unrelated Goal runtime state but retain Contract and relation endpoint facts", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-semantic-baseline",
     rough_idea: "等待用户确认期间，租约等运行态变化不能让 Contract 提案自然过期。",
     goal_id: "semantic-baseline-root",
     idempotency_key: "semantic-baseline-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-semantic-baseline",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8615,7 +8701,7 @@ test("Goal Tree baselines ignore unrelated Goal runtime state but retain Contrac
   store.db
     .prepare("UPDATE goals SET fulfillment_state = 'satisfied', updated_at = ? WHERE goal_id = ?")
     .run("2026-08-15T00:30:00.000Z", "semantic-baseline-root");
-  const runtimeOnlyCheck = coordinator.checkGoalTreeProposal({
+  const runtimeOnlyCheck = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-semantic-baseline",
@@ -8626,7 +8712,7 @@ test("Goal Tree baselines ignore unrelated Goal runtime state but retain Contrac
   store.db
     .prepare("UPDATE goals SET title = ?, updated_at = ? WHERE goal_id = ?")
     .run("真正改变 Contract 的另一个标题", "2026-08-15T00:31:00.000Z", "semantic-baseline-root");
-  const contractCheck = coordinator.checkGoalTreeProposal({
+  const contractCheck = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     actor_id: "runtime-semantic-baseline",
@@ -8639,7 +8725,7 @@ test("Goal Tree baselines ignore unrelated Goal runtime state but retain Contrac
 
 test("a failed unified Goal Tree submission leaves neither proposal rows nor canonical writes", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "失败时不能留下半份 Goal Tree 提案。",
@@ -8656,7 +8742,7 @@ test("a failed unified Goal Tree submission leaves neither proposal rows nor can
   `);
   assert.throws(
     () =>
-      coordinator.submitGoalTreeProposal({
+      coordinator.goalTreeSubmission.submitGoalTreeProposal({
         board_id: "board-1",
         actor_id: "runtime-clarifier",
         discovered_in_run_id: dialogue.run!.run_id,
@@ -8682,7 +8768,7 @@ test("a failed unified Goal Tree submission leaves neither proposal rows nor can
 
 test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates, and Rewires without rewriting history", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     rough_idea: "历史提案也必须能被统一读取。",
@@ -8715,7 +8801,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
     ],
     leaf_readiness: readyLeafReadiness("统一读取结果", ["legacy-contract-view"]),
   };
-  const legacyContract = coordinator.submitContractProposal({
+  const legacyContract = coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "board-1",
     goal_id: "legacy-draft",
     actor_id: "runtime-clarifier",
@@ -8733,7 +8819,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
     },
     idempotency_key: "legacy-tree-contract",
   }).proposal;
-  const legacyCandidate = coordinator.submitCandidate({
+  const legacyCandidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8756,7 +8842,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
     },
     idempotency_key: "legacy-tree-candidate",
   }).candidate;
-  const legacyRewire = coordinator.submitDependencyProposal({
+  const legacyRewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8766,7 +8852,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
     idempotency_key: "legacy-tree-rewire",
   }).rewire;
 
-  const unified = coordinator.listGoalTreeProposals({ board_id: "board-1" }).proposals;
+  const unified = coordinator.goalTree.listGoalTreeProposals({ board_id: "board-1" }).proposals;
   assert.equal(store.snapshot("board-1").goal_tree_proposals.length, 0);
   assert.equal(unified.filter((proposal) => proposal.origin !== "native").length, 3);
   const mappedContract = unified.find(
@@ -8777,7 +8863,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
   assert.deepEqual(mappedContract?.items[0]?.payload.field_sources, legacyContract.field_sources);
   assert.equal(mappedContract?.state, legacyContract.state);
   assert.equal(
-    coordinator.listGoalTreeProposals({
+    coordinator.goalTree.listGoalTreeProposals({
       board_id: "board-1",
       proposal_id: legacyContract.proposal_id,
       include_legacy: true,
@@ -8801,7 +8887,7 @@ test("the unified Goal Tree read view maps legacy Contract Proposals, Candidates
 
 test("the unified Goal Tree decision handle routes legacy Contract, Candidate, and Rewire decisions", () => {
   const { store, coordinator } = fixture();
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-legacy-decide",
     rough_idea: "历史提案要从统一 handle 完成决定。",
@@ -8832,7 +8918,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     }],
     leaf_readiness: readyLeafReadiness("可执行的正式 Contract", ["legacy-decide-contract"]),
   };
-  const contract = coordinator.submitContractProposal({
+  const contract = coordinator.legacyProposalSubmission.submitContractProposal({
     board_id: "board-1",
     goal_id: "legacy-decide-draft",
     actor_id: "runtime-legacy-decide",
@@ -8850,7 +8936,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     },
     idempotency_key: "legacy-decide-contract-submit",
   }).proposal;
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-legacy-decide",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8871,7 +8957,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     },
     idempotency_key: "legacy-decide-candidate-submit",
   }).candidate;
-  const rewire = coordinator.submitDependencyProposal({
+  const rewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-legacy-decide",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -8896,7 +8982,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     itemId: string,
     decision: "confirm" | "reject",
     key: string,
-  ) => coordinator.decideGoalTreeProposal({
+  ) => coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposalId,
     authority,
@@ -8904,7 +8990,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     idempotency_key: key,
   });
 
-  const rawContractCheck = coordinator.checkGoalTreeProposal({
+  const rawContractCheck = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: contract.proposal_id,
     actor_id: "runtime-legacy-decide",
@@ -8913,7 +8999,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
   assert.equal(rawContractCheck.proposal.proposal_id, `legacy-contract-proposal:${contract.proposal_id}`);
   assert.deepEqual(rawContractCheck.conflict_item_ids, []);
   assert.deepEqual(rawContractCheck.planning_issues, []);
-  const mappedContractCheck = coordinator.checkGoalTreeProposal({
+  const mappedContractCheck = coordinator.goalTreeCheck.checkGoalTreeProposal({
     board_id: "board-1",
     proposal_id: `legacy-contract-proposal:${contract.proposal_id}`,
     actor_id: "runtime-legacy-decide",
@@ -8953,7 +9039,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     }],
     idempotency_key: "legacy-decide-rewire-confirm",
   };
-  const rewireDecision = coordinator.decideGoalTreeProposal(rewireInput);
+  const rewireDecision = coordinator.goalTreeDecision.decideGoalTreeProposal(rewireInput);
   assert.equal(rewireDecision.proposal.state, "approved");
   assert.equal(rewireDecision.proposal.items[0]?.state, "applied");
   assert.equal(
@@ -8966,7 +9052,7 @@ test("the unified Goal Tree decision handle routes legacy Contract, Candidate, a
     relation.to_goal_id === "legacy-decide-provider" &&
     relation.type === "depends_on" &&
     relation.state === "active"));
-  const replay = coordinator.decideGoalTreeProposal(rewireInput);
+  const replay = coordinator.goalTreeDecision.decideGoalTreeProposal(rewireInput);
   assert.equal(replay.replayed, true);
   assert.equal(store.snapshot("board-1").relations.filter((relation) =>
     relation.from_goal_id === "legacy-decide-draft" &&
@@ -8980,7 +9066,7 @@ test("a native Goal Tree proposal supersedes a pending legacy Contract Proposal 
     const { store, coordinator } = fixture();
     const actorId = `runtime-legacy-contract-revision-${handleKind}`;
     const goalId = `legacy-contract-revision-${handleKind}`;
-    const dialogue = coordinator.startDraftDialogue({
+    const dialogue = coordinator.draftDialogue.startDraftDialogue({
       board_id: "board-1",
       actor_id: actorId,
       rough_idea: "把旧 Contract Proposal 收进新的完整 Goal Tree 修订链。",
@@ -9013,7 +9099,7 @@ test("a native Goal Tree proposal supersedes a pending legacy Contract Proposal 
         [`legacy-contract-revision-criterion-${handleKind}`],
       ),
     };
-    const legacy = coordinator.submitContractProposal({
+    const legacy = coordinator.legacyProposalSubmission.submitContractProposal({
       board_id: "board-1",
       goal_id: goalId,
       actor_id: actorId,
@@ -9033,7 +9119,7 @@ test("a native Goal Tree proposal supersedes a pending legacy Contract Proposal 
     }).proposal;
     const mappedHandle = `legacy-contract-proposal:${legacy.proposal_id}`;
     const supersedesProposalId = handleKind === "raw" ? legacy.proposal_id : mappedHandle;
-    const native = coordinator.submitGoalTreeProposal({
+    const native = coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: actorId,
       discovered_in_run_id: dialogue.run!.run_id,
@@ -9064,7 +9150,7 @@ test("a native Goal Tree proposal supersedes a pending legacy Contract Proposal 
     const databasePath = store.path;
     store.close();
     const recoveredStore = new SqliteGoalBoardStore(databasePath);
-    const recovered = new GoalBoardCoordinator(recoveredStore).listGoalTreeProposals({
+    const recovered = new GoalBoardCoordinator(recoveredStore).goalTree.listGoalTreeProposals({
       board_id: "board-1",
       proposal_id: native.proposal_id,
       include_legacy: true,
@@ -9121,7 +9207,7 @@ test("a native relation proposal precisely supersedes an equivalent pending lega
     },
     { actor_id: "user-1", idempotency_key: "legacy-supersession-relation" },
   ).relation_id;
-  const legacyRewire = coordinator.submitDependencyProposal({
+  const legacyRewire = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-legacy-supersession",
     discovered_in_run_id: run.run_id,
@@ -9137,7 +9223,7 @@ test("a native relation proposal precisely supersedes an equivalent pending lega
     }],
     idempotency_key: "legacy-supersession-rewire",
   }).rewire;
-  const unrelatedLegacy = coordinator.submitDependencyProposal({
+  const unrelatedLegacy = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-legacy-supersession",
     discovered_in_run_id: run.run_id,
@@ -9148,14 +9234,14 @@ test("a native relation proposal precisely supersedes an equivalent pending lega
     )],
     idempotency_key: "legacy-supersession-unrelated",
   }).rewire;
-  const dialogue = coordinator.startDraftDialogue({
+  const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: "board-1",
     actor_id: "runtime-native-supersession",
     rough_idea: "用 native Proposal 落地用户已经确认的依赖移除。",
     goal_id: "legacy-supersession-context",
     idempotency_key: "legacy-supersession-dialogue",
   });
-  const proposal = coordinator.submitGoalTreeProposal({
+  const proposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-native-supersession",
     discovered_in_run_id: dialogue.run!.run_id,
@@ -9180,7 +9266,7 @@ test("a native relation proposal precisely supersedes an equivalent pending lega
     })],
     idempotency_key: "legacy-supersession-native-submit",
   }).proposal;
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: proposal.proposal_id,
     authority: {
@@ -9204,7 +9290,7 @@ test("a native relation proposal precisely supersedes an equivalent pending lega
   assert.equal(reconciled.impact.proposed_changes_applied, true);
   assert.equal(reconciled.impact.superseded_by_goal_tree_proposal_id, proposal.proposal_id);
   assert.equal(snapshot.rewires.find((item) => item.rewire_id === unrelatedLegacy.rewire_id)?.state, "pending");
-  const unified = coordinator.listGoalTreeProposals({
+  const unified = coordinator.goalTree.listGoalTreeProposals({
     board_id: "board-1",
     proposal_id: `legacy-rewire:${legacyRewire.rewire_id}`,
   }).proposals[0]!;
@@ -9236,7 +9322,7 @@ test("Candidate validation prevents unrecoverable Rewires and unbound current-ru
   const before = store.snapshot("board-1").candidates.length;
   assert.throws(
     () =>
-      coordinator.submitCandidate({
+      coordinator.legacyProposalSubmission.submitCandidate({
         board_id: "board-1",
         actor_id: "runtime-a",
         proposed_goal: proposedGoal,
@@ -9257,7 +9343,7 @@ test("Candidate validation prevents unrecoverable Rewires and unbound current-ru
   assert.equal(store.getGoal("candidate-target"), null);
   assert.throws(
     () =>
-      coordinator.submitCandidate({
+      coordinator.legacyProposalSubmission.submitCandidate({
         board_id: "board-1",
         actor_id: "runtime-a",
         proposed_goal: proposedGoal,
@@ -9290,7 +9376,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
 
   assert.throws(
     () =>
-      coordinator.submitDependencyProposal({
+      coordinator.legacyProposalSubmission.submitDependencyProposal({
         board_id: "board-1",
         actor_id: "runtime-a",
         discovered_in_run_id: run.run_id,
@@ -9309,7 +9395,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
   );
   assert.equal(store.snapshot("board-1").rewires.length, 0);
 
-  const addProposal = coordinator.submitDependencyProposal({
+  const addProposal = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -9346,7 +9432,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
   );
   assert.throws(
     () =>
-      coordinator.confirmRewire({
+      coordinator.legacyRewireDecision.confirmRewire({
         board_id: "board-1",
         rewire_id: addProposal.rewire_id,
         actor_id: "runtime-a",
@@ -9357,7 +9443,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
     (error) =>
       error instanceof GoalBoardV1Error && error.code === "rewire.user_confirmation_required",
   );
-  const applied = coordinator.confirmRewire({
+  const applied = coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: addProposal.rewire_id,
     actor_id: "user-1",
@@ -9377,7 +9463,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
     ),
   );
 
-  const rejectedRemoval = coordinator.submitDependencyProposal({
+  const rejectedRemoval = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -9391,7 +9477,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
     ],
     idempotency_key: "dependency-proposal-deactivate-rejected",
   }).rewire;
-  coordinator.confirmRewire({
+  coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: rejectedRemoval.rewire_id,
     actor_id: "user-1",
@@ -9406,7 +9492,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
     ),
   );
 
-  const confirmedRemoval = coordinator.submitDependencyProposal({
+  const confirmedRemoval = coordinator.legacyProposalSubmission.submitDependencyProposal({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -9425,7 +9511,7 @@ test("Dependency Proposal requires reviewable evidence and only a user-applied R
     ],
     idempotency_key: "dependency-proposal-deactivate-confirmed",
   }).rewire;
-  const removed = coordinator.confirmRewire({
+  const removed = coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: confirmedRemoval.rewire_id,
     actor_id: "user-1",
@@ -9489,8 +9575,8 @@ test("Candidate idempotency replays the original result after approval changes B
     blocking_mode: "current_run" as const,
     idempotency_key: "candidate-replay-submit",
   };
-  const first = coordinator.submitCandidate(input);
-  coordinator.decideCandidate({
+  const first = coordinator.legacyProposalSubmission.submitCandidate(input);
+  coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: first.candidate.candidate_id,
     actor_id: "user-1",
@@ -9500,7 +9586,7 @@ test("Candidate idempotency replays the original result after approval changes B
     idempotency_key: "candidate-replay-approve",
   });
   assert.ok(store.getGoal("candidate-replay-target"));
-  const replay = coordinator.submitCandidate(input);
+  const replay = coordinator.legacyProposalSubmission.submitCandidate(input);
   assert.equal(replay.replayed, true);
   assert.equal(replay.candidate.candidate_id, first.candidate.candidate_id);
   store.close();
@@ -9628,7 +9714,7 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
     actor_id: "runtime-a",
     idempotency_key: "rewire-active-run",
   }).run;
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -9651,6 +9737,8 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
     proposed_relations: [
       dependencyProposal("active-work", "$new_goal", "原工作依赖新发现的结果"),
     ],
+    proposed_impacts: [{ goal_id: "$new_goal", surface: "src/new-required-work.ts", access: "read",
+      input_snapshot: "commit://confirmed-input", reason: "固定输入后开展新工作" }],
     proposed_risks: [
       {
         risk_id: "new-work-input-risk",
@@ -9669,7 +9757,7 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
     blocking_mode: "current_run",
     idempotency_key: "rewire-candidate-submit",
   }).candidate;
-  const approved = coordinator.decideCandidate({
+  const approved = coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: candidate.candidate_id,
     actor_id: "user-1",
@@ -9696,7 +9784,7 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
   );
   assert.throws(
     () =>
-      coordinator.confirmRewire({
+      coordinator.legacyRewireDecision.confirmRewire({
         board_id: "board-1",
         rewire_id: pending.rewire_id,
         actor_id: "runtime-a",
@@ -9707,7 +9795,17 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
     (error) =>
       error instanceof GoalBoardV1Error && error.code === "rewire.user_confirmation_required",
   );
-  const applied = coordinator.confirmRewire({
+  const beforeImpactRewire = store.snapshot("board-1");
+  store.db.exec(`CREATE TRIGGER reject_rewire_impact_apply BEFORE INSERT ON events
+    WHEN NEW.type = 'rewire.applied'
+    BEGIN SELECT RAISE(ABORT, 'injected rewire apply failure'); END;`);
+  assert.throws(() => coordinator.legacyRewireDecision.confirmRewire({
+    board_id: "board-1", rewire_id: pending.rewire_id, actor_id: "user-1", actor_kind: "user",
+    reason: "确认新依赖线路和影响", idempotency_key: "rewire-user-confirm",
+  }), /injected rewire apply failure/);
+  assert.deepEqual(store.snapshot("board-1"), beforeImpactRewire);
+  store.db.exec("DROP TRIGGER reject_rewire_impact_apply");
+  const applied = coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: pending.rewire_id,
     actor_id: "user-1",
@@ -9717,6 +9815,11 @@ test("approved Candidate creates a pending Rewire and confirmation never retarge
   }).rewire;
   assert.equal(applied.state, "applied");
   const snapshot = store.snapshot("board-1");
+  const [acceptedImpact] = coordinator.goals.impacts.list("board-1");
+  assert.equal(acceptedImpact?.goal_id, "new-required-work");
+  assert.equal(acceptedImpact?.input_snapshot, "commit://confirmed-input");
+  assert.equal(acceptedImpact?.state, "confirmed");
+  assert.deepEqual(store.db.prepare("SELECT type FROM events WHERE object_type = 'impact'").all(), []);
   assert.equal(snapshot.runs.find((item) => item.run_id === run.run_id)?.goal_id, "active-work");
   assert.equal(store.getGoal("new-required-work")?.validity_state, "valid");
   assert.equal(store.getGoal("active-work")?.validity_state, "needs_revalidation");
@@ -9758,7 +9861,7 @@ test("user can accept a Candidate Goal while rejecting its proposed Rewire", () 
     actor_id: "runtime-a",
     idempotency_key: "reject-rewire-run",
   }).run;
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-a",
     discovered_in_run_id: run.run_id,
@@ -9788,7 +9891,7 @@ test("user can accept a Candidate Goal while rejecting its proposed Rewire", () 
     blocking_mode: "current_run",
     idempotency_key: "reject-rewire-candidate",
   }).candidate;
-  coordinator.decideCandidate({
+  coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: candidate.candidate_id,
     actor_id: "user-1",
@@ -9801,7 +9904,7 @@ test("user can accept a Candidate Goal while rejecting its proposed Rewire", () 
   assert.ok(pending);
   assert.throws(
     () =>
-      coordinator.confirmRewire({
+      coordinator.legacyRewireDecision.confirmRewire({
         board_id: "board-1",
         rewire_id: pending.rewire_id,
         actor_id: "runtime-a",
@@ -9813,7 +9916,7 @@ test("user can accept a Candidate Goal while rejecting its proposed Rewire", () 
     (error) =>
       error instanceof GoalBoardV1Error && error.code === "rewire.user_confirmation_required",
   );
-  const rejected = coordinator.confirmRewire({
+  const rejected = coordinator.legacyRewireDecision.confirmRewire({
     board_id: "board-1",
     rewire_id: pending.rewire_id,
     actor_id: "user-1",
@@ -10411,7 +10514,7 @@ test("revalidator alone can restore a Goal after Contract, dependency, and Risk 
   store.db
     .prepare("UPDATE goals SET fulfillment_state = 'satisfied' WHERE goal_id = ?")
     .run("revalidation-dependency");
-  const riskProposal = coordinator.submitGoalTreeProposal({
+  const riskProposal = coordinator.goalTreeSubmission.submitGoalTreeProposal({
     board_id: "board-1",
     actor_id: "runtime-revalidator",
     discovered_in_run_id: run.run_id,
@@ -10436,7 +10539,7 @@ test("revalidator alone can restore a Goal after Contract, dependency, and Risk 
     idempotency_key: "revalidation-risk-proposal",
   }).proposal;
   assert.throws(
-    () => coordinator.submitGoalTreeProposal({
+    () => coordinator.goalTreeSubmission.submitGoalTreeProposal({
       board_id: "board-1",
       actor_id: "runtime-revalidator",
       discovered_in_run_id: run.run_id,
@@ -10459,7 +10562,7 @@ test("revalidator alone can restore a Goal after Contract, dependency, and Risk 
     (error: unknown) =>
       error instanceof GoalBoardV1Error && error.code === "goal_tree_proposal.revalidator_scope_invalid",
   );
-  coordinator.decideGoalTreeProposal({
+  coordinator.goalTreeDecision.decideGoalTreeProposal({
     board_id: "board-1",
     proposal_id: riskProposal.proposal_id,
     runtime_actor_id: "runtime-revalidator",
@@ -10602,7 +10705,7 @@ test("clarifier and executor pull different Goal states without weakening execut
     idempotency_key: "clarifier-run",
   }).run;
   assert.equal(run.role, "clarifier");
-  const candidate = coordinator.submitCandidate({
+  const candidate = coordinator.legacyProposalSubmission.submitCandidate({
     board_id: "board-1",
     actor_id: "runtime-clarifier",
     discovered_in_run_id: run.run_id,
@@ -10627,7 +10730,7 @@ test("clarifier and executor pull different Goal states without weakening execut
   }).candidate;
   assert.throws(
     () =>
-      coordinator.decideCandidate({
+      coordinator.legacyCandidateDecision.decideCandidate({
         board_id: "board-1",
         candidate_id: candidate.candidate_id,
         actor_id: "runtime-clarifier",
@@ -10639,7 +10742,7 @@ test("clarifier and executor pull different Goal states without weakening execut
     (error) =>
       error instanceof GoalBoardV1Error && error.code === "candidate.user_decision_required",
   );
-  coordinator.decideCandidate({
+  coordinator.legacyCandidateDecision.decideCandidate({
     board_id: "board-1",
     candidate_id: candidate.candidate_id,
     actor_id: "user-1",
@@ -11666,7 +11769,7 @@ test("Available suggests separate Runtime slots for confirmed pairwise-safe exec
     },
     { actor_id: "user-1", idempotency_key: "parallel-secondary-policy" },
   );
-  coordinator.addImpact(
+  coordinator.goals.impacts.add(
     "board-1",
     {
       goal_id: "parallel-primary",
@@ -11676,7 +11779,7 @@ test("Available suggests separate Runtime slots for confirmed pairwise-safe exec
     },
     { actor_id: "user-1", idempotency_key: "parallel-primary-impact" },
   );
-  coordinator.addImpact(
+  coordinator.goals.impacts.add(
     "board-1",
     {
       goal_id: "parallel-secondary",
@@ -11721,7 +11824,7 @@ test("Available suppresses a parallel suggestion for conflicting executor Goal i
   createLeaf(coordinator, "parallel-writer-a", 30);
   createLeaf(coordinator, "parallel-writer-b", 20);
   for (const goalId of ["parallel-writer-a", "parallel-writer-b"]) {
-    coordinator.addImpact(
+    coordinator.goals.impacts.add(
       "board-1",
       {
         goal_id: goalId,
@@ -11747,7 +11850,7 @@ test("Available does not claim safe parallelism when an executor Goal lacks conf
   const { store, coordinator } = fixture();
   createLeaf(coordinator, "parallel-bounded", 30);
   createLeaf(coordinator, "parallel-unbounded", 20);
-  coordinator.addImpact(
+  coordinator.goals.impacts.add(
     "board-1",
     {
       goal_id: "parallel-bounded",

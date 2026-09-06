@@ -60,7 +60,7 @@ Useful user-facing questions:
 | Several suggestions | List names, then ask which one to connect. |
 | No suggestion | “当前会话还没有关联项目。要打开现有项目中的一个，还是新建一个？” |
 | User mentions an existing project without clearly selecting it | “你提到了「{项目名}」。要把当前会话关联到它吗？” |
-| User asks for a directory default | “GoalBoard 不保存目录默认项目；这个目录只会把「{项目名}」列为候选，每个新 Session 都会再确认。” |
+| User asks for a directory default | “GoalBoard 不保存目录默认项目。只有这个已验证目录恰好关联一个项目时，才能只读恢复；多个项目时仍会请你选择。” |
 | User asks to create the current project | Propose the working-directory name as a display name, repeat it, and ask for confirmation; do not treat the directory itself as identity. |
 
 ## Manage projects without conflating permissions

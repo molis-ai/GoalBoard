@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   RuntimeIntegrationService,
   type RuntimeIntegrationServiceOptions,
   type SupportedRuntimeId,
-} from "../src/install/runtime-integration.js";
+} from "@adeptify/goalboard-app-local-host";
 import { runtimeContextHostFromEnvironment } from "../src/mcp/server.js";
 
 interface Fixture {
@@ -90,6 +91,30 @@ async function pathMissing(filePath: string): Promise<boolean> {
     throw error;
   }
 }
+
+test("default integration validation uses the real MCP launcher and rolls back an exited launcher", async () => {
+  await withFixture(async (fixture) => {
+    const serverPath = fileURLToPath(new URL("../dist/mcp/server.js", import.meta.url));
+    await writeFile(fixture.launcher, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(serverPath)}\n`, { mode: 0o755 });
+    const integration = new RuntimeIntegrationService({ homeDirectory: fixture.home,
+      userHomeDirectory: fixture.userHome, runtimeExecutables: fixture.executables });
+    const plan = await integration.prepare("codex", "connect");
+    const result = await integration.confirm({ runtime_id: "codex", plan_id: plan.plan_id, decision: "confirmed" });
+    assert.equal(result.status, "connected", result.message);
+    const codexConfig = await readFile(join(fixture.userHome, ".codex", "config.toml"), "utf8");
+    assert.match(codexConfig, /\[mcp_servers.goalboard\]/);
+    assert.equal(await readlink(join(fixture.userHome, ".codex", "skills", "goal-advance")), fixture.skillSource);
+
+    await writeFile(fixture.launcher, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    const failedPlan = await integration.prepare("claude-code", "connect");
+    const failed = await integration.confirm({ runtime_id: "claude-code", plan_id: failedPlan.plan_id, decision: "confirmed" });
+    assert.equal(failed.status, "rolled_back");
+    assert.equal(await pathMissing(join(fixture.userHome, ".claude.json")), true);
+    assert.equal(await pathMissing(join(fixture.userHome, ".claude", "skills", "goal-advance")), true);
+    assert.equal(await readFile(join(fixture.userHome, ".codex", "config.toml"), "utf8"), codexConfig,
+      "a failed integration for another Runtime cannot revert the successful one");
+  });
+});
 
 test("detect and prepare are read-only and public plans never expose the user's full config", async () => {
   await withFixture(async (fixture) => {

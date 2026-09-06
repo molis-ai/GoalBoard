@@ -93,7 +93,7 @@ Use a compact checkpoint when resuming, after a material direction change, or be
 
 ## Continue from returned state
 
-Prefer the latest `action_projection`; `work_state` exists only for older Runtime readers.
+Use the public action projection: `contract.action_projection` when reading one Goal, `available.action_projections` when choosing work, and the write response's `transition.projection` immediately after a lifecycle operation. `work_state` is a compatibility view, not a second decision algorithm. Consume the tool's returned fields; do not inspect Coordinator objects, database files, Web routes, or reconstruct eligibility from internal state.
 
 - `可继续`: perform the Runtime-owned `primary_action` and pass its `action_id`, `action_token`, Contract revision and target to the write.
 - `进行中`: continue only the active Claim/Run. Do not create a second Run.

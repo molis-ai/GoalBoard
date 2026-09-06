@@ -1,3 +1,4 @@
+import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,6 +28,7 @@ test("Goals public Command API owns Goal, relation, Policy, Risk, and Guidance w
     });
     const transitions: string[] = [];
     const goals = new GoalsModule(store.db, {
+      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
       currentActionToken: (_boardId, goalId) => `token:${goalId}`,
       authorizeRiskUpdate: () => undefined,
       authorizeRiskState: () => undefined,
@@ -176,6 +178,7 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
     });
     const revisionTransitions: GoalRevisionDependentTransition[] = [];
     const goals = new GoalsModule<{ observed_event_cursor: number }>(store.db, {
+      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
       currentActionToken: () => "token:lifecycle",
       authorizeRiskUpdate: () => undefined,
       authorizeRiskState: () => undefined,

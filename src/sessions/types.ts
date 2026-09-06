@@ -40,12 +40,6 @@ export type {
 
 export { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
 
-import type {
-  WorkSessionEventKind as SessionTimelineKind,
-  WorkSessionEventSource as SessionEventSource,
-  WorkSessionRecord as GoalBoardSessionRecord,
-} from "@adeptify/goalboard-contracts/modules/private-work-context";
-
 export { RUNTIME_SESSION_CAPABILITIES } from "@adeptify/goalboard-contracts/services/runtime-host";
 export type {
   RuntimeHostApi,
@@ -58,45 +52,4 @@ export type {
   RuntimeSessionTransport,
 } from "@adeptify/goalboard-contracts/services/runtime-host";
 
-export interface SessionTimelineEvent {
-  event_id: string;
-  session_id: string;
-  source: "runtime_native" | SessionEventSource;
-  kind: SessionTimelineKind;
-  label: string;
-  content: string;
-  occurred_at: string;
-  source_order: number;
-  runtime_id: string;
-  metadata: Record<string, unknown>;
-}
-
-export type SessionContentMode = "native" | "fallback" | "unavailable" | "failed";
-
-export interface SessionContentResult {
-  session: GoalBoardSessionRecord;
-  content_mode: SessionContentMode;
-  events: SessionTimelineEvent[];
-  native_error: { code: string; message: string } | null;
-  native_history: {
-    mode: "summary";
-    turn_count: number;
-    has_earlier: boolean;
-  } | null;
-  partial_terminal_history: boolean;
-}
-
-export type SessionResumeResult =
-  | {
-      status: "ok";
-      runtime_id: string;
-      native_runtime_session_id: string;
-      value: unknown;
-    }
-  | {
-      status: "unsupported" | "failed";
-      runtime_id: string;
-      code: string;
-      message: string;
-      next_action: "create_handoff" | "retry";
-    };
+export type { SessionTimelineEvent, SessionContentMode, SessionContentResult, SessionResumeResult } from "@adeptify/goalboard-plugin-work";

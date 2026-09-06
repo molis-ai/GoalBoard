@@ -1,3 +1,4 @@
+import type { StoredModuleEvent } from "@adeptify/goalboard-contracts/platform/storage";
 import type {
   CandidateGoalRecord,
   ContractProposalRecord,
@@ -12,6 +13,7 @@ import type {
 
 import {
   json,
+  parseJson,
   mapCandidate,
   mapContractProposal,
   mapGoalTreeProposal,
@@ -44,6 +46,15 @@ export interface StoredReviewObligationInput extends ReviewObligationRecord {}
 export class GovernanceRepository {
   constructor(private readonly db: GovernanceSqliteDatabase) {}
 
+  listLifecycleEvents(boardId: string): StoredModuleEvent[] {
+    return (this.db.prepare(`SELECT seq, type, object_type, object_id, payload_json, at FROM events
+      WHERE board_id = ? AND type IN ('review.submitted') ORDER BY seq`)
+      .all(boardId) as GovernanceRow[]).map(row => ({
+      seq: Number(row.seq ?? 0), type: text(row.type), object_type: text(row.object_type), object_id: text(row.object_id),
+      payload: parseJson<Record<string, unknown>>(row.payload_json, {}), at: text(row.at),
+    }));
+  }
+
   immediate<T>(operation: () => T): T {
     return this.db.transaction(operation).immediate();
   }
@@ -52,6 +63,28 @@ export class GovernanceRepository {
     const row = this.db.prepare("SELECT COALESCE(MAX(seq), 0) AS cursor FROM events WHERE board_id = ?")
       .get(boardId) as GovernanceRow | undefined;
     return Number(row?.cursor ?? 0);
+  }
+
+  hasCandidateBootstrap(
+    boardId: string,
+    candidateId: string,
+    goalId: string,
+    proposalId: string,
+  ): boolean {
+    const proposal = this.getGoalTreeProposal(boardId, proposalId);
+    return (proposal?.items ?? []).some((item) => {
+      if (item.state !== "applied" || item.kind !== "goal" || item.operation !== "create") return false;
+      return item.affected_objects.some(
+        (object) => object.object_type === "candidate" && object.object_id === candidateId,
+      ) && item.baseline_versions.some(
+        (baseline) =>
+          baseline.object_type === "candidate" &&
+          baseline.object_id === candidateId &&
+          baseline.exists,
+      ) && item.materialized_objects.some(
+        (object) => object.object_type === "goal" && object.object_id === goalId,
+      );
+    });
   }
 
   snapshot(boardId: string): GovernanceSnapshot {

@@ -1,4 +1,13 @@
 import { createHash } from "node:crypto";
+import { parsePluginManifest, PluginManifestError } from "@adeptify/goalboard-contracts/platform/plugin";
+
+export { parsePluginManifest } from "@adeptify/goalboard-contracts/platform/plugin";
+export type {
+  PluginManifest, PluginDefinition, PluginStartContext, PluginArtifactClient, PluginArtifactPublishInput, PluginPrivateStorage,
+  PluginUiClient, PluginHostServices,
+} from "@adeptify/goalboard-contracts/platform/plugin";
+export type { ArtifactReference, ArtifactVersionRecord } from "@adeptify/goalboard-contracts/modules/artifacts";
+export type { UiContribution, UiContributionDescriptor, UiRenderRequest } from "@adeptify/goalboard-contracts/platform/ui";
 
 import type {
   IntegrationProviderPort,
@@ -127,32 +136,13 @@ export function definePollingIntegrationPlugin(input: {
 }
 
 export function assertManifest(manifest: PluginManifest): void {
-  if (
-    manifest.schema_version !== 1
-    || manifest.host_api_version !== 1
-    || !/^io\.goalboard\.[a-z0-9][a-z0-9.-]*$/u.test(manifest.plugin_id)
-    || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(manifest.version)
-    || !manifest.publisher.publisher_id.trim()
-    || !manifest.publisher.signature.trim()
-  ) {
-    throw new PluginDefinitionError("plugin_manifest_invalid", "Plugin Manifest 身份或版本不合法");
-  }
-  if (manifest.entrypoints.length === 0) {
-    throw new PluginDefinitionError("plugin_entrypoint_missing", "Plugin 至少需要一个 entrypoint");
-  }
-  const entrypoints = new Set<string>();
-  for (const entrypoint of manifest.entrypoints) {
-    if (!entrypoint.entrypoint.trim() || entrypoints.has(entrypoint.deployment)) {
-      throw new PluginDefinitionError("plugin_entrypoint_missing", "同一部署环境只能声明一个有效 entrypoint");
+  try {
+    parsePluginManifest(manifest);
+  } catch (error) {
+    if (error instanceof PluginManifestError) {
+      throw new PluginDefinitionError(error.code, error.message);
     }
-    entrypoints.add(entrypoint.deployment);
-  }
-  const permissions = new Set<string>();
-  for (const permission of manifest.permissions) {
-    if (!permission.permission.trim() || !permission.reason.trim() || permissions.has(permission.permission)) {
-      throw new PluginDefinitionError("plugin_permission_invalid", "Plugin permission 必须唯一并说明用途");
-    }
-    permissions.add(permission.permission);
+    throw error;
   }
 }
 

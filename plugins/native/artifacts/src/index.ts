@@ -1,13 +1,24 @@
-/** Generated as the F2 contract-only workspace boundary. */
+export { openArtifactProjectReference, ArtifactProjectReferenceError } from "./project-reference.js";
+export type { ArtifactProjectReferencePorts } from "./project-reference.js";
+export { artifactReferenceUiContribution, ARTIFACT_REFERENCE_UI_CONTRIBUTION_ID, isProjectReference } from "./reference-ui.js";
+export type { ArtifactReferenceUiPrimitives, ArtifactReferenceUiModel } from "./reference-ui.js";
+export { readArtifactBrowser, matchArtifactBrowserRoute, exportArtifactVersion, artifactVersionPath, ArtifactBrowserError } from "./browser.js";
+export type { ArtifactBrowserView, ArtifactBrowserRoute } from "./browser.js";
+export { artifactBrowserUiContribution, ARTIFACT_BROWSER_UI_CONTRIBUTION_ID } from "./browser-ui.js";
+export type { ArtifactBrowserUiModel } from "./browser-ui.js";
+export { ARTIFACT_EN } from "./en.js";
+export { createPluginArtifactClient, PluginArtifactAccessError } from "./plugin-client.js";
+export { readGoalArtifactEmbeds, type GoalArtifactEmbed } from "./goal-context.js";
+
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-plugin-artifacts",
   packagePath: "plugins/native/artifacts",
   kind: "native-plugin",
-  maturity: "contract-only",
+  maturity: "partial",
   contract: "@adeptify/goalboard-contracts/platform/plugin",
   migrationGoals: ["goal-reorg-f2", "goal-reorg-ar1", "goal-reorg-ar3"],
   ssot: "docs/SSOT-MATRIX.md",
-  capabilities: [],
+  capabilities: ["artifacts.project-reference.v1", "artifacts.browser.v1"],
 } as const;
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;

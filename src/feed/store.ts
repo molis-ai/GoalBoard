@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
+import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
 
 import {
   AttentionError,
@@ -129,6 +131,7 @@ export class FeedStore {
 
   constructor(readonly db: Database.Database) {
     this.sources = new SourcesModule(db);
+    const goals = new GoalsQueryService(new GoalsRepository(db));
     let feedItems!: FeedModule;
     this.attention = new AttentionModule(db, {
       exists: (projectId, subjectType, subjectId) => {
@@ -142,9 +145,7 @@ export class FeedStore {
             throw error;
           }
         }
-        return Boolean(this.db.prepare(
-          "SELECT 1 FROM goals WHERE board_id = ? AND goal_id = ?",
-        ).get(projectId, subjectId));
+        return goals.getGoal(projectId, subjectId) !== null;
       },
     }, {
       eventSink: (event) => this.appendLegacyEvent(
@@ -158,6 +159,7 @@ export class FeedStore {
       ),
     });
     feedItems = new FeedModule(db, this.attention, {
+      ledger: createContextLedger(db, { authorize: (access) => access.scope.kind === "personal" && access.actor_id === "module:feed" }),
       eventSink: (event) => this.appendLegacyEvent(
         event.project_id,
         "feed_item",

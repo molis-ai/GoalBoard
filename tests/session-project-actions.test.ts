@@ -3,12 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardSessionError } from "../src/sessions/types.js";
 
 test("Session project actions are confirmed, atomic, isolated and keep Goal history", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-actions-"));
-  const registry = await GoalBoardSessionRegistry.open({
+  const registry = await openWorkSessionRegistry({
     homeDirectory: path.join(directory, ".goalboard"),
     now: () => new Date("2026-08-31T08:00:00.000Z"),
   });
@@ -103,3 +103,4 @@ test("Session project actions are confirmed, atomic, isolated and keep Goal hist
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

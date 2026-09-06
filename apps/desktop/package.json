@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@adeptify/goalboard-app-local-host": "workspace:*",
     "@adeptify/goalboard-contracts": "workspace:*",
     "@adeptify/goalboard-plugin-feed": "workspace:*"
   },

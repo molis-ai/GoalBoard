@@ -1,12 +1,13 @@
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { CodexRuntimeSessionAdapter, RuntimeSessionAdapterRouter } from "../src/sessions/adapters.js";
-import { SessionDirectoryService } from "../src/sessions/directory.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
+import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "../src/sessions/types.js";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
@@ -38,9 +39,9 @@ test("Session directory discovers metadata without content or silent association
     subscribe() { return () => undefined; },
   };
 
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   try {
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     router.register(new CodexRuntimeSessionAdapter(transport));
     const service = new SessionDirectoryService(registry, router);
 
@@ -101,7 +102,7 @@ test("Session directory discovers metadata without content or silent association
     registry.close();
   }
 
-  const reopened = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const reopened = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     assert.equal(reopened.list().length, 3);
     assert.equal(reopened.list({ project_id: "project-a" }).length, 3);
@@ -228,3 +229,4 @@ test("project Session directory APIs discover, link, create, transfer, archive a
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

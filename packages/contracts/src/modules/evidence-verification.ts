@@ -150,6 +150,7 @@ export interface EvidenceCriterionProjectionInput {
 }
 
 export interface EvidenceQueryApi {
+  listLifecycleEvents(boardId: string): import("../platform/storage.js").StoredModuleEvent[];
   getEvidence(boardId: string, evidenceId: string): EvidenceRecord | null;
   listEvidence(boardId: string): EvidenceRecord[];
   listCorrections(boardId: string): EvidenceCorrectionRecord[];

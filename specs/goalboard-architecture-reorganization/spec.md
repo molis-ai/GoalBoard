@@ -1,5 +1,7 @@
 # GoalBoard 架构与包重组需求书
 
+GW6 实施补齐（2026-09-06）：按已接受 `gw6-work-plan.md`，Goals 基础 schema、15/25/26/30 Goals 升级、V3 旧覆盖账 Query/导入写入已经归入 Goals；Host 保留同连接跨 owner 事务，Web/导入器使用公开 API。已完成定向前后端兼容与失败恢复检查，见 [GW6 验收](gw6-validation.md)。不新增产品功能，不缩减父项/根目标的完整 E2E、清理、再次 E2E 和架构总审要求。
+
 状态：已确认（Architecture Baseline / F1）
 
 完成等级：Level 1 — 可执行架构方案（不代表功能已经迁移或实现）
@@ -551,7 +553,7 @@ Contract
 
 ### 13.6 二级执行 Goal 与 Huge Class 退出责任（已确认）
 
-上面的 11 项是一级结果工作流，不全部直接作为执行叶子。Goals Query、迁移 / 安全 / 恢复保证、最终 Cutover 暂时保持叶子；其余 8 项已经拆成 29 个已确认二级执行 Goal。GW4 实施对账后另发现 1 个待用户确认的候选 Goal（GW5），用于补齐未被 GW4 Contract 覆盖的 Goals Native Plugin UI 与文案迁移。二级 Goal 仍按垂直结果拆分，不把某个 Huge File 自身当作业务 Goal。
+上面的 11 项是一级结果工作流，不全部直接作为执行叶子。Goals Query、迁移 / 安全 / 恢复保证、最终 Cutover 暂时保持叶子；其余 8 项已经拆成 29 个已确认二级执行 Goal。GW4 实施对账后补充 GW5，已于 2026-09-02 正式接受，用于补齐未被 GW4 Contract 覆盖的 Goals Native Plugin UI 与文案迁移；2026-09-06 整项工程验收见 gw5-validation.md。二级 Goal 仍按垂直结果拆分，不把某个 Huge File 自身当作业务 Goal。
 
 | 一级工作流 | 二级执行 Goal | 唯一主要交付 | 必须迁出的 Huge Class / 旧路径职责 |
 | --- | --- | --- | --- |
@@ -566,7 +568,7 @@ Contract
 | Goals Mutation / Planning | GW2 Goal Lifecycle 与数据迁移 | Goal 生命周期、版本递增和旧数据迁移 | 从 Coordinator / Store 抽出 accept、revalidate、complete、trash / restore 与兼容迁移 |
 | Goals Mutation / Planning | GW3 Planning Engine | 方法目录、图分析与 change impact 的独立实现 | 将 `src/planning/` 与 Coordinator 内的规划分析迁入 Goals 边界，不拥有 Proposal / Decision 事实 |
 | Goals Mutation / Planning | GW4 Goals 写入口切换 | Web / CLI / MCP 写路径全部使用公开 Command API | 从 `src/web/server.ts`、`src/mcp/server.ts`、`src/cli/` 和 Coordinator Facade 删除 Goals 写入职责 |
-| Goals Mutation / Planning | GW5 Goals Native Plugin UI 与文案迁移（Candidate `candidate-1dbbef41-f270-42d9-bb40-8c643c06687d`，待用户确认） | Goals 一级入口、详情、编辑、Planning、Risk/Policy UI 通过 Native Plugin contribution 运行 | 从 `src/web/render.ts`、全局 i18n 和 Web route composition 移出 Goals 产品 UI 与文案；Workbench 只装配公开 contribution |
+| Goals Mutation / Planning | GW5 Goals Native Plugin UI 与文案迁移（正式接受；来源 Candidate `candidate-1dbbef41-f270-42d9-bb40-8c643c06687d`） | Goals 一级入口、详情、编辑、Planning、Risk/Policy UI 通过 Native Plugin contribution 运行 | 从 root renderer、全局 i18n 和 Web route composition 移出对应 Goals 产品职责；Workbench 只装配公开 contribution。整项工程验收见 gw5-validation.md |
 | Artifacts / Context Ledger | AR1 Artifact Core | Artifact Contract、版本、内容引用与 Repository | 从 Coordinator、Store、Evidence 文件辅助和重复类型中抽出 Artifact 正式事实 |
 | Artifacts / Context Ledger | AR2 Context Ledger | ObjectRef、ContextEdge 与可重建 Materialization | 从 Coordinator 的 relation / impact / provenance、Feed link、Session association 等路径抽出唯一 Ledger owner |
 | Artifacts / Context Ledger | AR3 Artifacts Native Plugin 与旧结果迁移 | 可浏览、嵌入和交换的 Artifact 用户入口 | 从 `src/web/render.ts` / `server.ts` 移出结果展示与业务判断，并迁移现有输出 / 文件 / 内容引用 |
@@ -1805,6 +1807,8 @@ Horizontal Service 是可重建运行机制。它可以保存 queue、cursor、l
 - 验收时 Runtime Host 可以用 fake provider 独立测试，不导入 Execution Store、Session Registry implementation、Web Server 或 Tauri implementation。
 
 **WK2 执行合同（2026-09-02）：**
+
+2026-09-05 恢复验证发现两项可复现的 Runtime 生命周期缺陷：并发首次请求可抢在 initialize 完成前发送；initialize 超时后进程未清理且重试复用未初始化连接。WK2 的启动、恢复与资源清理验收包含修复这两项；保留已完成请求和业务状态，不自动重放写请求。
 
 - 完成等级：功能可用的无损迁移；本 Goal 完成自动化 Contract、边界、定向与全量回归，统一人工端到端验证按第 24 节在全部架构开发完成后执行。
 - `@adeptify/goalboard-contracts/services/runtime-host` 是 Runtime capability、Provider Adapter、transport result/error 的唯一类型入口；`horizontal/runtime-host` 只通过公开入口对调用者开放。

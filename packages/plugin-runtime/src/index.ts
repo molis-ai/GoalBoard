@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 
+export { SqlitePluginPrivateStorage, PluginPrivateStorageError } from "./private-storage.js";
+export type { PluginPrivateStorageDatabase } from "./private-storage.js";
+export { SqlitePluginRuntimeRepository } from "./repository.js";
+export type { PluginRuntimeDatabase } from "./repository.js";
+export { loadDevelopmentPlugin } from "./development-loader.js";
+export { PluginPackageError, pluginPublisherIdentity, assertPluginPackagePath, parsePluginPackage,
+  pluginPackageSigningBytes, signPluginPackage, verifyPluginPackage } from "./package-verification.js";
+
 import type {
   PluginContribution,
   PluginDefinition,
@@ -75,6 +83,7 @@ export class NativePluginExecutor implements PluginExecutor {
 export class PluginRuntime implements PluginRuntimeApi {
   private readonly definitions = new Map<string, PluginDefinition>();
   private readonly contributions = new Map<string, PluginContribution>();
+  private readonly contexts = new Map<string, { context: PluginStartContext; revoke(): void }>();
 
   constructor(
     private readonly repository: PluginRuntimeRepository = new MemoryPluginRuntimeRepository(),
@@ -173,7 +182,7 @@ export class PluginRuntime implements PluginRuntimeApi {
     const definition = this.requireDefinition(current);
     assertRequiredGrants(definition.manifest, current.grants);
     try {
-      const handle = await this.executor.start(definition, this.context(current));
+      const handle = await this.executor.start(definition, this.activateContext(current));
       this.contributions.set(installId, handle.contribution);
       const updated = {
         ...current,
@@ -184,6 +193,7 @@ export class PluginRuntime implements PluginRuntimeApi {
       this.repository.save(updated);
       return this.receipt("start", updated, false);
     } catch (error) {
+      this.revokeContext(installId);
       const updated = {
         ...current,
         state: "crashed" as const,
@@ -206,6 +216,7 @@ export class PluginRuntime implements PluginRuntimeApi {
     } catch {
       // A crashed executor may already be unavailable; lifecycle state is still authoritative.
     }
+    this.revokeContext(installId);
     this.contributions.delete(installId);
     const updated = {
       ...current,
@@ -236,7 +247,7 @@ export class PluginRuntime implements PluginRuntimeApi {
     assertRequiredGrants(definition.manifest, current.grants);
     const recoveryCount = current.recovery_count + 1;
     try {
-      const handle = await this.executor.start(definition, this.context(current));
+      const handle = await this.executor.start(definition, this.activateContext(current));
       this.contributions.set(installId, handle.contribution);
       const updated = {
         ...current,
@@ -248,6 +259,7 @@ export class PluginRuntime implements PluginRuntimeApi {
       this.repository.save(updated);
       return this.receipt("recover", updated, false);
     } catch (error) {
+      this.revokeContext(installId);
       const quarantined = recoveryCount >= maxAttempts;
       const updated = {
         ...current,
@@ -272,8 +284,16 @@ export class PluginRuntime implements PluginRuntimeApi {
     if (current.state === "uninstalled") return this.receipt("uninstall", current, true);
     const definition = this.requireDefinition(current);
     if (current.state === "running") {
-      await this.executor.stop(definition, this.context(current));
+      try {
+        await this.executor.stop(definition, this.context(current));
+      } catch (error) {
+        this.revokeContext(installId);
+        this.contributions.delete(installId);
+        this.repository.save({ ...current, state: "crashed", last_error_code: safeErrorCode(error), updated_at: this.now() });
+        throw new PluginRuntimeError("plugin_executor_failed", "Plugin 停止失败，已撤销权限并记录为 crashed，可重试卸载");
+      }
     }
+    this.revokeContext(installId);
     this.contributions.delete(installId);
     const at = this.now();
     const updated = {
@@ -321,19 +341,33 @@ export class PluginRuntime implements PluginRuntimeApi {
   }
 
   private context(record: PluginInstanceRecord): PluginStartContext {
+    return this.contexts.get(record.install_id)?.context ?? this.activateContext(record);
+  }
+
+  private revokeContext(installId: string): void {
+    this.contexts.get(installId)?.revoke();
+    this.contexts.delete(installId);
+  }
+
+  private activateContext(record: PluginInstanceRecord): PluginStartContext {
+    this.revokeContext(record.install_id);
+    let active = true;
     const grants = Object.freeze([...record.grants]);
-    return {
+    const context: PluginStartContext = {
       install_id: record.install_id,
       plugin_id: record.plugin_id,
       version: record.version,
       deployment: record.deployment,
       grants,
       requireGrant(permission) {
-        if (!grants.includes(permission)) {
+        if (!active || !grants.includes(permission)) {
           throw new PluginRuntimeError("plugin_grant_denied", `Plugin 没有 ${permission} grant`);
         }
       },
     };
+    Object.freeze(context);
+    this.contexts.set(record.install_id, { context, revoke() { active = false; } });
+    return context;
   }
 
   private receipt(

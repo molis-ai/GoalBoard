@@ -15,6 +15,8 @@ import type {
 } from "@adeptify/goalboard-contracts/modules/goals";
 
 import { GoalsCommandContext } from "../command-support.js";
+import { GoalContractPlanning } from "./contract-structure.js";
+import { GoalProposalCoordination } from "./proposal-coordination.js";
 import {
   analyzeGoalChangeImpact,
   planningMetrics,
@@ -38,10 +40,15 @@ type GraphRelation = Pick<
 >;
 
 export class GoalsPlanningEngine implements GoalsPlanningApi {
+  readonly contracts: GoalContractPlanning;
+  readonly proposals: GoalProposalCoordination;
   constructor(
     private readonly context: GoalsCommandContext,
     private readonly personalMethods: readonly PlanningMethodPack[] = [],
-  ) {}
+  ) {
+    this.contracts = new GoalContractPlanning(context);
+    this.proposals = new GoalProposalCoordination(context);
+  }
 
   effectiveMethods(boardId: string): PlanningMethodPack[] {
     this.context.requireBoard(boardId);
@@ -49,6 +56,22 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
       this.personalMethods,
       this.context.repository.listPlanningMethodPacks(boardId),
     );
+  }
+
+  proposalGraphIssues(boardId: string, items: readonly PlanningProposalItem[]): PlanningGraphIssue[] {
+    this.context.requireBoard(boardId);
+    const goals = this.context.repository.listGoals(boardId), relations = this.context.repository.listRelations(boardId);
+    const existing = new Set(validatePlanningGraph(goals, relations).map(issue => `${issue.code}:${issue.path.join("\u0000")}`));
+    return validatePlanningProposalGraph(goals, relations, items)
+      .filter(issue => !existing.has(`${issue.code}:${issue.path.join("\u0000")}`));
+  }
+
+  wouldCreatePartOfCycle(boardId: string, fromGoalId: string, toGoalId: string): boolean {
+    const projectedId = "projected:part-of-cycle-check";
+    return validatePlanningGraph(this.context.repository.listGoals(boardId), projectPlanningRelations(
+      this.context.repository.listRelations(boardId), [{ action: "add", relation_id: projectedId,
+        from_goal_id: fromGoalId, to_goal_id: toGoalId, type: "part_of" }],
+    )).some(issue => issue.code === "planning.part_of_cycle" && issue.relation_ids.includes(projectedId));
   }
 
   projectComposition(boardId: string): PlanningMethodComposition {

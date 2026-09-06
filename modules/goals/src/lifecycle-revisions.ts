@@ -8,45 +8,17 @@ import type {
 
 import { GoalsCommandContext } from "./command-support.js";
 import { rowText, sqliteJson } from "./repository.js";
+import { contractInputFromGoal } from "./goal-contract-records.js";
 
 type Row = Record<string, unknown>;
 
-export interface AcceptDraftGoalInput {
-  board_id: string;
-  goal_id: string;
-  proposed_goal: CreateGoalInput;
-  actor_id: string;
-  accepted_at: string;
-}
+import type { AcceptDraftGoalInput, ApplyAcceptedContractRevisionInput, AppliedGoalContractRevision } from "@adeptify/goalboard-contracts/modules/goals";
+export type { AcceptDraftGoalInput, ApplyAcceptedContractRevisionInput, AppliedGoalContractRevision } from "@adeptify/goalboard-contracts/modules/goals";
 
-export interface ApplyAcceptedContractRevisionInput {
-  board_id: string;
-  goal_id: string;
-  proposed_goal: CreateGoalInput;
-  source_proposal_id: string;
-  source_item_id?: string;
-  actor_id: string;
-  reason: string;
-  applied_at: string;
-}
 
-export interface AppliedGoalContractRevision {
-  goal: GoalRecord;
-  previous_contract_revision: number;
-  contract_revision: number;
-  effect: GoalContractRevisionEffect;
-  downstream_goal_ids: string[];
-}
 
-export interface GoalRevisionDependentTransition {
-  board_id: string;
-  goal_id: string;
-  previous_contract_revision: number;
-  contract_revision: number;
-  effect: GoalContractRevisionEffect;
-  actor_id: string;
-  at: string;
-}
+import type { GoalRevisionDependentTransition } from "@adeptify/goalboard-contracts/modules/goals";
+export type { GoalRevisionDependentTransition } from "@adeptify/goalboard-contracts/modules/goals";
 
 export interface GoalRevisionHooks {
   validateGoalInput(input: CreateGoalInput): void;
@@ -328,32 +300,7 @@ export class GoalRevisionCommands {
   }
 }
 
-function contractInputFromGoal(goal: GoalRecord): CreateGoalInput {
-  return {
-    goal_id: goal.goal_id,
-    title: goal.title,
-    outcome: goal.outcome,
-    why: goal.why,
-    business_logic: goal.business_logic,
-    in_scope: goal.in_scope,
-    out_of_scope: goal.out_of_scope,
-    constraints: goal.constraints,
-    required_inputs: goal.required_inputs,
-    promised_outputs: goal.promised_outputs,
-    decomposition_review: goal.decomposition_review ?? undefined,
-    definition_state: goal.definition_state,
-    decomposition_state: goal.decomposition_state,
-    priority: goal.priority,
-    acceptance_criteria: goal.acceptance_criteria.map((criterion) => ({
-      criterion_id: criterion.criterion_id,
-      statement: criterion.statement,
-      decision_method: criterion.decision_method,
-      pass_condition: criterion.pass_condition,
-      target: criterion.target,
-      required_evidence: criterion.required_evidence,
-    })),
-  };
-}
+
 
 function contractRevisionEffect(
   current: CreateGoalInput,

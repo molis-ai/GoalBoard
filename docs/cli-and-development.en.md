@@ -1,5 +1,17 @@
 # CLI & Development
 
+## Installer ownership during development
+
+`pnpm build` builds all 48 packages in declared workspace dependency order before the root entrypoints and PTY bundle. It no longer relies on the handwritten migration order. The Plugin CLI launcher exists in source, so a clean frozen-lockfile install followed by build makes `pnpm exec goalboard-plugin --help` available. Boundary checks cover JavaScript/TypeScript under src, tooling and bin.
+
+Desktop release scripts belong to `apps/desktop/tooling/`; root `pnpm desktop:*` commands are unchanged. They call Local Host's `createGoalBoardRuntimePayload` instead of running npm install against an isolated workspace:* manifest. Failed preparation preserves old resources; vendor provenance, SBOM and license assets survive both payload generation and Home installation.
+
+Home installation, Runtime integration, managed Web service and uninstall implementations live under `apps/local-host/src/installer/`, exposed through `@adeptify/goalboard-app-local-host`. The old `src/install/` implementations are removed. CLI/Web callers must not duplicate preview, confirmation, ownership, rollback or cleanup policy.
+
+`installGoalBoardHome` requires an explicit `sourceDirectory`; only the product-root CLI derives its default from its own entry location. Calling that CLI from another working directory without `--source` still installs the same product. Uninstall requires injected `UninstallProjectAccess`; `src/local-host/uninstall.ts` composes the read-only connection and existing Demo deletion lifecycle. Projects owns catalog interpretation, and preview never runs database migrations.
+
+Rebuild after changing workspace sources. At the end of `pnpm build`, `apps/local-host/tooling/write-build-manifest.mjs` invokes the Local Host build-record API over root and workspace source/configuration plus build scripts. Never stamp an old build as fresh. Update fingerprint package discovery and build lists when introducing a workspace level. Targeted tests are `tests/install.test.ts`, `tests/service.test.ts`, `tests/uninstall.test.ts`, and `tests/uninstall-catalog.test.ts`, supplemented by Web/Desktop integration tests. Full DV4 release acceptance remains pending; these checks are not release certification.
+
 ## One-time V3 import
 
 Legacy JSON is not a parallel running mode; it can only be written into a brand-new V1 Board through an explicit import:
@@ -121,7 +133,7 @@ pnpm build:all
 # Current-product regression and release contents
 pnpm typecheck
 pnpm test
-pnpm pack --dry-run --json
+pnpm package:npm
 ```
 
 Use the published-style package name to verify one package independently, for example:
@@ -135,6 +147,8 @@ pnpm --filter @adeptify/goalboard-integration-github typecheck
 
 `workspace:check` validates only the F2 package inventory. `boundary:check` scans real imports, dependency direction, Contract entrypoints, cycles, and the legacy Huge Class allowlist. `workspace:verify` is the complete package gate shared by local development and CI.
 
-The release package contains only GoalBoard V1's `dist`, the Runtime Skill, and the README — no second runtime.
+The Desktop payload contains root dist, production workspace dependencies, Runtime Skill, Node and vendor provenance/license assets, not a second business implementation. For npm, use `pnpm package:npm`: it builds the workspace and invokes Local Host tooling to stage `release/npm/*.tgz`. Pass an absolute output directory as its argument when needed. Direct npm/pnpm pack at the source root prints this command instead of producing an uninstallable workspace:* archive.
+
+The npm archive bundles required workspace and vendor JavaScript packages using their declared files. Consumers install registry dependencies normally, including target-platform SQLite/PTY binaries; Node itself is not bundled and Node 24+ is required. In a new consumer directory run `npm install /absolute/archive.tgz` without skipping install scripts, then run `node tests/npm-distribution-smoke.mjs /absolute/consumer` from this repository. This checks the actual CLI, SQLite persistence, PTY, planning assets, Home installation and source-independent MCP handshake. The smoke script targets a Unix host; passing locally does not certify other platforms.
 
 That sentence describes the current release. DV4 and the final Cutover Goal will update and verify monorepo packaging, installation, and release commands in a clean environment.

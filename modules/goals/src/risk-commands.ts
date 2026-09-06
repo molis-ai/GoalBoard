@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  AcceptedRiskFacts,
   GoalValidityState,
   GoalsActorWrite,
   RiskFactsInput,
@@ -52,6 +53,7 @@ export class RiskCommands<TTransition> {
     private readonly lifecycle: GoalsRiskLifecycleHooks<TTransition>,
   ) {}
 
+
   addRisk(
     boardId: string,
     input: RiskFactsInput,
@@ -81,32 +83,7 @@ export class RiskCommands<TTransition> {
       );
       const riskId = input.risk_id?.trim() || `risk-${randomUUID()}`;
       const now = this.context.now().toISOString();
-      repository.db.prepare(`
-        INSERT INTO risks (
-          risk_id, board_id, description, probability, impact,
-          affected_surfaces_json, trigger, treatment, treatment_plan, blocking_mode,
-          revisit_condition, owner, state, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
-      `).run(
-        riskId,
-        boardId,
-        facts.description,
-        facts.probability,
-        facts.impact,
-        sqliteJson(facts.affected_surfaces),
-        facts.trigger,
-        facts.treatment,
-        facts.treatment_plan,
-        facts.blocking_mode,
-        facts.revisit_condition,
-        facts.owner,
-        now,
-        now,
-      );
-      const link = repository.db.prepare(
-        "INSERT INTO goal_risks (goal_id, risk_id) VALUES (?, ?)",
-      );
-      for (const goalId of facts.goal_ids) link.run(goalId, riskId);
+      repository.insertOpenRisk({ ...facts, board_id: boardId, risk_id: riskId }, now);
       repository.appendEvent({
         eventId: randomUUID(),
         boardId,
@@ -482,7 +459,7 @@ export class RiskCommands<TTransition> {
   normalizeRiskFacts(
     boardId: string,
     input: Omit<RiskFactsInput, "risk_id">,
-  ): Omit<RiskFactsInput, "risk_id" | "affected_surfaces"> & { affected_surfaces: string[] } {
+  ): Omit<AcceptedRiskFacts, "risk_id" | "board_id"> {
     const goalIds = unique(input.goal_ids.map((item) => item.trim()).filter(Boolean));
     const description = input.description.trim();
     const probability = input.probability.trim();
@@ -538,7 +515,7 @@ const RISK_BLOCKING_MODES = new Set<RiskRecord["blocking_mode"]>([
   "completion",
   "invalidate_on_trigger",
 ]);
-const RISK_STATES = new Set<RiskRecord["state"]>([
+export const RISK_STATES = new Set<RiskRecord["state"]>([
   "open",
   "triggered",
   "resolved",

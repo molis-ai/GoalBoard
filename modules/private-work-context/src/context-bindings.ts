@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
+import { createRuntimeContextBindingMetadata, RuntimeContextProjectReferences } from "./context-binding-references.js";
 import type {
   RuntimeContextBindingEventRecord,
   RuntimeContextBindingRecord,
@@ -11,14 +13,18 @@ export interface RuntimeContextSetupRequestRecord {
 }
 
 export class RuntimeContextBindingRepository {
-  constructor(private readonly db: Database.Database) {}
+  private readonly references: RuntimeContextProjectReferences;
+  constructor(private readonly db: Database.Database, private readonly options: {
+    ledger: ContextLedgerApi;
+    assertProject(projectId: string): void;
+  }) { this.references = new RuntimeContextProjectReferences(options.ledger); }
 
   find(runtimeId: string, stableWorkContextId: string): RuntimeContextBindingRecord | null {
     const row = this.db.prepare(`
       SELECT * FROM runtime_context_bindings
       WHERE runtime_id = ? AND stable_work_context_id = ?
     `).get(runtimeId, stableWorkContextId) as Record<string, unknown> | undefined;
-    return row ? mapRuntimeContextBinding(row) : null;
+    return row ? this.map(row) : null;
   }
 
   list(): RuntimeContextBindingRecord[] {
@@ -26,36 +32,47 @@ export class RuntimeContextBindingRepository {
       SELECT * FROM runtime_context_bindings
       ORDER BY updated_at DESC, runtime_id, stable_work_context_id
     `).all() as Array<Record<string, unknown>>;
-    return rows.map(mapRuntimeContextBinding);
+    return rows.map((row) => this.map(row));
   }
 
   insert(binding: RuntimeContextBindingRecord): void {
-    this.db.prepare(`
+    this.db.transaction(() => {
+      this.options.assertProject(binding.project_id);
+      this.db.prepare(`
       INSERT INTO runtime_context_bindings (
-        binding_id, runtime_id, stable_work_context_id, project_id,
+        binding_id, runtime_id, stable_work_context_id,
         bound_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       binding.binding_id,
       binding.runtime_id,
       binding.stable_work_context_id,
-      binding.project_id,
       binding.bound_by,
       binding.created_at,
       binding.updated_at,
-    );
+      );
+      this.references.set(binding.binding_id, binding.project_id, binding.bound_by, binding.updated_at);
+    }).immediate();
   }
 
   updateProject(bindingId: string, projectId: string, actorId: string, updatedAt: string): void {
-    this.db.prepare(`
+    this.db.transaction(() => {
+      this.options.assertProject(projectId);
+      const updated = this.db.prepare(`
       UPDATE runtime_context_bindings
-      SET project_id = ?, bound_by = ?, updated_at = ?
+      SET bound_by = ?, updated_at = ?
       WHERE binding_id = ?
-    `).run(projectId, actorId, updatedAt, bindingId);
+      `).run(actorId, updatedAt, bindingId);
+      if (updated.changes) this.references.set(bindingId, projectId, actorId, updatedAt);
+    }).immediate();
   }
 
-  remove(bindingId: string): number {
-    return this.db.prepare("DELETE FROM runtime_context_bindings WHERE binding_id = ?").run(bindingId).changes;
+  remove(bindingId: string, actorId: string, at: string): number {
+    return this.db.transaction(() => {
+      const count = this.db.prepare("DELETE FROM runtime_context_bindings WHERE binding_id = ?").run(bindingId).changes;
+      if (count) this.references.remove(bindingId, actorId, at);
+      return count;
+    }).immediate();
   }
 
   listEvents(filter?: { runtime_id: string; stable_work_context_id: string }): RuntimeContextBindingEventRecord[] {
@@ -195,28 +212,23 @@ export class RuntimeContextBindingRepository {
     );
   }
 
-  removeProjectFacts(projectId: string): number {
-    const deletedBindings = this.db.prepare("DELETE FROM runtime_context_bindings WHERE project_id = ?")
-      .run(projectId).changes;
-    this.db.prepare("DELETE FROM runtime_context_setup_requests WHERE project_id = ?").run(projectId);
-    return deletedBindings;
+  removeProjectFacts(projectId: string, actorId: string, at: string): number {
+    return this.db.transaction(() => {
+      const deletedBindings = this.references.forProject(projectId)
+        .reduce((count, id) => count + this.remove(id, actorId, at), 0);
+      this.db.prepare("DELETE FROM runtime_context_setup_requests WHERE project_id = ?").run(projectId);
+      return deletedBindings;
+    }).immediate();
+  }
+
+  private map(row: Record<string, unknown>): RuntimeContextBindingRecord {
+    return mapRuntimeContextBinding(row, this.references.get(String(row.binding_id)));
   }
 }
 
 export function createRuntimeContextBindingTables(db: Database.Database): void {
+  createRuntimeContextBindingMetadata(db);
   db.exec(`
-    CREATE TABLE runtime_context_bindings (
-      binding_id TEXT PRIMARY KEY,
-      runtime_id TEXT NOT NULL,
-      stable_work_context_id TEXT NOT NULL,
-      project_id TEXT NOT NULL REFERENCES projects(project_id),
-      bound_by TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      UNIQUE(runtime_id, stable_work_context_id)
-    );
-    CREATE INDEX runtime_context_bindings_project_idx
-      ON runtime_context_bindings(project_id, runtime_id, stable_work_context_id);
     CREATE TABLE runtime_context_binding_events (
       event_id TEXT PRIMARY KEY,
       binding_id TEXT NOT NULL,
@@ -291,12 +303,12 @@ export function migrateRuntimeContextBindingEventsForUnbind(db: Database.Databas
   `);
 }
 
-function mapRuntimeContextBinding(row: Record<string, unknown>): RuntimeContextBindingRecord {
+function mapRuntimeContextBinding(row: Record<string, unknown>, projectId: string): RuntimeContextBindingRecord {
   return {
     binding_id: String(row.binding_id),
     runtime_id: String(row.runtime_id),
     stable_work_context_id: String(row.stable_work_context_id),
-    project_id: String(row.project_id),
+    project_id: projectId,
     bound_by: String(row.bound_by),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),

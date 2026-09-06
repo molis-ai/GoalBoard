@@ -1,4 +1,5 @@
 export { STYLES } from "./styles/base.js";
+export { PROJECT_RULES_CLIENT_SCRIPT, PROJECT_RULES_SETTINGS_STYLES } from "@adeptify/goalboard-plugin-goals";
 export { MORE_STYLES } from "./styles/workbench.js";
 export { RESPONSIVE_STYLES } from "./styles/responsive.js";
 export { PROJECT_INDEX_STYLES } from "./styles/project-index.js";
@@ -9,12 +10,10 @@ export {
 } from "./scripts/control.js";
 export {
   PROJECT_GUIDANCE_SETTINGS_STYLES,
-  PROJECT_RULES_SETTINGS_STYLES,
   SETTINGS_STYLES,
 } from "./styles/settings.js";
 export {
   PROJECT_GUIDANCE_CLIENT_SCRIPT,
-  PROJECT_RULES_CLIENT_SCRIPT,
   SETTINGS_CLIENT_SCRIPT,
 } from "./scripts/settings.js";
 export { WORK_TAB_VISIBILITY_CLIENT_SCRIPT } from "./scripts/work-tabs.js";

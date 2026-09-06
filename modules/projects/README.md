@@ -1,5 +1,7 @@
 # @adeptify/goalboard-module-projects
 
+DV4: `inspectProjectCatalogForUninstall` is the public read-only inspection for an existing catalog, including legacy rows without `data_class`. It checks catalog ownership and classifies persisted user/migrated/demo facts without creating schema or running migrations. The root Local Host composition owns the read-only connection and supplies the result to the installer; the installer does not read Projects tables. Demo deletion continues through the existing catalog lifecycle until its final cutover.
+
 <!-- Updated by AP1 after the first real Projects vertical slice. -->
 
 Status: `partial`  

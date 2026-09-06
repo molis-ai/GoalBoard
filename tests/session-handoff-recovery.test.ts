@@ -1,3 +1,4 @@
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -5,11 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { CodexRuntimeSessionAdapter, RuntimeSessionAdapterRouter } from "../src/sessions/adapters.js";
-import { SessionContentService } from "../src/sessions/content.js";
-import { SessionDirectoryService } from "../src/sessions/directory.js";
-import { SessionHandoffService } from "../src/sessions/handoff.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
+import { SessionContentService } from "@adeptify/goalboard-plugin-work";
+import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
+import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "../src/sessions/types.js";
 
 function definitelyRejected(message: string): Error {
@@ -49,7 +50,7 @@ function contractFixture(databasePath: string, boardId: string, goalId: string) 
 }
 
 function services(registry: GoalBoardSessionRegistry, transport: RuntimeSessionTransport) {
-  const router = new RuntimeSessionAdapterRouter(registry);
+  const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
   router.register(new CodexRuntimeSessionAdapter(transport));
   const content = new SessionContentService(registry, router);
   return {
@@ -69,7 +70,7 @@ test("turn delivery failure keeps the real target and retry sends only to that t
   const boardId = "project-handoff-recovery";
   const goalId = "goal-handoff-recovery";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  let registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  let registry = await openWorkSessionRegistry({ homeDirectory: home });
   const calls: Array<{ method: string; threadId: string | null }> = [];
   let failTurn = true;
   const transport: RuntimeSessionTransport = {
@@ -115,7 +116,7 @@ test("turn delivery failure keeps the real target and retry sends only to that t
     assert.deepEqual(calls.map((call) => call.method), ["thread/read", "thread/start", "turn/start"]);
 
     registry.close();
-    registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    registry = await openWorkSessionRegistry({ homeDirectory: home });
     runtime = services(registry, transport);
     failTurn = false;
     const retried = await runtime.handoff.send({
@@ -142,7 +143,7 @@ test("thread creation failure keeps a retryable package without a false destinat
   const boardId = "project-handoff-create-failure";
   const goalId = "goal-handoff-create-failure";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   const transport: RuntimeSessionTransport = {
     async request(method) {
       if (method === "thread/read") return { thread: { turns: [] } };
@@ -192,7 +193,7 @@ test("an ambiguous thread creation result is not automatically replayed", async 
   const boardId = "project-handoff-ambiguous-create";
   const goalId = "goal-handoff-ambiguous-create";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   const calls: string[] = [];
   const transport: RuntimeSessionTransport = {
     async request(method) {
@@ -247,7 +248,7 @@ test("a successful create response without a native Session ID is not automatica
   const boardId = "project-handoff-missing-native-id";
   const goalId = "goal-handoff-missing-native-id";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   const calls: string[] = [];
   const transport: RuntimeSessionTransport = {
     async request(method) {
@@ -302,7 +303,7 @@ test("an ambiguous delivery result keeps the target but blocks automatic replay"
   const boardId = "project-handoff-ambiguous-delivery";
   const goalId = "goal-handoff-ambiguous-delivery";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   const calls: string[] = [];
   const transport: RuntimeSessionTransport = {
     async request(method) {
@@ -358,7 +359,7 @@ test("a concurrent send cannot create a second target Session", async () => {
   const boardId = "project-handoff-concurrent";
   const goalId = "goal-handoff-concurrent";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   let releaseThreadStart!: () => void;
   let reportThreadStart!: () => void;
   const threadStartReleased = new Promise<void>((resolve) => { releaseThreadStart = resolve; });
@@ -429,7 +430,7 @@ test("a Runtime cannot reuse the source native ID as the Handoff target", async 
   const boardId = "project-handoff-source-reuse";
   const goalId = "goal-handoff-source-reuse";
   const { store, contract } = contractFixture(path.join(directory, "board.db"), boardId, goalId);
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   const transport: RuntimeSessionTransport = {
     async request(method) {
       if (method === "thread/read") return { thread: { turns: [] } };
@@ -490,7 +491,7 @@ test("an interrupted sending state keeps its known target and becomes retryable 
   const home = path.join(directory, ".goalboard");
   let nowMs = Date.parse("2026-08-31T00:00:00.000Z");
   const now = () => new Date(nowMs);
-  let registry = await GoalBoardSessionRegistry.open({ homeDirectory: home, now });
+  let registry = await openWorkSessionRegistry({ homeDirectory: home, now });
   const source = registry.createSession({
     runtime_id: "unknown",
     actor_id: "user",
@@ -521,13 +522,13 @@ test("an interrupted sending state keeps its known target and becomes retryable 
     destination_session_id: destination.session_id,
     delivery_mode: "native",
   });
-  const observer = await GoalBoardSessionRegistry.open({ homeDirectory: home, now });
+  const observer = await openWorkSessionRegistry({ homeDirectory: home, now });
   assert.equal(observer.getHandoff(draft.package_id).state, "sending");
   assert.equal(observer.latestPendingHandoff(source.session_id)?.state, "sending");
   observer.close();
   registry.close();
   nowMs += 6 * 60 * 1000;
-  registry = await GoalBoardSessionRegistry.open({ homeDirectory: home, now });
+  registry = await openWorkSessionRegistry({ homeDirectory: home, now });
   try {
     const recovered = registry.getHandoff(draft.package_id);
     assert.equal(recovered.state, "failed");
@@ -541,3 +542,4 @@ test("an interrupted sending state keeps its known target and becomes retryable 
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

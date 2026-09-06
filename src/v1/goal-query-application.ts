@@ -52,6 +52,10 @@ export class GoalReadApplication {
     return this.goals.listTrashedGoals(boardId);
   }
 
+  listPolicyHistory(boardId: string) { return this.goals.listPolicyHistory(boardId); }
+  listLegacyCoverage(boardId: string) { return this.goals.listLegacyCoverage(boardId); }
+  listGoalRiskLinks(boardId: string) { return this.goals.listGoalRiskLinks(boardId); }
+
   getResolvedGoalPolicy(input: { board_id: string; goal_id: string }): GoalPolicy {
     return this.goals.resolvePolicy(input.board_id, input.goal_id);
   }

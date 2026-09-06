@@ -1,3 +1,4 @@
+import { GOALS_PROPOSAL_MOBILE_STYLES, GOALS_LEGACY_PROPOSAL_MOBILE_STYLES } from "@adeptify/goalboard-plugin-goals";
 export const RESPONSIVE_STYLES = `
   @container (max-width: 660px) {
     .goal-workspace-nav { margin-inline: -4px; padding-inline: 4px; }
@@ -196,30 +197,13 @@ export const RESPONSIVE_STYLES = `
     .decision-result { grid-template-columns: auto minmax(0, 1fr); }
     .decision-result-links { grid-column: 2; justify-items: start; }
     .decision-result-links a { justify-content: flex-start; text-align: left; }
-    .candidate-title { display: grid; }
-    .candidate-title > span { justify-self: start; }
-    .candidate-contract { grid-template-columns: 1fr; }
-    .goal-tree-proposal-details { grid-template-columns: 1fr; }
-    .goal-tree-risk-options { grid-template-columns: 1fr; }
-    .goal-tree-risk-options label { border-right: 0; }
-    .goal-tree-risk-options label:nth-last-child(-n+2) { border-bottom: 1px solid var(--line); }
-    .goal-tree-risk-options label:last-child { border-bottom: 0; }
-    .goal-tree-risk-plan textarea { font-size: 16px; }
-    .candidate-wide { grid-column: 1; }
-    .goal-tree-proposal-acceptance { grid-column: 1; }
+${GOALS_PROPOSAL_MOBILE_STYLES}
     .decision-reason { grid-template-columns: 1fr; gap: 5px; }
     .decision-reason > span { padding-top: 0; }
     .goal-situation { grid-template-columns: 1fr 1fr; }
     .goal-situation-cell:nth-child(2n) { border-right: 0; }
     .goal-situation-cell:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-    .contract-proposal > header { display: grid; }
-    .contract-diff-row, .proposal-appendix { grid-template-columns: 1fr; gap: 6px; }
-    .proposal-source { padding: 7px 0 0; border-left: 0; border-top: 1px dashed var(--line); }
-    .dependency-direction, .dependency-rationale { grid-template-columns: 1fr; }
-    .dependency-direction > span { grid-auto-flow: column; justify-content: start; gap: 5px; }
-    .dependency-direction > span svg { transform: rotate(90deg); }
-    .dependency-evidence { grid-template-columns: 1fr; }
-    .dependency-evidence .inline-ref, .dependency-evidence > .empty-row { grid-column: 1; }
+${GOALS_LEGACY_PROPOSAL_MOBILE_STYLES}
     .decision-actions { justify-content: flex-end; }
     .field-row--split, .goal-choice-list { grid-template-columns: 1fr; }
     .relation-field-heading, .relation-field > legend { grid-template-columns: 1fr; gap: 6px; }
@@ -231,5 +215,4 @@ export const RESPONSIVE_STYLES = `
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   }
 `;
-
 

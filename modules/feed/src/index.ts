@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
+import { FeedGoalLinks } from "./goal-links.js";
 
 import type {
   AttentionApi,
@@ -51,6 +53,7 @@ export interface FeedLegacyEvent {
 }
 
 export interface FeedModuleOptions {
+  ledger: ContextLedgerApi;
   now?: () => Date;
   eventSink?: (event: FeedLegacyEvent) => void;
 }
@@ -167,6 +170,7 @@ export function migrateFeed(db: FeedSqliteDatabase): void {
 }
 
 export class FeedModule implements FeedApi {
+  private readonly goalLinks: FeedGoalLinks;
   readonly query = {
     list: (projectId: string) => this.list(projectId),
     get: (projectId: string, itemId: string) => this.get(projectId, itemId),
@@ -209,12 +213,27 @@ export class FeedModule implements FeedApi {
   constructor(
     private readonly db: FeedSqliteDatabase,
     private readonly attention: AttentionApi,
-    private readonly options: FeedModuleOptions = {},
+    private readonly options: FeedModuleOptions,
   ) {
     migrateFeed(db);
+    this.goalLinks = new FeedGoalLinks(options.ledger);
+    this.migrateGoalLinks();
+  }
+
+  private migrateGoalLinks(): void {
+    this.db.transaction(() => {
+      const rows = this.db.prepare(`SELECT board_id, item_id, linked_goal_id, updated_at
+        FROM feed_items WHERE linked_goal_id IS NOT NULL`).all() as Row[];
+      for (const row of rows) {
+        this.goalLinks.set(text(row.board_id), text(row.item_id), text(row.linked_goal_id), text(row.updated_at), true);
+        this.db.prepare("UPDATE feed_items SET linked_goal_id = NULL WHERE board_id = ? AND item_id = ?")
+          .run(row.board_id, row.item_id);
+      }
+    }).immediate();
   }
 
   private list(projectId: string): FeedItemRecord[] {
+    const links = this.goalLinks.list(projectId);
     const materials = (this.db.prepare(
       "SELECT * FROM feed_materials WHERE board_id = ? ORDER BY updated_at DESC, material_id",
     ).all(projectId) as Row[]).map(mapFeedMaterial);
@@ -224,7 +243,8 @@ export class FeedModule implements FeedApi {
     }
     return (this.db.prepare(
       "SELECT * FROM feed_items WHERE board_id = ? ORDER BY source_updated_at DESC, item_id",
-    ).all(projectId) as Row[]).map((row) => mapFeedItem(row, byItem.get(text(row.item_id)) ?? []));
+    ).all(projectId) as Row[]).map((row) => mapFeedItem(row, byItem.get(text(row.item_id)) ?? [],
+      links.get(text(row.item_id)) ?? null));
   }
 
   private get(projectId: string, itemId: string): FeedItemRecord {
@@ -236,7 +256,7 @@ export class FeedModule implements FeedApi {
       SELECT * FROM feed_materials
       WHERE board_id = ? AND item_id = ? ORDER BY updated_at DESC, material_id
     `).all(projectId, itemId) as Row[]).map(mapFeedMaterial);
-    return mapFeedItem(row, materials);
+    return mapFeedItem(row, materials, this.goalLinks.get(projectId, itemId));
   }
 
   private exists(projectId: string, itemId: string): boolean {
@@ -252,18 +272,12 @@ export class FeedModule implements FeedApi {
   }
 
   private findByLinkedGoal(projectId: string, goalId: string, itemId?: string): FeedItemRecord | null {
-    const row = itemId == null
-      ? this.db.prepare(`
-          SELECT item_id FROM feed_items
-          WHERE board_id = ? AND linked_goal_id = ?
-          ORDER BY updated_at DESC, item_id LIMIT 1
-        `).get(projectId, goalId)
-      : this.db.prepare(`
-          SELECT item_id FROM feed_items
-          WHERE board_id = ? AND linked_goal_id = ? AND item_id = ? LIMIT 1
-        `).get(projectId, goalId, itemId);
-    const resolved = row as { item_id?: string } | undefined;
-    return resolved?.item_id ? this.get(projectId, resolved.item_id) : null;
+    const linked = this.goalLinks.find(projectId, goalId).filter((id) => itemId == null || id === itemId);
+    if (!linked.length) return null;
+    const found = this.db.prepare(`SELECT item_id FROM feed_items
+      WHERE board_id = ? AND item_id IN (SELECT value FROM json_each(?))
+      ORDER BY updated_at DESC, item_id LIMIT 1`).get(projectId, JSON.stringify(linked)) as { item_id: string } | undefined;
+    return found ? this.get(projectId, found.item_id) : null;
   }
 
   private ingest(input: IngestFeedItemInput): {
@@ -629,11 +643,12 @@ export class FeedModule implements FeedApi {
       }
       if (current.linked_goal_id === goalId && current.disposition === disposition) return current;
       const at = this.now().toISOString();
+      this.goalLinks.set(projectId, itemId, goalId, at);
       this.db.prepare(`
         UPDATE feed_items
-        SET linked_goal_id = ?, disposition = ?, revision = revision + 1, updated_at = ?
+        SET disposition = ?, revision = revision + 1, updated_at = ?
         WHERE board_id = ? AND item_id = ?
-      `).run(goalId, disposition, at, projectId, itemId);
+      `).run(disposition, at, projectId, itemId);
       const inbox = this.attention.query.findActiveForSubject(projectId, "feed_item", itemId);
       if (inbox) {
         this.attention.commands.setStatus(
@@ -664,6 +679,7 @@ export class FeedModule implements FeedApi {
     return this.db.transaction(() => {
       const at = this.now().toISOString();
       for (const itemId of itemIds) {
+        this.goalLinks.remove(projectId, itemId);
         this.attention.commands.deleteSubject(projectId, "feed_item", itemId);
       }
       this.db.prepare("DELETE FROM feed_items WHERE board_id = ? AND source_id = ?")
@@ -912,7 +928,7 @@ function mapFeedMaterial(row: Row): FeedMaterialRecord {
   };
 }
 
-function mapFeedItem(row: Row, materials: FeedMaterialRecord[]): FeedItemRecord {
+function mapFeedItem(row: Row, materials: FeedMaterialRecord[], linkedGoalId: string | null = null): FeedItemRecord {
   return {
     project_id: text(row.board_id),
     item_id: text(row.item_id),
@@ -932,7 +948,7 @@ function mapFeedItem(row: Row, materials: FeedMaterialRecord[]): FeedItemRecord 
     tags: json<string[]>(row.tags_json, []),
     author: optionalText(row.author),
     disposition: text(row.disposition) as FeedItemDisposition,
-    linked_goal_id: optionalText(row.linked_goal_id),
+    linked_goal_id: linkedGoalId,
     read_at: optionalText(row.read_at),
     revision: Number(row.revision ?? 0),
     source_created_at: text(row.source_created_at),

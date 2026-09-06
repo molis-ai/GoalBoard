@@ -4,6 +4,8 @@
 
 ## macOS Desktop installer
 
+Current reorganization worktree: installer implementations now belong to Local Host. Build all workspace packages before installing from source; stale builds are rejected without replacing the existing installation. The release procedures below still require full DV4 revalidation. Passing targeted installer tests does not certify DMG or supply-chain artifacts from this worktree.
+
 For macOS, download the `macos-arm64` (Apple Silicon) or `macos-x64` (Intel) DMG from [GitHub Releases](https://github.com/adeptify/GoalBoard/releases), drag GoalBoard into Applications, and launch it. The App contains architecture-matched Node, GoalBoard Core, and production dependencies. On first launch it calls the same `goalboard install` service to populate `~/.goalboard`, then starts the local Web service. It does not create a project, connect a Runtime, create demo data, or edit a user project.
 
 Repository development provides the same release path:
@@ -16,9 +18,13 @@ pnpm desktop:start:macos    # launch the installed App
 
 For automation or acceptance checks, set `GOALBOARD_SKIP_OPEN=1` to install without opening a window. `GOALBOARD_APP_DIR` can point the script at another user-level Applications directory.
 
-The build downloads a fixed Node LTS release and verifies it against Node's official `SHASUMS256.txt` before creating the payload. Apple Silicon and Intel are built separately so native addons are never mixed into a fake universal package. Without Developer ID and notarization credentials, local builds and manually dispatched workflows can only produce internal ad-hoc artifacts that trigger Gatekeeper; the scripts do not remove quarantine on the user's behalf. A public `v*` tag release requires all Apple Secrets, then Tauri signs, notarizes, staples, and publishes both architectures.
+The build downloads a fixed Node LTS release and verifies it against Node's official `SHASUMS256.txt` before creating the payload. Apple Silicon and Intel are built separately so native addons are never mixed into a fake universal package. Without an explicit `APPLE_SIGNING_IDENTITY`, the script sets `-` for internal ad-hoc signing, preventing Tauri from selecting an unrelated local development certificate. An explicit identity is preserved. The script verifies App signature integrity and reports the artifact's actual signature. This is not proof of Apple notarization or Gatekeeper approval; quarantine is never removed automatically.
+
+The [release workflow](../.github/workflows/release-macos.yml) is currently manual-only; automatic tag triggers are paused. Restoring automatic `v*` releases requires a separate trigger change and all Apple Secrets. Existing public-release conditions require Developer ID signing and Apple notarization. This reorganization neither changes triggers nor uploads artifacts, and internal verification does not establish public release readiness.
 
 ## Install boundaries
+
+To distribute an npm archive, run `pnpm package:npm` in the repository and take the artifact from `release/npm/`. Consumers run `npm install /absolute/adeptify-goalboard-VERSION.tgz` in their own directory, then `npx --no-install goalboard --help` or `npx --no-install goalboard install`. This path requires Node 24+ and normal target-platform native dependency installation; do not use `--ignore-scripts`. No source checkout or separately published private workspace packages are needed. Installing the npm package does not start services or connect a Runtime; the explicit `goalboard install` command maintains the Home described below.
 
 `goalboard install` only maintains `~/.goalboard`: the versioned program, shared Skill, MCP/Web/CLI launchers, project DB root, logs, and install manifest. It never creates or starts projects, never writes into user projects, and never modifies any Runtime user-level configuration. Registering the MCP entry into a Runtime later requires the user-confirmed Runtime integration flow.
 

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { findSessionForHostSignals, type RuntimeSessionHostSignals } from "../src/sessions/compatibility.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardSessionError } from "../src/sessions/types.js";
 
 async function withRegistry(
@@ -12,7 +12,7 @@ async function withRegistry(
 ): Promise<void> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-registry-"));
   const home = path.join(directory, ".goalboard");
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     await run(registry, home);
   } finally {
@@ -197,3 +197,4 @@ test("stale GoalBoard or surface IDs cannot override a conflicting native Runtim
     assert.equal(findSessionForHostSignals(registry, { ...signals, native_runtime_session_id: "thread-unknown" }), null);
   });
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

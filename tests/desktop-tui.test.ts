@@ -11,7 +11,7 @@ import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "../src/web/control-token.js";
+import { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "@adeptify/goalboard-app-local-host";
 import { NATIVE_DESKTOP_BOOTSTRAP_SCRIPT } from "@adeptify/goalboard-app-desktop";
 import {
   GoalBoardPtyHost,
@@ -35,7 +35,9 @@ import {
 } from "../src/web/server.js";
 
 const WEB_TEST_CONTROL_TOKEN = "goalboard-web-test-control-token-0123456789abcdef";
-const PTY_CLIENT_SOURCE = readFileSync(new URL("../src/web/pty-client.ts", import.meta.url), "utf8");
+const PTY_CLIENT_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/client.ts", import.meta.url), "utf8");
+const TERMINAL_AUTOFILL_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/autofill.ts", import.meta.url), "utf8");
+const TERMINAL_PANELS_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/panels.ts", import.meta.url), "utf8");
 const WEB_RENDER_SOURCE = readFileSync(new URL("../src/web/render.ts", import.meta.url), "utf8");
 const WORKBENCH_UI_SOURCE = [WEB_RENDER_SOURCE, CLIENT_SCRIPT, ONBOARDING_CLIENT_SCRIPT].join("\n");
 const DESKTOP_CAPABILITIES = JSON.parse(
@@ -62,7 +64,7 @@ test("desktop capability permits the custom title bar to drag its window", () =>
 
 test("release version sources agree before packaging", () => {
   const output = execFileSync(process.execPath, [
-    new URL("../scripts/verify-release-versions.mjs", import.meta.url).pathname,
+    new URL("../apps/desktop/tooling/verify-release-versions.mjs", import.meta.url).pathname,
   ], { encoding: "utf8" });
   const packageVersion = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -947,19 +949,18 @@ test("compound parent terminals become read-only and direct execution APIs requi
 });
 
 test("TUI client rejects cross-Goal and parent writes before touching the PTY channel", () => {
-  const client = readFileSync(join(process.cwd(), "src/web/pty-client.ts"), "utf8");
+  const client = PTY_CLIENT_SOURCE;
   assert.match(client, /const canControlPanel/);
   assert.match(client, /panel\.goal_id === goalId\(\)/);
-  assert.match(client, /term\.onData\(\(data\) => \{\s+const panel[\s\S]+if \(!canControlPanel\(panel\)\) return;/);
-  assert.match(client, /mode === "start" \|\| mode === "reopen"/);
-  assert.match(client, /panelLoadSequence/);
+  assert.match(client, /onInput: \(panelId, data\) => \{\s+const panel[\s\S]+if \(!canControlPanel\(panel\)\) return;/);
+  assert.match(TERMINAL_PANELS_SOURCE, /mode === "start" \|\| mode === "reopen"/);
   assert.match(client, /parentReadOnly/);
   assert.match(client, /className\.startsWith\("goal-status--"\)/);
   assert.match(client, /ownerStatusEl\.classList\.add\(`goal-status--\$\{status\}`\)/);
   assert.match(client, /detail\.statusIconMarkup/);
   assert.match(
     client,
-    /goalboard:goal-changed[\s\S]{0,1800}panelLoadSequence \+= 1;[\s\S]{0,260}showTerminal\(null\)/,
+    /goalboard:goal-changed[\s\S]{0,1800}panelController\.resetGoal\(\)/,
   );
   assert.match(
     client,
@@ -973,16 +974,16 @@ test("Feed processing opens Runtime and fills context without sending it", () =>
   assert.match(WORKBENCH_UI_SOURCE, /feedStartRequested/);
   assert.match(WORKBENCH_UI_SOURCE, /goalWorkspaceMode = "runtime"/);
   assert.match(WORKBENCH_UI_SOURCE, /setDesktopWorkSurface\("goal", false, false\)/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard-feed-runtime-autofill:/);
-  assert.match(PTY_CLIENT_SOURCE, /await writePrompt\(false, pending\.itemId\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard-feed-runtime-autofill:/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /await writePrompt\(false, pending\.itemId\)/);
   assert.match(PTY_CLIENT_SOURCE, /const query = new URLSearchParams\(\)/);
   assert.match(PTY_CLIENT_SOURCE, /if \(feedItemId\) query\.set\("feed_item_id", feedItemId\)/);
-  assert.match(PTY_CLIENT_SOURCE, /await waitForTerminalOutput\(panel\.panel_id\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /await waitForTerminalOutput\(panel\.panel_id\)/);
   assert.match(PTY_CLIENT_SOURCE, /replace\(\/\[\\r\\n\]\+\/g, " ⏎ "\)/);
   assert.match(PTY_CLIENT_SOURCE, /replace\(\/\[\\u0000-\\u001f\\u007f\]\/g, " "\)/);
   assert.match(PTY_CLIENT_SOURCE, /data: send \? `\$\{fillText\}\\r` : fillText/);
-  assert.match(PTY_CLIENT_SOURCE, /Item 上下文已填入，检查后再发送/);
-  assert.doesNotMatch(PTY_CLIENT_SOURCE, /fillPendingFeedContext[\s\S]{0,1200}writePrompt\(true\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /Item 上下文已填入，检查后再发送/);
+  assert.doesNotMatch(TERMINAL_AUTOFILL_SOURCE, /fillPendingFeedContext[\s\S]{0,1200}writePrompt\(true\)/);
 });
 
 test("Onboarding opens one Goal-bound TUI and fills the advance prompt without sending it", () => {
@@ -994,19 +995,19 @@ test("Onboarding opens one Goal-bound TUI and fills the advance prompt without s
   assert.match(WORKBENCH_UI_SOURCE, /安排好了，进入 GoalBoard/);
   assert.match(WORKBENCH_UI_SOURCE, /const onboardingRuntimeRequested = new URLSearchParams\(location\.search\)\.get\("onboarding-runtime"\) === "1"/);
   assert.match(WORKBENCH_UI_SOURCE, /onboardingRuntimeRequested[\s\S]{0,700}setWorkspaceMode\("runtime", false\)[\s\S]{0,220}setMobileView\("tui"\)/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard-onboarding-runtime-autofill:/);
-  assert.match(PTY_CLIENT_SOURCE, /await openPanel\(\{ runtime_kind: pending\.runtimeKind, cwd: pending\.workspacePath \}\)/);
-  assert.match(PTY_CLIENT_SOURCE, /await waitForTerminalOutput\(panel\.panel_id\)/);
-  assert.match(PTY_CLIENT_SOURCE, /await writePrompt\(false, undefined, true\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard-onboarding-runtime-autofill:/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /await openPanel\(\{ runtime_kind: pending\.runtimeKind, cwd: pending\.workspacePath \}\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /await waitForTerminalOutput\(panel\.panel_id\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /await writePrompt\(false, undefined, true\)/);
   assert.match(PTY_CLIENT_SOURCE, /query\.set\("onboarding", "1"\)/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard:onboarding-runtime-bootstrap/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard:onboarding-runtime-ready/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard:onboarding-runtime-waiting/);
-  assert.match(PTY_CLIENT_SOURCE, /goalboard:onboarding-runtime-error/);
-  assert.match(PTY_CLIENT_SOURCE, /press enter to \(\?:continue\|confirm\)/);
-  assert.match(PTY_CLIENT_SOURCE, /ask codex to do anything/);
-  assert.match(PTY_CLIENT_SOURCE, /初始化提示已填入，检查后再发送/);
-  assert.doesNotMatch(PTY_CLIENT_SOURCE, /fillPendingOnboardingContext[\s\S]{0,1800}writePrompt\(true\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard:onboarding-runtime-bootstrap/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard:onboarding-runtime-ready/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard:onboarding-runtime-waiting/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /goalboard:onboarding-runtime-error/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /press enter to \(\?:continue\|confirm\)/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /ask codex to do anything/);
+  assert.match(TERMINAL_AUTOFILL_SOURCE, /初始化提示已填入，检查后再发送/);
+  assert.doesNotMatch(TERMINAL_AUTOFILL_SOURCE, /fillPendingOnboardingContext[\s\S]{0,1800}writePrompt\(true\)/);
 });
 
 test("Feed Item actions create one bound Goal and expose its source context to Terminal", async () => {
@@ -1139,9 +1140,13 @@ test("Feed Item actions create one bound Goal and expose its source context to T
       } | undefined;
       assert.deepEqual(binding, {
         source_type: "feed_item",
-        source_ref: "feed-item:feed-item-test",
+        source_ref: "",
         state: "confirmed",
       });
+      const receipt = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+        .find((input) => input.goal_id === startedBody.goal_id);
+      assert.equal(receipt?.source_ref, "feed-item:feed-item-test");
+      assert.equal(receipt?.state, "confirmed");
       const item = store.db.prepare(`
         SELECT disposition, linked_goal_id, read_at FROM feed_items WHERE board_id = ? AND item_id = ?
       `).get(fixture.project.board_id, "feed-item-test") as {
@@ -1150,7 +1155,8 @@ test("Feed Item actions create one bound Goal and expose its source context to T
         read_at: string | null;
       };
       assert.equal(item.disposition, "processing");
-      assert.equal(item.linked_goal_id, startedBody.goal_id);
+      assert.equal(item.linked_goal_id, null, "Feed 不再保存第二份关联事实");
+      assert.equal(new FeedStore(store.db).findLinkedGoalItem(fixture.project.board_id, startedBody.goal_id)?.item_id, "feed-item-test");
       assert.equal(item.read_at, readBody.item.read_at);
     } finally {
       store.close();
@@ -1237,14 +1243,12 @@ test("Feed start reuses one Draft Goal across repeat clicks and a Web restart", 
 
   const store = new SqliteGoalBoardStore(fixture.project.database_path);
   try {
-    const bindingCount = store.db.prepare(`
-      SELECT COUNT(*) AS count FROM input_bindings
-      WHERE board_id = ? AND source_type = 'feed_item' AND source_ref = ?
-    `).get(fixture.project.board_id, `feed-item:${itemId}`) as { count: number };
+    const bindings = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+      .filter((input) => input.source_type === "feed_item" && input.source_ref === `feed-item:${itemId}`);
     const runCount = store.db.prepare(`
       SELECT COUNT(*) AS count FROM runs WHERE board_id = ? AND goal_id = ?
     `).get(fixture.project.board_id, goalId) as { count: number };
-    assert.equal(bindingCount.count, 1);
+    assert.equal(bindings.length, 1);
     assert.equal(runCount.count, 0, "Start may open Runtime UI but must not bypass Claim/Run selection");
   } finally {
     store.close();
@@ -1370,16 +1374,15 @@ test("Inbox Message save and start survives a Web restart without duplicating it
     const goal = store.db.prepare(`
       SELECT title FROM goals WHERE board_id = ? AND goal_id = ?
     `).get(fixture.project.board_id, goalId) as { title: string };
-    const bindingCount = store.db.prepare(`
-      SELECT COUNT(*) AS count FROM input_bindings
-      WHERE board_id = ? AND goal_id = ? AND source_type = 'feed_item' AND source_ref = ?
-    `).get(fixture.project.board_id, goalId, `feed-item:${itemId}`) as { count: number };
+    const bindings = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+      .filter((input) => input.goal_id === goalId && input.source_type === "feed_item" && input.source_ref === `feed-item:${itemId}`);
     const materialCount = store.db.prepare(`
       SELECT COUNT(*) AS count FROM feed_materials WHERE board_id = ? AND item_id = ?
     `).get(fixture.project.board_id, itemId) as { count: number };
-    assert.deepEqual(item, { disposition: "processing", linked_goal_id: goalId, read_at: null });
+    assert.deepEqual(item, { disposition: "processing", linked_goal_id: null, read_at: null });
+    assert.equal(new FeedStore(store.db).findLinkedGoalItem(fixture.project.board_id, goalId, itemId)?.linked_goal_id, goalId);
     assert.equal(goal.title, "处理 Inbox Message：需要处理的 Inbox Message");
-    assert.equal(bindingCount.count, 1);
+    assert.equal(bindings.length, 1);
     assert.equal(materialCount.count, 1);
   } finally {
     store.close();

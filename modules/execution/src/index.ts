@@ -24,6 +24,7 @@ export const packageDescriptor = {
 } as const;
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+export { executionImpactPolicy } from "./impact-policy.js";
 
 export interface ExecutionModuleOptions extends ExecutionLifecycleOptions {
   db: ExecutionSqliteDatabase;
@@ -40,11 +41,13 @@ export class ExecutionModule implements ExecutionApplicationApi {
     this.lifecycle = new ExecutionLifecycle(this.repository, options);
     this.commands = this.lifecycle;
     this.query = {
+      listLifecycleEvents: boardId => this.repository.listLifecycleEvents(boardId),
       getClaim: (boardId, claimId) => this.repository.getClaim(boardId, claimId),
       getRun: (boardId, runId) => this.repository.getRun(boardId, runId),
       getRunWithClaim: (boardId, runId) => this.repository.getRunWithClaim(boardId, runId),
       listClaims: (boardId) => this.repository.listClaims(boardId),
       listRuns: (boardId) => this.repository.listRuns(boardId),
+      listNonterminalRuns: boardId => this.repository.listNonterminalRuns(boardId),
     };
   }
 }

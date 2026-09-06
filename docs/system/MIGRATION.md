@@ -1,8 +1,35 @@
 # 架构重组迁移矩阵
 
+GW6（2026-09-06）：Goals 基础 schema、15/25/26 与 migration 30 的 Goals revision/coverage 回填已由 Goals 接管。V3 importer 与 Web 覆盖账 caller 改用公开 Command/Query，Host 保留同连接跨 owner 顺序及事务。193 项定向前后端回归通过，补强历史升级对账 6 项通过，详情见 [GW6 验收](../../specs/goalboard-architecture-reorganization/gw6-validation.md)。旧 Store 仍非整体 retired；最终清理与全产品 E2E 义务不变。
+
+DD2 工程状态（2026-09-06）：原生/历史提案应用与决定 UI/copy/client 已按 owner 迁移，209 项串行回归和 12 项边界反证通过。当前 Coordinator / root renderer / server 为 2,771 / 2,240 / 3,243 行；它们仍未整体退出。真实 caller 与验收见 `specs/goalboard-architecture-reorganization/dd2-caller-audit.md`、`dd2-validation.md`。下文旧阶段记录只保留当时边界；canonical 完成状态以 GoalBoard 为准。
+
+DD1（2026-09-06）：草稿 start/turn/resume 的真实应用已迁入 Goals Native Plugin；Governance clarification API 接管原记录、事件、幂等与事务，Goals/Execution 保持原事实 owner。Host 三个 capability 改绑新应用，CLI/MCP 契约不变；旧 Coordinator 三方法/独占 helper 和 root Store 澄清读取映射已删除。无 schema 改动，无新 Web 表单。DD2 的提案/决定、决定后关闭会话与最终 Host 清理仍未完成，详情见 `specs/goalboard-architecture-reorganization/dd1-validation.md`。
+
+DV4 分发切片：release tooling 已归 Desktop / Local Host，Desktop payload 复用唯一 installer release 创建能力并保留 vendor provenance/SBOM。干净锁文件安装、依赖拓扑构建全部 48 包、真实 Node 下载校验、App/DMG 构建已通过。首次 CLI bin 缺失和手写构建顺序问题均已修复。Apple notarization、根 npm tarball 独立安装和最终用户安装恢复仍未闭合；详见 DV4 进展，不宣称整体分发完成。
+
+DV4 安装代码切片：旧 `src/install/` 实现已清零。Home、Runtime integration、常驻服务和卸载归 Local Host 的具名公开 API，均按职责拆分；卸载 catalog 只读事实检查归 Projects，根装配只注入连接生命周期和 Demo 删除。构建指纹已包含 workspace 源码，CLI 不传 `--source` 时仍安装根产品。当前验证见 [DV4 进展](../../specs/goalboard-architecture-reorganization/dv4-progress.md)；release/Tauri/provenance/SBOM 与整体用户 E2E 尚未完成。
+
+DV2 已完成：Skill 与中英文 MCP/Runtime 说明对应正式协议；真实 launcher handshake 归 MCP App 公开 validator，原安装 caller 已切换。66 项定向回归和边界检查通过，见 [DV2 验收报告](../../specs/goalboard-architecture-reorganization/dv2-validation.md)。DV3 已于 2026-09-05 07:42 UTC 通过正式 Review：真实本地开发 CLI、私有存储/Artifact/UI、公共 fixture、打包签名与外部安装 SDK 样例均已验证，见 [DV3 验收报告](../../specs/goalboard-architecture-reorganization/dv3-validation.md)。DV4 已开始，正在迁移安装与分发；整体前后端用户 E2E 未完成。
+
+DV1 当前验收：CLI/MCP 全部 Goal caller 已走公开 Host Client，Board/import 等声明与完整类型已归官方 Goals Plugin。实际旧入口无 Store/Coordinator 直访；入口权限检查与 executable 装配保留，安装分发归 DV4。构建、601 项全量自动回归（0 失败/跳过）、边界检查通过。逐项证据见 [DV1 验收报告](../../specs/goalboard-architecture-reorganization/dv1-validation.md)。以下 DV1 切片是历史进展；不代表最终用户 E2E 或整体重组已完成。
+
+DV1 第十一切片：CLI/MCP 的 Goals/Execution/Available 已全面改走 typed Host Client；旧 application scope caller 清零。Host 把 Available+projection、trash+状态、planning composition 保持在一次具名调用内；Client `withScope` 保留打开/响应/关闭顺序，不暴露 Runtime。46 项受影响入口回归、125 项 V1/adapter/一致性回归通过，包含真实排队写入不能拆开结果的验证。仍有旧 Board/import 等 capability 声明公开收口和最终 DV1 验收；整体用户 E2E 未开始。
+
+DV1 第十切片：Draft / Goal Tree / legacy proposal 三组真实调用改走具名 typed Host Capability；Plugin 提供异步应用 client，CLI/MCP await 后展示，旧 runtime 三组字段清零并删除。42 项受影响回归通过；补充并发重复回答与跨入口 Proposal check 重放/持久化/重启链通过。边界 300 source files、0 错误。其余 Goals/Execution/Available 组合和旧 Host definitions 收口、最终 DV1 验收仍待完成。
+
+DV1 第九切片：完整 Goal Contract 唯一类型归官方 Goals Plugin，CLI/MCP 的 Contract/Guidance/active-goal 已走该 Plugin 的公开 typed Capability，Host 注册原实现。回收站命令与结果、URL、context response 组合归 MCP App；Runtime 决定先校验 wire，再由 Local Host 组合原宿主来源/attestation。45 项入口回归、122 项 V1/协议相关回归通过，另补真实 context presenter 的 guidance 故障/Session unavailable 顺序验证；边界 299 source files、0 错误。旧 MCP 542 行，仍有其余应用组的 `withProject`→Client 切换和最终 DV1 验收，未把分阶段测试当成总目标的真实用户 E2E。
+
 状态：Goals Query、GW1–GW4、AR1、EX1–EX4 与 AP1–AP4 已迁入  
 最后核对：2026-09-02  
 目标：迁移期间始终能回答“旧代码现在由谁负责、下一个迁移 Goal 是什么、什么时候可以删除”。
+
+### WK3 已落地的 Work 应用与 UI
+
+- Session 内容/恢复、创建/发现、Handoff、TUI 记录和工作目录补偿恢复已归 `plugins/native/work`，事实仍通过 Projects / Private Work Context / Runtime Host / Desktop Panel 公共端口访问。
+- Session/Terminal 页面通过 Workbench 的 UI Host 挂载；终端按连接、面板生命周期、自动填入、xterm 显示和页面事件拆开。浏览器入口、xterm 依赖和终端英文文案跟随 Work，Web Server/renderer 仅留 Host 装配。
+- 旧 Session 应用、终端/Session 大文件、工作目录 action adapter 和无生产用途的 Registry/Adapter re-export 已清零后删除。535 项全量回归、最后 90 项定向回归通过；工作区类型、构建、边界通过。
+- 见 [WK3 验收与边界](../../specs/goalboard-architecture-reorganization/wk3-validation.md)。这不替代全部开发结束后的模拟用户 E2E、清理和最终规范审计。
 
 ## 1. 总体顺序
 
@@ -11,6 +38,22 @@
 3. F3 建立 import 与 Contract 自动门禁。
 4. Feed 作为首个真实垂直切片验证 Module、Horizontal、Plugin、Host 和 UI。
 5. 依次迁移 Goals、Artifacts/Ledger、Execution/Evidence/Governance、Work/Runtime、Projects/App Shell、开发者入口。
+
+AR3 已完成迁移验收：现有结果引用展示已由 Native Artifacts UI Contribution 经 Workbench/UI Host 提供；项目文件打开的 Evidence / 原 workspace 选择策略已迁入 Plugin，安全 reader 仍由 Evidence & Verification 拥有。正式版本列表、详情、本地导出和 Goal 上下文嵌入均已有实际 caller。普通引用不会被自动注册为 Artifact；上下文只读明确输入/产出关系，按 id/version 查看。Web 与上下文回归 62 项通过，嵌入的桌面/窄屏点击与独立界面审查通过；真实 Chrome 复制成功/拒绝与相关 Artifact 回归合计 13 项通过。切片证据与整体开发后 E2E 分开记录，详见 `specs/goalboard-architecture-reorganization/ar3-embed-validation.md`。
+
+DV1 进行中：JSON-RPC message/reply、宿主 `_meta`、Tool schema 与 Runtime audience 已迁入 MCP App；真实服务器的发现及调用分类共用公开目录。迁移前后管理端 57 / Runtime 44 个完整工具定义（顺序、描述、嵌套 schema）直接对比一致，MCP 协议与原 MCP 回归 35 项通过。CLI 和剩余 Store/初始化 caller 尚未清零，详见 `specs/goalboard-architecture-reorganization/dv1-work-plan.md`。
+
+DV1 后续进度：CLI 输入/帮助/JSON/URL 展示已迁入 CLI App；CLI/MCP 数据库目录准备共用 Local Host，V3 import、恢复事实和回收站读走 typed Host capabilities，两个入口的直接 Store 访问已清零。MCP 恢复展示只消费 Host 返回的既有事实。最新相关回归 43 项通过，另有 V1 CLI/导入/重验证定向 5 项通过；命令路由、Project/Session 宿主组合与完整 DV1 验收仍未完成。
+
+DV1 命令层后续：CLI/MCP 的已公开 Goals/Execution 命令转换已由各 App 的具名 handler 拥有，真实入口 switch 已切换，原 Runtime 检查仍先于调用。完整 V1 加受影响入口回归 163 项通过；另新增真实 CLI 领取 → MCP 报告/Evidence → CLI 复核的持久化链，验证幂等、错误 actor、顶层 Board 与宿主 locator_context 优先级。边界规则同步追踪 App handler 调用链，没有放开 Store/Module implementation 直访。Draft/Goal Tree、旧查询与 Project/Session 组合、最终 DV1 验收仍待完成。
+
+DV1 查询层后续：Ready/Available/Explain 的既有 Contract 类型归官方 Goals Native Plugin，旧路径变为类型别名；Host 为 CLI/MCP 提供同一 `GoalAvailabilityQueryApi`。MCP 方法目录、Available 摘要与澄清历史分页归 App，入口不再直调上述 Coordinator 查询。163 项回归及 2 项分页/错误兼容测试通过，包边界无错误。查询算法仍由旧实现承担，`withProject` 与 Draft/Goal Tree/Project/Session 组合尚未退出，未完成最终验收。
+
+DV1 第六切片：Draft Dialogue、Goal Tree、legacy proposal 的既有应用 Contract 由官方 Goals Plugin 公开，Clarification 记录只在 Governance Contract 定义。Host 绑定同一个原实现，CLI/MCP 的具名转换已切换；Runtime 用户确认和来源仍在 handler 前核实。157 项原 V1/受影响入口回归与新增跨入口 Draft→提案→用户决定→Candidate 拒绝/重放→Host 重启恢复链通过，边界 0 错误。只迁接口/调用，不宣称原事务/决策算法、Project/Session 组合及最终 Host Client 已退出。
+
+DV1 第七切片：宿主环境和 Session Registry 组合归 Local Host，Session 身份匹配归 Private Work Context，MCP 活动内容解析归 App；root 兼容层仅保留 catalog reconciliation 回调和未迁的连接/Panel 组合。50 项受影响回归及 2 项新增活动测试通过，包含真实 MCP 成功写入、同 key 活动去重、其他 Session 不受影响、Registry 故障后主 Run 仍 completed 且下次 context 显示 unavailable。MCP 967 行并不等于 DV1 已完成；剩余职责见 Huge Class 清单。
+
+DV1 第八切片：七个项目 context 工具的转换归 MCP App；公开 catalog scope 保持原资源生命周期，Local Host 接管连接缓存和 Panel/native Session 组合。旧类型改为 Contract 别名，原绑定/删除算法及权限未改。相关回归最初 75/87 通过，其余 12 项均为沙箱监听本机端口 EPERM；通过审批后定向补跑，包含这 12 项的 13 项筛选结果全部通过。另新增真实 catalog 的异步 scope/失败恢复测试通过。MCP 当前 770 行，剩余展示、确认来源及完整 Host Client 切换仍待完成，不把上述程序化回归当作最终用户 E2E。
 6. 保证 Goal 做数据、安全、隐私、恢复和回滚验证。
 7. Cutover 在 caller 清零后删除旧 Facade，完成全量测试、安装和发布验收。
 
@@ -62,7 +105,7 @@
 - GitHub Provider 已迁入 `plugins/official-integrations/github`；Gmail Provider、scope、history cursor 和错误归一已迁入 `plugins/official-integrations/gmail`，原 `src/feed/connectors/github.ts`、`gmail.ts` 与 cursor/scope 文件只保留凭据接线或 re-export 的薄兼容入口。
 - `FeedConnectorService` 只消费 `OfficialIntegrationRegistry` 返回的公开 contribution，不再创建 Provider Driver、Signal Adapter 或携带 Provider-specific lifecycle 分支；Listener Host 继续完全不认识 GitHub/Gmail。
 - `tests/plugin-runtime-integration.test.ts` 固定 install → grant → start → Signal → crash/recover → uninstall 主链，并验证签名隔离、grant 越权拒绝、版本未递增时拒绝 Manifest 静默变化和卸载后历史 Signal 保留。
-- Runtime 当前是本地进程内参考实现；持久化安装目录、独立进程/沙箱、升级回滚 UI 和开发者 CLI 属于 DV3/AP2 等后续 Goal，不在 FD3 伪装成已完成。
+- Runtime 当前是本地进程内实现；DV3 已提供开发安装记录持久化、源码调试 CLI 和签名工具。生产安装/发布归 DV4；独立进程/沙箱与升级 UI 不由 FD3 的历史验收代表。
 
 ### Goals Query 与 GW1–GW4 已落地的 Query、Command、Lifecycle、Planning、Repository 与入口迁移
 
@@ -173,13 +216,13 @@
 | `src/sessions/` | `thin Private Work Context + Runtime compatibility composition` | Private Work Context、Runtime Host、Work Plugin | WK1 已迁事实 owner；WK2 已迁 Runtime Host/Adapter；WK3 继续 | registry/content-store/codex-transport/adapters 已变薄；registry fallback、resume、handoff 与 UI caller 清零后删除兼容入口 |
 | `src/projects/` | `thin-project-facade + app composition + Desktop forwarding` | Projects Module、Local Host、Private Work Context、Desktop App | AP1、AP2、AP4、WK1 已迁；Cutover 清 facade | Project/Runtime binding/Desktop 事实均已退出；文件 staging 和旧 Panel 方法 caller 清零后删除兼容 Catalog |
 | `src/planning/` | `retired` | Goals Planning | GW3、GW4 已完成 | 零 caller re-export 已删除；Planning 不拥有 Proposal/Decision 事实 |
-| `src/web/` | `legacy-product-ui + Local Host client` | Native Plugin UI、App Shell 页面、route adapters | AR3、WK3、AP4；GW5 Candidate 待确认 | EX4 已移出执行验收 UI 与 route application adapter；其余产品 owner 继续清零 |
-| `src/mcp/` | `legacy-mixed + Local Host client` | `apps/mcp` thin adapter | AP2、GW4、EX4 已迁；DV1、DV2 继续 | Goal 与 execution-validation 调用已接 App adapter；其余 schema、audience、context 继续变薄 |
+| `src/web/` | `legacy-product-ui + Local Host client` | Native Plugin UI、App Shell 页面、route adapters | AR3、WK3、AP4、GW5 已有对应迁移结果；最终 Cutover 待执行 | GW5 整项工程验收含项目工作规则已齐；Goals contribution/copy/client/route 与 Workbench 页面/请求装配分离。root renderer 3,827 / server 3,353，175 项串行回归通过。剩余跨 Execution/Decision/共享 Shell/兼容 caller 见 gw5-caller-audit.md，完整证据见 gw5-validation.md；总产品 E2E 与旧路径清零尚未完成 |
+| `src/mcp/` | `legacy-mixed + Local Host client` | `apps/mcp` thin adapter | AP2、GW4、EX4 已迁；DV1、DV2 继续 | Goal 与 execution-validation 已接 App adapter；协议、schema、audience 已迁，context 与 Host 组合继续清理 |
 | `src/cli/` | `legacy-mixed + Local Host client` | `apps/cli` thin adapter | AP2、GW4、EX4 已迁；DV1 继续 | Goal 与 execution-validation 调用已接 App adapter；其余只解析参数、调用 Host Client、展示结果 |
 | `src/desktop/`、`desktop/` | `thin-forwarders + distribution-config` | `apps/desktop` 和就近 Tauri Adapter | AP4 已迁；DV4 继续 | AP4 已分离 Native Bridge 与业务 owner；DV4 完成发布配置、签名、公证与安装升级验收，Cutover 删除旧转发 |
-| `src/install/` | `legacy-mixed` | App installer、Plugin lifecycle、Runtime integration | DV3、DV4 | 预览、确认、回滚、诊断与供应链测试通过 |
+| 原 `src/install/` | `removed` | Local Host installer；Projects 只读 catalog facts | DV4 代码迁移完成，分发验收仍进行中 | 旧 caller 已切公开 API；release scripts/Tauri/provenance/SBOM 和干净完整安装链尚待验收 |
 | `src/evidence/` | `removed` | Evidence & Verification | EX2、AR1 已完成对账 | locator 已归 Evidence public entrypoint；Artifact Core 没有从此处继承第二套内容规则，目录保持删除 |
-| `skills/goal-advance/` | `implemented-on-legacy` | Runtime 集成发布面 | DV2 | 只调用正式 public Contract |
+| `skills/goal-advance/` | `public-protocol` | Runtime 集成发布面 | DV2 已完成；DV4 分发 | 只消费正式工具 Contract 与 transition；安装版本与真实恢复仍需 DV4 验证 |
 | `scripts/` | `legacy-mixed` | Release scripts 与 `tooling/migrations` | DV4 | 可复现、可回滚，迁移脚本有明确生命周期 |
 | `.github/workflows/` | `partial-boundary-active` | Monorepo CI、boundary gate 与发布流程 | F2、F3、DV4、最终 Cutover | package 门禁已启用；全量产品测试、签名、公证、SBOM 和发布候选仍由 DV4 / Cutover 完成 |
 | `vendor/` | `legacy-mixed` | 依赖 owner 与发布供应链 | DV4 | provenance、license、hash、SBOM 可追溯 |

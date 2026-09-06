@@ -1,3 +1,4 @@
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -6,9 +7,9 @@ import test from "node:test";
 import {
   assertCompleteRuntimeSessionCapabilities,
   CodexRuntimeSessionAdapter,
-  RuntimeSessionAdapterRouter,
-} from "../src/sessions/adapters.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+  RuntimeHostRouter,
+} from "@adeptify/goalboard-service-runtime-host";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 function definitelyRejected(message: string): Error {
   return Object.assign(new Error(message), { deliveryAccepted: false, retryable: true });
@@ -62,9 +63,9 @@ test("Codex Adapter declares every capability and routes only through verified a
 
 test("unknown Runtime uses honest registry fallback without Runtime-name branching", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-adapter-"));
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     const created = await router.invoke("future-runtime", "create", {
       actor_id: "user",
       user_confirmed: true,
@@ -196,3 +197,4 @@ test("Codex Handoff does not automatically retry an ambiguous delivery error", a
     assert.equal(result.recovery?.retryable, false);
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

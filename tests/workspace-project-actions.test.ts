@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 const TOKEN = "goalboard-workspace-actions-token-0123456789";
@@ -46,7 +46,7 @@ test("project workspace actions require confirmation, repair matching Sessions, 
     assert.equal(addedResponse.status, 201);
     const added = await addedResponse.json() as { workspace: { workspace_id: string; canonical_path: string } };
 
-    const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    const registry = await openWorkSessionRegistry({ homeDirectory: home });
     const existingSession = registry.createSession({
       runtime_id: "claude-code",
       actor_id: "user",
@@ -87,7 +87,7 @@ test("project workspace actions require confirmation, repair matching Sessions, 
     const repaired = await repairResponse.json() as { workspace: { workspace_id: string; canonical_path: string }; updated_session_count: number };
     assert.equal(repaired.updated_session_count, 2);
 
-    const afterRepair = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    const afterRepair = await openWorkSessionRegistry({ homeDirectory: home });
     assert.equal(afterRepair.get(existingSession.session_id).workspace_path, repaired.workspace.canonical_path);
     assert.equal(afterRepair.get(conflictingSession.session_id).workspace_id, repaired.workspace.workspace_id);
     afterRepair.close();
@@ -119,7 +119,7 @@ test("project workspace actions require confirmation, repair matching Sessions, 
     assert.equal(finalCatalog.listWorkspaceDirectory(project.project_id).length, 0);
     assert.equal(finalCatalog.listWorkspaceMemberships().some((membership) => membership.is_default), false);
     finalCatalog.close();
-    const finalRegistry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    const finalRegistry = await openWorkSessionRegistry({ homeDirectory: home });
     assert.equal(finalRegistry.get(existingSession.session_id).workspace_path, null);
     assert.equal(finalRegistry.get(conflictingSession.session_id).workspace_path, null);
     assert.equal(finalRegistry.get(launched.session.session_id).workspace_path, null);
@@ -131,3 +131,4 @@ test("project workspace actions require confirmation, repair matching Sessions, 
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

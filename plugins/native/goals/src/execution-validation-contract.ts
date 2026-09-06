@@ -394,14 +394,7 @@ export interface ExecutionValidationSnapshot {
     parent_contract_revision: number;
     child_contract_revision: number;
   }>;
-  lifecycle_events: Array<{
-    seq: number;
-    type: string;
-    object_type: string;
-    object_id: string;
-    payload: Record<string, unknown>;
-    at: string;
-  }>;
+  lifecycle_events: import("@adeptify/goalboard-contracts/platform/storage").StoredModuleEvent[];
   candidates: CandidateGoalRecord[];
   contract_proposals: ContractProposalRecord[];
   rewires: RewireRecord[];

@@ -4,13 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "../src/sessions/types.js";
 import {
   PROJECT_OPERATIONS_CLIENT_SCRIPT,
   PROJECT_OPERATIONS_STYLES,
   renderProjectOperations,
-} from "../src/web/project-session-workspaces.js";
+} from "@adeptify/goalboard-app-workbench";
+import { icon } from "../src/web/icons.js";
 import { renderGoalBoardWeb, type GoalBoardWebView } from "../src/web/render.js";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
@@ -93,7 +94,7 @@ test("project operation renderer uses real records or an honest empty state with
   const rendered = renderProjectOperations({
     project_id: "project-real-only",
     display_name: "GoalBoard 信息流工作台重设计",
-  });
+  }, undefined, icon);
   const html = `${rendered.rootItems}${rendered.directories}${rendered.surfaces}${rendered.overlays}`;
   assert.match(rendered.rootItems, /<strong>Sessions<\/strong><small>执行内容、运行位置与续跑<\/small><\/span><svg aria-hidden="true"><use href="#icon-chevron-right"><\/use><\/svg>/);
   assert.doesNotMatch(rendered.rootItems, /工作目录|data-directory-open="workspaces"/);
@@ -138,7 +139,7 @@ test("project Sessions render real Registry records and content/resume APIs stay
   const second = await catalog.createProject({ display_name: "Session 项目 B", actor_id: "user" });
   catalog.close();
 
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   const sessionA = registry.explicitlyLinkSession({
     runtime_id: "codex",
     native_runtime_session_id: "thread-web-a",
@@ -243,3 +244,4 @@ test("project Sessions render real Registry records and content/resume APIs stay
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

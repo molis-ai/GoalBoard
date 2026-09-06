@@ -1,0 +1,159 @@
+/** Browser initializer: only the named ports cross this behavior boundary. */
+export const WORK_SESSION_ADD_CLIENT = `
+({ route, parseActionResponse, showDialogStatus }) => {
+  const sessionAddDialog = document.querySelector("[data-session-add-dialog]");
+  const sessionAddForm = sessionAddDialog?.querySelector("[data-session-add-form]");
+  const sessionAddAction = sessionAddForm?.querySelector("[data-session-add-action]");
+  const sessionAddRuntime = sessionAddForm?.querySelector("[data-session-add-runtime]");
+  const sessionAddNative = sessionAddForm?.querySelector("[data-session-add-native]");
+  const sessionAddNativeInput = sessionAddForm?.querySelector("[data-session-native-id]");
+  const sessionAddConfirm = sessionAddForm?.querySelector("[data-session-add-confirm]");
+  const sessionAddSubmit = sessionAddForm?.querySelector("[data-session-add-submit]");
+  const sessionAddStatus = sessionAddForm?.querySelector("[data-session-add-status]");
+  const sessionAddWorkspaceId = sessionAddForm?.querySelector("[data-session-add-workspace-id]");
+  const sessionAddWorkspace = sessionAddForm?.querySelector("[data-session-add-workspace]");
+  const sessionAddWorkspaceName = sessionAddForm?.querySelector("[data-session-workspace-name]");
+  const sessionAddWorkspacePath = sessionAddForm?.querySelector("[data-session-workspace-path]");
+  const sessionAddWorkspaceMenu = sessionAddForm?.querySelector("[data-session-workspace-menu]");
+  const sessionAddWorkspaceCustomPanel = sessionAddForm?.querySelector("[data-session-workspace-custom-panel]");
+  const sessionAddWorkspaceCustomInput = sessionAddForm?.querySelector("[data-session-workspace-custom-input]");
+  const initialSessionWorkspace = {
+    id: sessionAddWorkspaceId?.defaultValue || "",
+    path: sessionAddWorkspace?.defaultValue || "",
+    name: sessionAddWorkspaceName?.textContent || "不关联工作目录",
+  };
+  const setSessionWorkspace = ({ id = "", path = "", name = "不关联工作目录", custom = false }) => {
+    if (sessionAddWorkspaceId) sessionAddWorkspaceId.value = id;
+    if (sessionAddWorkspace) sessionAddWorkspace.value = path;
+    if (sessionAddWorkspaceName) sessionAddWorkspaceName.textContent = name;
+    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || (custom ? "请输入这台电脑上的绝对路径" : "运行时不绑定本地路径");
+    if (sessionAddWorkspaceCustomPanel) sessionAddWorkspaceCustomPanel.hidden = !custom;
+    if (sessionAddWorkspaceMenu) sessionAddWorkspaceMenu.open = false;
+    if (custom) queueMicrotask(() => sessionAddWorkspaceCustomInput?.focus());
+  };
+  const updateSessionAddForm = () => {
+    const action = sessionAddAction?.value || "create";
+    const option = sessionAddRuntime?.selectedOptions?.[0];
+    const createMode = option?.dataset.createMode || "registry";
+    const discoverMode = option?.dataset.discoverMode || "unsupported";
+    if (sessionAddNative) sessionAddNative.hidden = action !== "link";
+    if (sessionAddNativeInput) sessionAddNativeInput.required = action === "link";
+    const dialogTitle = sessionAddForm?.querySelector("[data-session-add-dialog-title]");
+    const dialogCopy = sessionAddForm?.querySelector("[data-session-add-dialog-copy]");
+    const mode = sessionAddForm?.querySelector("[data-session-add-mode]");
+    const toggle = sessionAddForm?.querySelector("[data-session-add-toggle]");
+    const confirmCopy = sessionAddForm?.querySelector("[data-session-add-confirm-copy]");
+    if (dialogTitle) dialogTitle.textContent = action === "create" ? "新建 Session" : "关联已有 Session";
+    if (dialogCopy) dialogCopy.textContent = action === "create" ? "从当前项目启动一条新的 Runtime Session。" : "把一条已存在的 Runtime Session 收入当前项目。";
+    if (mode) mode.textContent = action === "create" ? "创建新的 Runtime Session" : "关联已有 Runtime Session";
+    if (toggle) toggle.textContent = action === "create" ? "关联已有 Session" : "改为启动新 Session";
+    if (confirmCopy) confirmCopy.textContent = action === "create"
+      ? "确认使用以上 Goal、Runtime 和工作目录启动新 Session。"
+      : "确认只为已有 Session 写入当前 Project、Goal 和工作目录关系。";
+    const capability = sessionAddForm?.querySelector("[data-session-add-capability]");
+    if (capability) capability.textContent = action === "create"
+      ? createMode === "native"
+        ? "会请求所选 Runtime 创建一条新的原生 Session；不会自动发送消息。"
+        : "这个 Runtime 没有原生创建接口，将建立 GoalBoard 托管记录，不伪装成已启动 Runtime。"
+      : discoverMode === "native"
+        ? "可以先同步 Runtime 元数据；只有提交后才会关联当前 Project。"
+        : "这个 Runtime 不支持发现列表，请粘贴原生 Session ID；GoalBoard 不读取正文。";
+    if (sessionAddSubmit) {
+      sessionAddSubmit.textContent = action === "create" ? "启动 Session" : "关联 Session";
+      sessionAddSubmit.disabled = !sessionAddConfirm?.checked || (action === "link" && !sessionAddNativeInput?.value.trim());
+    }
+  };
+  document.querySelectorAll("[data-open-session-add]").forEach((button) => button.addEventListener("click", () => {
+    sessionAddForm?.reset();
+    if (sessionAddAction) sessionAddAction.value = "create";
+    setSessionWorkspace(initialSessionWorkspace);
+    if (sessionAddStatus) sessionAddStatus.hidden = true;
+    updateSessionAddForm();
+    sessionAddDialog?.showModal();
+  }));
+  sessionAddForm?.querySelector("[data-session-add-toggle]")?.addEventListener("click", () => {
+    if (sessionAddAction) sessionAddAction.value = sessionAddAction.value === "create" ? "link" : "create";
+    if (sessionAddConfirm) sessionAddConfirm.checked = false;
+    updateSessionAddForm();
+  });
+  sessionAddForm?.querySelectorAll("[data-session-workspace-option]").forEach((button) => button.addEventListener("click", () => {
+    setSessionWorkspace({ id: button.dataset.workspaceId || "", path: button.dataset.workspacePath || "", name: button.dataset.workspaceName || "工作目录" });
+  }));
+  sessionAddForm?.querySelector("[data-session-workspace-none]")?.addEventListener("click", () => setSessionWorkspace({}));
+  sessionAddForm?.querySelector("[data-session-workspace-custom]")?.addEventListener("click", () => setSessionWorkspace({
+    path: sessionAddWorkspaceCustomInput?.value.trim() || "",
+    name: "其他目录",
+    custom: true,
+  }));
+  sessionAddWorkspaceCustomInput?.addEventListener("input", () => {
+    const path = sessionAddWorkspaceCustomInput.value.trim();
+    if (sessionAddWorkspace) sessionAddWorkspace.value = path;
+    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || "请输入这台电脑上的绝对路径";
+  });
+  sessionAddRuntime?.addEventListener("change", updateSessionAddForm);
+  sessionAddNativeInput?.addEventListener("input", updateSessionAddForm);
+  sessionAddConfirm?.addEventListener("change", updateSessionAddForm);
+  sessionAddForm?.querySelector("[data-session-discover]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const option = sessionAddRuntime?.selectedOptions?.[0];
+    if (option?.dataset.discoverMode !== "native") {
+      showDialogStatus(sessionAddStatus, "这个 Runtime 不支持 Session 列表发现，请直接输入原生 Session ID。", true);
+      return;
+    }
+    button.disabled = true;
+    showDialogStatus(sessionAddStatus, "正在同步 Session 元数据；不会读取正文。", false);
+    try {
+      const payload = await parseActionResponse(await fetch(route("/api/sessions/discover"), {
+        method: "POST",
+        headers: window.goalboardControlHeaders?.() || {},
+        body: JSON.stringify({ runtime_id: sessionAddRuntime.value }),
+      }));
+      const options = sessionAddForm.querySelector("[data-session-discovery-options]");
+      options.replaceChildren();
+      (payload.records || []).forEach((record) => {
+        if (!record.native_runtime_session_id) return;
+        const item = document.createElement("option");
+        item.value = record.native_runtime_session_id;
+        item.label = (record.title || "未命名 Session") + (record.runtime_workspace_hint ? " · " + record.runtime_workspace_hint : "");
+        options.append(item);
+      });
+      showDialogStatus(sessionAddStatus, payload.records?.length
+        ? "已同步 " + payload.records.length + " 条元数据。选择或输入 Session ID 后再确认加入。"
+        : "Runtime 当前没有返回可发现的 Session。", false);
+    } catch (error) {
+      showDialogStatus(sessionAddStatus, error instanceof Error ? error.message : String(error), true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  sessionAddForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!sessionAddConfirm?.checked) return;
+    sessionAddSubmit.disabled = true;
+    showDialogStatus(sessionAddStatus, sessionAddAction.value === "create" ? "正在创建并登记 Session..." : "正在关联这条 Session...", false);
+    try {
+      await parseActionResponse(await fetch(route("/api/sessions"), {
+        method: "POST",
+        headers: window.goalboardControlHeaders?.() || {},
+        body: JSON.stringify({
+          action: sessionAddAction.value,
+          runtime_id: sessionAddRuntime.value,
+          native_runtime_session_id: sessionAddNativeInput?.value.trim() || null,
+          title: sessionAddForm.querySelector("[data-session-add-title]")?.value.trim() || null,
+          current_goal_id: sessionAddForm.querySelector("[data-session-add-goal]")?.value || null,
+          workspace_id: sessionAddWorkspaceId?.value || null,
+          workspace_path: sessionAddForm.querySelector("[data-session-add-workspace]")?.value.trim() || null,
+          user_confirmed: true,
+        }),
+      }));
+      sessionAddDialog.close();
+      location.reload();
+    } catch (error) {
+      showDialogStatus(sessionAddStatus, error instanceof Error ? error.message : String(error), true);
+      sessionAddSubmit.disabled = false;
+    }
+  });
+
+  
+}
+`;

@@ -4,6 +4,8 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
+import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
 import type { PlanningMethodPack } from "@adeptify/goalboard-contracts/modules/goals";
 import {
   ExecutionRepository,
@@ -46,6 +48,7 @@ import {
   createRuntimeContextSetupRequestTable,
   createRuntimeContextSuggestionRejectionTable,
   migrateRuntimeContextBindingEventsForUnbind,
+  migrateRuntimeContextProjectReferences,
 } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardCoordinator } from "../v1/coordinator.js";
 import { DEMO_BOARD_ID, seedDemoBoard } from "../v1/demo.js";
@@ -53,7 +56,7 @@ import { SqliteGoalBoardStore } from "../v1/store.js";
 import type { BoardSnapshot } from "../v1/types.js";
 import { createDesktopPanelTables, SqliteDesktopPanelRepository } from "./desktop-panel-adapter.js";
 
-const CATALOG_SCHEMA_VERSION = 9;
+const CATALOG_SCHEMA_VERSION = 10;
 const CATALOG_OWNER = "goalboard-project-catalog-v1";
 
 export type GoalBoardProjectRecord = ProjectRecord;
@@ -77,31 +80,15 @@ export interface GoalBoardProjectCatalogErrorDetails {
  * ID resumes the same host Session/work entry; a fresh Session must receive a
  * fresh ID from its host.
  */
-export interface RuntimeWorkContext {
-  runtime_id: string;
-  stable_work_context_id: string | null;
-  host_declares_stable: boolean;
-  /** Canonical host workspace, independent from the optional Session ID. */
-  workspace?: RuntimeWorkspaceContext | null;
-}
+export type RuntimeWorkContext = import("@adeptify/goalboard-contracts/modules/private-work-context").RuntimeWorkContext;
 
-export interface NormalizedRuntimeWorkContext {
-  runtime_id: string;
-  stable_work_context_id: string | null;
-  workspace?: NormalizedRuntimeWorkspaceContext;
-}
+export type NormalizedRuntimeWorkContext = import("@adeptify/goalboard-contracts/modules/private-work-context").NormalizedRuntimeWorkContext;
 
-export interface RuntimeWorkspaceContext {
-  canonical_path: string;
-  realpath_verified: boolean;
-}
+export type RuntimeWorkspaceContext = import("@adeptify/goalboard-contracts/modules/private-work-context").RuntimeWorkspaceContext;
 
-export interface NormalizedRuntimeWorkspaceContext extends RuntimeWorkspaceContext {
-  workspace_id: string;
-  display_name: string;
-}
+export type NormalizedRuntimeWorkspaceContext = import("@adeptify/goalboard-contracts/modules/private-work-context").NormalizedRuntimeWorkspaceContext;
 
-export type GoalBoardProjectBindingScope = "session" | "workspace_default";
+export type GoalBoardProjectBindingScope = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardProjectBindingScope;
 
 export type GoalBoardWorkspaceMembership = ProjectWorkspaceMembership;
 export type GoalBoardWorkspaceDirectoryRecord = ProjectWorkspaceDirectoryRecord;
@@ -113,25 +100,11 @@ export type GoalBoardProjectSelection = ProjectSelection;
  * fresh Session. It is never an identity and is never accepted from a Runtime
  * MCP tool argument.
  */
-export type RuntimeProjectSuggestionClueKind =
-  | "workspace"
-  | "path"
-  | "directory"
-  | "repository"
-  | "session_title"
-  | "runtime"
-  | "recent_project"
-  | "project_name";
+export type RuntimeProjectSuggestionClueKind = import("@adeptify/goalboard-contracts/modules/private-work-context").RuntimeProjectSuggestionClueKind;
 
-export interface RuntimeProjectSuggestionClue {
-  kind: RuntimeProjectSuggestionClueKind;
-  value: string;
-}
+export type RuntimeProjectSuggestionClue = import("@adeptify/goalboard-contracts/modules/private-work-context").RuntimeProjectSuggestionClue;
 
-export interface GoalBoardProjectSuggestion extends GoalBoardProjectSelection {
-  /** Generic, user-safe explanation; never includes the host clue value. */
-  reasons: string[];
-}
+export type GoalBoardProjectSuggestion = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardProjectSuggestion;
 
 export type GoalBoardRuntimeContextBinding = RuntimeContextBindingRecord;
 
@@ -141,69 +114,19 @@ export type AliasGoalBoardDesktopPanelSessionInput = AliasDesktopPanelSessionInp
 
 export type GoalBoardRuntimeContextBindingEvent = RuntimeContextBindingEventRecord;
 
-export interface GoalBoardProjectConnection {
-  project_id: string;
-  board_id: string;
-  database_path: string;
-}
+export type GoalBoardProjectConnection = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardProjectConnection;
 
-export interface GoalBoardRuntimeContextResolution {
-  status: "bound" | "suggested" | "unbound";
-  reason: "missing_stable_context" | "unknown_context" | null;
-  next_action:
-    | "continue"
-    | "use_explicit_existing_selection_or_ask_user_to_confirm_suggestion"
-    | "use_explicit_existing_selection_or_ask_user_to_select_or_create";
-  context: NormalizedRuntimeWorkContext;
-  project: GoalBoardProjectSelection | null;
-  connection: GoalBoardProjectConnection | null;
-  suggested_projects: GoalBoardProjectSuggestion[];
-  available_projects: GoalBoardProjectSelection[];
-}
+export type GoalBoardRuntimeContextResolution = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardRuntimeContextResolution;
 
-export interface BindRuntimeWorkContextInput {
-  context: RuntimeWorkContext;
-  project_id: string;
-  actor_id: string;
-  /** The user selected this project in the current Runtime conversation. */
-  user_confirmed: boolean;
-  /** Required only when a previously bound entry switches to another project. */
-  rebind_confirmed?: boolean;
-  /** Omit to record a workspace candidate; `session` only affects the current native Session. */
-  binding_scope?: GoalBoardProjectBindingScope;
-}
+export type BindRuntimeWorkContextInput = import("@adeptify/goalboard-contracts/modules/private-work-context").BindRuntimeWorkContextInput;
 
-export interface UnbindRuntimeWorkContextInput {
-  context: RuntimeWorkContext;
-  actor_id: string;
-  /** The user explicitly asked to disconnect this current Runtime entry. */
-  user_confirmed: boolean;
-  /** Session override by default; workspace removes one long-lived membership. */
-  binding_scope?: "session" | "workspace";
-  project_id?: string;
-}
+export type UnbindRuntimeWorkContextInput = import("@adeptify/goalboard-contracts/modules/private-work-context").UnbindRuntimeWorkContextInput;
 
-export interface GoalBoardRuntimeContextUnbindResult {
-  resolution: GoalBoardRuntimeContextResolution;
-  unbound_project: GoalBoardProjectSelection | null;
-  changed: boolean;
-}
+export type GoalBoardRuntimeContextUnbindResult = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardRuntimeContextUnbindResult;
 
-export interface RejectRuntimeContextSuggestionInput {
-  context: RuntimeWorkContext;
-  project_id: string;
-  actor_id: string;
-  /** The user explicitly rejected this candidate in the current conversation. */
-  user_confirmed: boolean;
-  /** Host-only ranking hints. The model never supplies them through MCP. */
-  suggestion_clues: readonly RuntimeProjectSuggestionClue[];
-}
+export type RejectRuntimeContextSuggestionInput = import("@adeptify/goalboard-contracts/modules/private-work-context").RejectRuntimeContextSuggestionInput;
 
-export interface GoalBoardRuntimeContextSuggestionRejectionResult {
-  resolution: GoalBoardRuntimeContextResolution;
-  rejected_project: GoalBoardProjectSelection;
-  changed: boolean;
-}
+export type GoalBoardRuntimeContextSuggestionRejectionResult = import("@adeptify/goalboard-contracts/modules/private-work-context").GoalBoardRuntimeContextSuggestionRejectionResult;
 
 export interface CreateGoalBoardProjectInput {
   display_name: string;
@@ -230,15 +153,7 @@ export type GoalBoardProjectDeletionResult = ProjectDeletionResult;
  * entry in one recoverable operation. Call this only after the user has
  * explicitly asked for a new project in the current Runtime conversation.
  */
-export interface CreateAndBindRuntimeContextInput {
-  context: RuntimeWorkContext;
-  display_name: string;
-  actor_id: string;
-  user_confirmed: boolean;
-  rebind_confirmed?: boolean;
-  binding_scope?: GoalBoardProjectBindingScope;
-  idempotency_key: string;
-}
+export type CreateAndBindRuntimeContextInput = import("@adeptify/goalboard-contracts/modules/private-work-context").CreateAndBindRuntimeContextInput;
 
 export type GoalBoardProjectMigrationStep = ProjectMigrationStep;
 export type MigrateGoalBoardProjectInput = MigrateProjectInput;
@@ -325,6 +240,7 @@ export class GoalBoardProjectCatalog {
   private constructor(
     private readonly db: Database.Database,
     homeDirectory: string,
+    ledger: ContextLedgerApi,
   ) {
     this.homeDirectory = homeDirectory;
     this.projectsDirectory = path.join(homeDirectory, "projects");
@@ -334,7 +250,9 @@ export class GoalBoardProjectCatalog {
       errorFactory: (code, message) =>
         new GoalBoardProjectCatalogError(code as GoalBoardProjectCatalogError["code"], message),
     });
-    this.workContexts = new RuntimeContextBindingRepository(db);
+    this.workContexts = new RuntimeContextBindingRepository(db, {
+      ledger, assertProject: (projectId) => { this.projects.query.getProject(projectId); },
+    });
     this.desktopPanels = new DesktopPanelService({
       repository: new SqliteDesktopPanelRepository(db),
       errorFactory: (code, message) => new GoalBoardProjectCatalogError(code, message),
@@ -375,13 +293,15 @@ export class GoalBoardProjectCatalog {
       db.pragma("synchronous = FULL");
       db.pragma("foreign_keys = ON");
       db.pragma("busy_timeout = 5000");
-      if (existed) {
-        assertOwnedCatalog(db, databasePath);
-        migrateCatalog(db, databasePath);
-      } else {
-        initializeCatalog(db);
-      }
-      return new GoalBoardProjectCatalog(db, homeDirectory);
+      return db.transaction(() => {
+        if (existed) assertOwnedCatalog(db, databasePath);
+        const ledger = createContextLedger(db, {
+          authorize: (access) => access.scope.kind === "personal" && access.scope.id === "private-work-context",
+        });
+        if (existed) migrateCatalog(db, databasePath, ledger);
+        else initializeCatalog(db);
+        return new GoalBoardProjectCatalog(db, homeDirectory, ledger);
+      }).immediate();
     } catch (error) {
       db.close();
       throw error;
@@ -1013,7 +933,7 @@ export class GoalBoardProjectCatalog {
 
   private removeSessionBinding(binding: GoalBoardRuntimeContextBinding, actorId: string): void {
     const now = new Date().toISOString();
-    this.workContexts.remove(binding.binding_id);
+    this.workContexts.remove(binding.binding_id, actorId, now);
     this.appendRuntimeContextBindingEvent({
       binding,
       type: "context.unbound",
@@ -1197,12 +1117,12 @@ export class GoalBoardProjectCatalog {
             "同一个项目删除请求正在或已经由另一个调用处理，请重新读取项目列表",
           );
         }
-        const deletedSessionBindingCount = this.workContexts.removeProjectFacts(project.project_id);
+        const now = new Date().toISOString();
+        const deletedSessionBindingCount = this.workContexts.removeProjectFacts(project.project_id, actorId, now);
         const deletedWorkspaceMembershipCount =
           this.projects.lifecycle.removeWorkspaceMembershipsForProject(project.project_id);
         this.desktopPanels.deleteForProject(project.project_id);
         this.projects.lifecycle.removeFacts(project.project_id);
-        const now = new Date().toISOString();
         const record: StoredProjectDeletion = {
           deletion_id: `project-deletion-${randomUUID()}`,
           actor_id: actorId,
@@ -1426,7 +1346,7 @@ function assertOwnedCatalog(db: Database.Database, databasePath: string): void {
   }
 }
 
-function migrateCatalog(db: Database.Database, databasePath: string): void {
+function migrateCatalog(db: Database.Database, databasePath: string, ledger: ContextLedgerApi): void {
   const versionRow = db
     .prepare("SELECT value FROM catalog_meta WHERE key = 'schema_version'")
     .get() as { value?: unknown } | undefined;
@@ -1477,6 +1397,11 @@ function migrateCatalog(db: Database.Database, databasePath: string): void {
       createPersonalPlanningMethodPackTable(db);
       db.prepare("UPDATE catalog_meta SET value = ? WHERE key = 'schema_version'").run("9");
       current = 9;
+    }
+    if (current === 9) {
+      migrateRuntimeContextProjectReferences(db, ledger);
+      db.prepare("UPDATE catalog_meta SET value = ? WHERE key = 'schema_version'").run("10");
+      current = 10;
     }
     if (current !== CATALOG_SCHEMA_VERSION) {
       throw new GoalBoardProjectCatalogError(

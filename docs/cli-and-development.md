@@ -1,5 +1,17 @@
 # CLI 与开发
 
+## 安装代码的开发边界
+
+`pnpm build` 现在根据 workspace 声明的依赖顺序构建全部 48 个包，再生成根入口和 PTY bundle；不再依靠手写的迁移包顺序。Plugin CLI 的稳定 bin 启动文件随源码存在，干净 `pnpm install --frozen-lockfile` 后构建即可使用 `pnpm exec goalboard-plugin --help`。包边界扫描覆盖 src、tooling 和 bin 中的 JavaScript/TypeScript 调用。
+
+Desktop 发布脚本归 `apps/desktop/tooling/`，根 `pnpm desktop:*` 命令不变。它调用 Local Host 的 `createGoalBoardRuntimePayload` 生成自包含目录，不在孤立资源目录对 workspace:* manifest 再执行 npm install。失败不覆盖已有资源，vendor 来源、SBOM、许可证随 payload 和 Home 安装保留。
+
+Home 安装、Runtime 接入、常驻 Web 服务和卸载的实现统一在 `apps/local-host/src/installer/`，调用者通过 `@adeptify/goalboard-app-local-host` 公开入口使用；旧 `src/install/` 已删除。不要在 CLI/Web 中复制预览、确认、所有权、回滚和清理规则。
+
+`installGoalBoardHome` 必须接收明确的 `sourceDirectory`；只有产品根 CLI 根据自己的入口位置补默认值，因此从其他工作目录执行、不传 `--source` 仍安装同一个产品。卸载器必须注入 `UninstallProjectAccess`，根 `src/local-host/uninstall.ts` 负责只读连接与现有 Demo 删除装配；Projects 的公开检查负责 catalog facts，预览不迁移数据库。
+
+修改 workspace 源码后必须重新构建。`pnpm build` 最后通过 `apps/local-host/tooling/write-build-manifest.mjs` 调用 Local Host 的构建记录生成函数，覆盖根源码、workspace 包源码/配置和构建脚本；不要单独生成记录掩盖旧构建。新建 workspace 层级时同步 installer fingerprint 的包发现范围与构建列表。定向回归包括 `tests/install.test.ts`、`tests/service.test.ts`、`tests/uninstall.test.ts`、`tests/uninstall-catalog.test.ts`，真实 Web/Desktop 调用由对应集成测试覆盖。DV4 完整发布验收尚未完成，不能把这些回归当成可发布证明。
+
 ## 一次性 V3 导入
 
 旧 JSON 不是并行运行模式，只能通过显式导入写入一个全新的 V1 Board：
@@ -121,7 +133,7 @@ pnpm build:all
 # 当前产品回归与发布内容
 pnpm typecheck
 pnpm test
-pnpm pack --dry-run --json
+pnpm package:npm
 ```
 
 单独检查某个 package 时使用其正式名称，例如：
@@ -135,6 +147,8 @@ pnpm --filter @adeptify/goalboard-integration-github typecheck
 
 `workspace:check` 只核对 F2 包清单；`boundary:check` 扫描真实 import、依赖方向、Contract 入口、依赖环和 Huge Class 临时名单；`workspace:verify` 是本地与 CI 共用的完整 package 门禁。
 
-发行包只包含 GoalBoard V1 的 `dist`、Runtime Skill 和 README，不包含第二套运行时。
+当前 Desktop payload 包含根 dist、正式 workspace 运行依赖、Runtime Skill、Node 和 vendor 来源/许可资产，不包含第二套业务实现。npm 使用 `pnpm package:npm`：先完整构建，再由 Local Host tooling 在临时目录生成 `release/npm/*.tgz`。需要其他输出目录时用 `pnpm package:npm /absolute/output`。不要直接在源码根执行 npm/pnpm pack；它会提示正确命令，避免生成含 workspace:* 的不可安装包。
+
+npm 产物随包交付实际依赖的 workspace 与 vendor JavaScript 包，按各包 files 声明保留发布资产；注册表依赖由消费者正常安装，SQLite/PTY 不带入构建机二进制，也不附 Node。消费环境需要 Node 24+。本地验收先在新目录执行 `npm install /absolute/archive.tgz`（不能跳过安装脚本），再执行 `node tests/npm-distribution-smoke.mjs /absolute/consumer`。该检查通过实际产品入口验证 CLI、SQLite 持久化、PTY、方法资产、Home 安装及源包不可用时的 MCP 握手；只支持当前 Unix 测试宿主，不声称验证其他平台。
 
 上句描述当前发布物。Monorepo 重组完成后的 package、安装和发布命令由 DV4 与最终 Cutover Goal 更新并在干净环境验证。

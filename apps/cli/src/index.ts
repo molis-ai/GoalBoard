@@ -1,5 +1,20 @@
+export { createCliDraftDialogueHandlers } from "./draft-dialogue-commands.js";
+export { createCliGoalTreeHandlers } from "./goal-tree-commands.js";
+export { createCliLegacyProposalHandlers } from "./legacy-proposal-commands.js";
 import type { GoalsApplicationApi } from "@adeptify/goalboard-contracts/modules/goals";
 import type { ExecutionValidationApplicationApi } from "@adeptify/goalboard-plugin-goals";
+export { createCliExecutionCommandHandlers } from "./execution-commands.js";
+export { createCliGoalCommandHandlers } from "./goal-commands.js";
+export { createCliAvailabilityQueryHandlers } from "./availability-queries.js";
+
+export {
+  DEFAULT_CLI_DATABASE,
+  cliFlagValue,
+  readCliJsonPayload,
+  printCliJson,
+  cliGoalUrl,
+  printV1Help,
+} from "./protocol.js";
 
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-app-cli",
@@ -21,6 +36,7 @@ export function createCliGoalsAdapter<TTransition>(
   goals: GoalsApplicationApi<TTransition>,
 ): CliGoalsAdapter<TTransition> {
   return {
+    impacts: goals.impacts,
     commands: goals.commands,
     lifecycle: goals.lifecycle,
     planning: goals.planning,

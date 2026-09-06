@@ -16,11 +16,19 @@ This package explicitly does **not** own Business facts, Module rules, or Runtim
 
 ## Dependencies
 
+`AliasDesktopPanelSessionInput` now has its sole definition in the App Host Contract; the Desktop entrypoint re-exports it. Alias behavior and persistence still belong to the existing Desktop Panel service. Local Host consumes it when connecting a late native Session to its original panel.
+
 The app depends on public Contracts and the Feed native Plugin's external-content redactor. Panel persistence and Project context are injected ports. It does not deep-import legacy code, import SQLite, or own Module Stores.
 
 The native adapter source lives under `adapters/tauri/src/`, split into window/Capsule composition, PTY, managed Web service and Runtime environment responsibilities. `../../desktop/src-tauri/` remains distribution configuration and points its binary at this adapter.
 
 ## Commands
+
+DV4 release tooling lives under `tooling/`: build, verified Node download/runtime preparation, App install/start and release-version checks. Root `pnpm desktop:*` commands call these files; they are not a second application package. `prepare-runtime-payload.mjs` consumes Local Host's public `createGoalBoardRuntimePayload`, verifies native dependencies and CLI using the payload's Node with the payload as cwd, then replaces generated resources. A failed preparation leaves the previous resources untouched. It does not run npm install over unresolved `workspace:*` manifests. Node checksum and target-architecture checks remain in the shell preparation step.
+
+The Local Host dependency is for this release composition; Desktop still does not own installer rules or Module Stores. Tauri configuration remains under `desktop/src-tauri`; final DMG/signing/notarization and installed recovery acceptance are not implied by payload tests.
+
+The release command preserves an explicit `APPLE_SIGNING_IDENTITY`; when absent, it explicitly selects ad-hoc (`-`). Before exporting DMG/zip and their SHA256 sidecars, it verifies the App signature and then reports the artifact's actual signing metadata. Local integrity verification is not notarization or Gatekeeper approval. The GitHub release workflow is currently manual-only; this migration does not enable automatic publication. Desktop first-run verification still uses the existing fixed 4173 endpoint and user LaunchAgent label, so changing GOALBOARD_HOME alone does not isolate it from a running user service.
 
 ```bash
 pnpm --filter @adeptify/goalboard-app-desktop typecheck

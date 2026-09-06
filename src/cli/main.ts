@@ -1,13 +1,17 @@
 #!/usr/bin/env node
-import { installGoalBoardHome, type GoalBoardHomeInstallResult } from "../install/home.js";
-import { GoalBoardUninstallService, type GoalBoardUninstallPlan } from "../install/uninstall.js";
+import { installGoalBoardHome, type GoalBoardHomeInstallResult } from "@adeptify/goalboard-app-local-host";
+import type { GoalBoardUninstallPlan } from "@adeptify/goalboard-app-local-host";
+import { createLocalUninstallService } from "../local-host/uninstall.js";
 import {
   GoalBoardWebServiceManager,
   type GoalBoardWebServiceAction,
   type GoalBoardWebServicePlan,
-} from "../install/web-service.js";
+} from "@adeptify/goalboard-app-local-host";
 import { printV1Help, runV1Cli } from "../v1/cli.js";
 import { withGoalBoardProjectCatalog } from "../projects/catalog-session.js";
+import { runPluginCli } from "@adeptify/goalboard-plugin-cli";
+import { runLocalPluginDevelopment } from "../local-host/plugin-development.js";
+import { fileURLToPath } from "node:url";
 
 function flag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -89,8 +93,11 @@ function printUninstallPlan(plan: GoalBoardUninstallPlan): void {
 
 export async function main(args = process.argv.slice(2)): Promise<number> {
   try {
+    if (args[0] === "plugin") return runPluginCli(args.slice(1), {
+      stdout: value => process.stdout.write(value), stderr: value => process.stderr.write(value),
+    }, { runDevelopment: runLocalPluginDevelopment });
     if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
-      console.log("GoalBoard commands: goalboard install | goalboard service <operation> | goalboard demo <operation> | goalboard uninstall | goalboard v1 <operation>\n");
+      console.log("GoalBoard commands: goalboard install | goalboard service <operation> | goalboard demo <operation> | goalboard uninstall | goalboard plugin <operation> | goalboard v1 <operation>\n");
       printV1Help();
       return 0;
     }
@@ -101,7 +108,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       }
       const result = await installGoalBoardHome({
         homeDirectory: flag(args, "--home"),
-        sourceDirectory: flag(args, "--source"),
+        sourceDirectory: flag(args, "--source") ?? fileURLToPath(new URL("../../", import.meta.url)),
         version: flag(args, "--version"),
       });
       if (args.includes("--json")) console.log(JSON.stringify(result, null, 2));
@@ -187,7 +194,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
         printUninstallHelp();
         return 0;
       }
-      const service = new GoalBoardUninstallService({ homeDirectory: flag(args, "--home") });
+      const service = createLocalUninstallService({ homeDirectory: flag(args, "--home") });
       const purgeUserData = args.includes("--purge-user-data");
       const plan = await service.prepare({ purge_user_data: purgeUserData });
       if (!args.includes("--confirm")) {

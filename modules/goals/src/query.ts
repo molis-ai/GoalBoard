@@ -12,10 +12,13 @@ import type {
 
 import {
   GoalsCommandContext,
+  requestHash,
   type GoalsCommandContextOptions,
 } from "./command-support.js";
 import { GuidanceCommands } from "./guidance-commands.js";
 import { GoalsRepository } from "./repository.js";
+import { GoalQueryFactsRepository } from "./query-facts-repository.js";
+import { LegacyGoalCoverage } from "./legacy-coverage.js";
 
 const DEFAULT_GOAL_POLICY: GoalPolicy = {
   goal_mode: "preferred",
@@ -32,6 +35,7 @@ const GOAL_MODE_ORDER = { disabled: 0, preferred: 1, required: 2 } as const;
 export class GoalsQueryService implements GoalsQueryApi {
   private readonly context: GoalsCommandContext;
   private readonly guidance: GuidanceCommands;
+  private readonly facts: GoalQueryFactsRepository;
 
   constructor(
     readonly repository: GoalsRepository,
@@ -39,15 +43,61 @@ export class GoalsQueryService implements GoalsQueryApi {
   ) {
     this.context = new GoalsCommandContext(repository, options);
     this.guidance = new GuidanceCommands(this.context);
+    this.facts = new GoalQueryFactsRepository(repository.db);
   }
+
+  listPolicyHistory(boardId: string) { return this.facts.listPolicyHistory(boardId); }
+  listLegacyCoverage(boardId: string) { return new LegacyGoalCoverage(this.context).list(boardId); }
+  listGoalRiskLinks(boardId: string) { return this.repository.listGoalRiskLinks(boardId); }
+  listDependencies(boardId: string, goalId: string) { return this.facts.listDependencies(boardId, goalId); }
+  listOpenGoalRisks(boardId: string, goalId: string) { return this.facts.listOpenGoalRisks(boardId, goalId); }
+  activeReplacement(boardId: string, goalId: string) { return this.facts.activeReplacement(boardId, goalId); }
 
   getBoard(boardId: string): GoalsBoardRecord | null {
     return this.repository.getBoard(boardId);
   }
 
+  policyBindingVersion(boardId: string, bindingId: string, mode: "legacy" | "semantic-v1"): { exists: boolean; version: string } {
+    const current = this.repository.db.prepare("SELECT * FROM policy_bindings WHERE board_id = ? AND policy_binding_id = ?")
+      .get(boardId, bindingId) as Record<string, unknown> | undefined;
+    if (!current) return { exists: false, version: "absent" };
+    // Old baselines include serialized policy_json verbatim, including whitespace.
+    // Parsing it here would invalidate saved proposals even when no fact changed.
+    const version = mode === "legacy" ? requestHash(current) : `semantic-v1:${requestHash(Object.fromEntries(
+      Object.entries(current).filter(([key]) => !["created_at", "updated_at", "decided_at", "deactivated_at"].includes(key)),
+    ))}`;
+    return { exists: true, version };
+  }
+
   getGoal(boardId: string, goalId: string): GoalRecord | null {
     const goal = this.repository.getGoal(goalId);
     return goal?.board_id === boardId ? goal : null;
+  }
+
+  hasGoalIdentity(goalId: string): boolean {
+    return this.repository.getGoal(goalId) !== null;
+  }
+
+  getRelation(boardId: string, relationId: string) {
+    return this.repository.getRelation(boardId, relationId);
+  }
+
+  listContractRevisions(boardId: string) { return this.repository.listContractRevisions(boardId); }
+  listLifecycleEvents(boardId: string) { return this.repository.listLifecycleEvents(boardId); }
+  listCoverageRevisions(boardId: string) { return this.repository.listCoverageRevisions(boardId); }
+
+  getRisk(boardId: string, riskId: string) {
+    return this.repository.getRisk(boardId, riskId);
+  }
+
+  policyBindingState(boardId: string, bindingId: string): "active" | "replaced" | "withdrawn" | null {
+    const row = this.repository.db.prepare("SELECT state FROM policy_bindings WHERE board_id = ? AND policy_binding_id = ?")
+      .get(boardId, bindingId) as { state: "active" | "replaced" | "withdrawn" } | undefined;
+    return row?.state ?? null;
+  }
+
+  criterionGoalId(criterionId: string): string | null {
+    return this.repository.criterionGoalId(criterionId);
   }
 
   listGoals(

@@ -30,7 +30,7 @@
   "goalboard": {
     "path": "modules/context-ledger",
     "kind": "module",
-    "maturity": "contract-only",
+    "maturity": "partial",
     "contract": "@adeptify/goalboard-contracts/modules/context-ledger",
     "migrationGoals": [
       "goal-reorg-f2",

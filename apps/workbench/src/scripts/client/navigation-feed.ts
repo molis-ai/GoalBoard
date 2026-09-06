@@ -4,39 +4,7 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       if (!workTabs) return;
       const byId = new Map(visibleGoals().map((item) => [item.goal.goal_id, item]));
       const fragment = document.createDocumentFragment();
-      if (!decisionView && !collectionView) {
-        openWorkTabs = openWorkTabs.filter((goalId) => byId.has(goalId));
-        if (selected && byId.has(selected) && !openWorkTabs.includes(selected)) openWorkTabs.push(selected);
-        openWorkTabs.forEach((goalId, index) => {
-          const item = byId.get(goalId);
-          if (!item) return;
-          const selectedTab = activeDesktopSurface === "goal" && goalId === selected;
-          const shell = document.createElement("div");
-          shell.className = "desktop-work-tab" + (selectedTab ? " is-selected" : "");
-          shell.dataset.workTabShell = goalId;
-          const tab = document.createElement("button");
-          tab.type = "button";
-          tab.id = "desktop-work-tab-" + index;
-          tab.role = "tab";
-          tab.dataset.workTab = goalId;
-          tab.setAttribute("aria-selected", String(selectedTab));
-          tab.setAttribute("aria-controls", "goal-document-pane");
-          tab.tabIndex = selectedTab ? 0 : -1;
-          const dot = document.createElement("i");
-          dot.dataset.status = item.status;
-          dot.setAttribute("aria-hidden", "true");
-          const label = document.createElement("span");
-          label.textContent = item.goal.title;
-          tab.append(dot, label);
-          const close = document.createElement("button");
-          close.type = "button";
-          close.dataset.closeWorkTab = goalId;
-          close.setAttribute("aria-label", L("关闭 {title}", { title: item.goal.title }));
-          close.textContent = "×";
-          shell.append(tab, close);
-          fragment.append(shell);
-        });
-      }
+      appendGoalWorkTabs(fragment, byId);
       if (activeDesktopSurface !== "goal" || decisionView || collectionView) {
         const surface = desktopWorkSurfaces.find((candidate) => candidate.dataset.workSurface === activeDesktopSurface);
         if (surface) {
@@ -62,26 +30,6 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       else documentPane.removeAttribute("aria-labelledby");
       persistWorkTabs();
       ensureActiveWorkTabVisible();
-    };
-
-    const ensureWorkTab = (goalId) => {
-      if (!workTabs || decisionView || collectionView || !goalId) return;
-      if (!openWorkTabs.includes(goalId)) openWorkTabs.push(goalId);
-      if (openWorkTabs.length > 8) {
-        const removable = openWorkTabs.find((candidate) => candidate !== goalId && candidate !== selected);
-        if (removable) openWorkTabs = openWorkTabs.filter((candidate) => candidate !== removable);
-        else openWorkTabs = openWorkTabs.slice(-8);
-      }
-      renderWorkTabs();
-    };
-
-    const focusWorkTab = (goalId) => {
-      if (!workTabs || !goalId) return;
-      requestAnimationFrame(() => {
-        const tab = [...workTabs.querySelectorAll("[data-work-tab]")]
-          .find((candidate) => candidate.dataset.workTab === goalId);
-        tab?.focus();
-      });
     };
 
     const restoreLastGoal = (openGoalsDirectory = false) => {
@@ -602,4 +550,3 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       }
     };
 `;
-

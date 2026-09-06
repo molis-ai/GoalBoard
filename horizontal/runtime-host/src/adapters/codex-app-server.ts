@@ -40,6 +40,7 @@ export class CodexAppServerTransport implements RuntimeSessionTransport {
   async request(method: string, params: Record<string, unknown>): Promise<unknown> {
     if (this.closed) throw new Error("Codex Session transport 已关闭");
     await this.ensureStarted();
+    if (this.closed) throw new Error("Codex Session transport 已关闭");
     return this.requestRaw(method, params);
   }
 
@@ -55,17 +56,18 @@ export class CodexAppServerTransport implements RuntimeSessionTransport {
     this.startPromise = null;
     this.resetResponseBuffer();
     this.failAll(new Error("Codex Session transport 已关闭"));
+    this.listeners.clear();
     if (child && !child.killed) child.kill("SIGTERM");
   }
 
   private ensureStarted(): Promise<void> {
-    if (this.child) return Promise.resolve();
     if (this.startPromise) return this.startPromise;
-    this.startPromise = this.start().catch((error) => {
-      this.startPromise = null;
-      throw error;
-    });
-    return this.startPromise;
+    if (this.child) return Promise.resolve();
+    const pending = this.start();
+    this.startPromise = pending;
+    const clear = () => { if (this.startPromise === pending) this.startPromise = null; };
+    void pending.then(clear, clear);
+    return pending;
   }
 
   private async start(): Promise<void> {
@@ -84,15 +86,20 @@ export class CodexAppServerTransport implements RuntimeSessionTransport {
     child.once("exit", () => this.handleExit(child, "Codex app-server 已退出"));
     child.stderr.on("data", () => undefined);
 
-    await this.requestRaw("initialize", {
-      clientInfo: { name: "goalboard-session-browser", title: "GoalBoard", version: "0.1.14" },
-      capabilities: {
-        experimentalApi: false,
-        requestAttestation: false,
-        optOutNotificationMethods: [],
-      },
-    });
-    this.write({ method: "initialized" });
+    try {
+      await this.requestRaw("initialize", {
+        clientInfo: { name: "goalboard-session-browser", title: "GoalBoard", version: "0.1.14" },
+        capabilities: {
+          experimentalApi: false,
+          requestAttestation: false,
+          optOutNotificationMethods: [],
+        },
+      });
+      this.write({ method: "initialized" });
+    } catch (error) {
+      this.failProtocolLine(child, error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
   }
 
   private requestRaw(method: string, params: Record<string, unknown>): Promise<unknown> {

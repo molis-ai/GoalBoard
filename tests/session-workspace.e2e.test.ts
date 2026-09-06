@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "../src/sessions/types.js";
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
@@ -307,7 +307,7 @@ test("fallback journey preserves TUI content, honest capability limits, workspac
     assert.equal(created.session.workspace_path, workspace.canonical_path);
 
     const marker = "FALLBACK-TUI-PRIVATE-MARKER";
-    const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    const registry = await openWorkSessionRegistry({ homeDirectory: home });
     try {
       registry.appendEvent({
         session_id: created.session.session_id,
@@ -403,7 +403,7 @@ test("fallback journey preserves TUI content, honest capability limits, workspac
     await access(firstPath);
     await access(repairedPath);
 
-    const reopened = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    const reopened = await openWorkSessionRegistry({ homeDirectory: home });
     try {
       assert.equal(reopened.get(created.session.session_id).workspace_path, repaired.workspace.canonical_path);
       assert.equal(reopened.get(sent.destination_session.session_id).workspace_path, repaired.workspace.canonical_path);
@@ -417,3 +417,4 @@ test("fallback journey preserves TUI content, honest capability limits, workspac
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

@@ -4,13 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
-import { PROJECT_OPERATIONS_STYLES } from "../src/web/project-session-workspaces.js";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
+import { PROJECT_OPERATIONS_STYLES } from "@adeptify/goalboard-plugin-work";
 import {
   GoalBoardWorkspaceActionError,
   repairProjectWorkspace,
   unlinkProjectWorkspace,
-} from "../src/web/workspace-project-actions.js";
+} from "@adeptify/goalboard-plugin-work";
 
 test("Session and workspace row states render one status frame", () => {
   assert.doesNotMatch(PROJECT_OPERATIONS_STYLES, /\.project-record-row \.directory-row-state/);
@@ -137,7 +137,7 @@ test("workspace Session reassignment is project isolated and preserves Session i
   const next = path.join(directory, "next");
   await mkdir(previous, { recursive: true });
   await mkdir(next, { recursive: true });
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     const first = registry.createSession({
       runtime_id: "claude-code",
@@ -185,3 +185,4 @@ test("workspace Session reassignment is project isolated and preserves Session i
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

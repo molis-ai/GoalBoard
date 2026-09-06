@@ -9,6 +9,9 @@
     "node": ">=24"
   },
   "sideEffects": false,
+  "bin": {
+    "goalboard-plugin": "./bin/goalboard-plugin.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,6 +19,7 @@
     }
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],
@@ -25,12 +29,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@adeptify/goalboard-plugin-runtime": "workspace:*",
     "@adeptify/goalboard-contracts": "workspace:*"
   },
   "goalboard": {
     "path": "tooling/plugin-cli",
     "kind": "tooling",
-    "maturity": "contract-only",
+    "maturity": "partial",
     "contract": "@adeptify/goalboard-contracts/platform/tooling",
     "migrationGoals": [
       "goal-reorg-f2",

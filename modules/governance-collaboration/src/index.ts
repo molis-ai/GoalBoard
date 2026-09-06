@@ -13,6 +13,10 @@ import {
   type GovernanceReviewLifecycleOptions,
 } from "./review-lifecycle.js";
 import { GovernanceRecordStore } from "./record-store.js";
+import { GovernanceProvenance } from "./provenance.js";
+import { GovernanceClarificationStore } from "./clarification-store.js";
+import { GovernanceDecisionTransactions } from "./decision-transactions.js";
+export { GovernanceClarificationStore } from "./clarification-store.js";
 
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-module-governance-collaboration",
@@ -37,6 +41,8 @@ export interface GovernanceCollaborationModuleOptions extends GovernanceReviewLi
 }
 
 export class GovernanceCollaborationModule implements GovernanceApplicationApi {
+  readonly clarification: GovernanceClarificationStore;
+  readonly provenance: GovernanceProvenance;
   readonly repository: GovernanceRepository;
   readonly reviews: GovernanceReviewLifecycle;
   readonly records: GovernanceRecordsApi;
@@ -44,13 +50,17 @@ export class GovernanceCollaborationModule implements GovernanceApplicationApi {
   readonly query: GovernanceQueryApi;
 
   constructor(options: GovernanceCollaborationModuleOptions) {
+    this.clarification = new GovernanceClarificationStore(options.db, options.now, options.errorFactory);
+    this.provenance = new GovernanceProvenance(options.errorFactory);
     this.repository = new GovernanceRepository(options.db);
     this.reviews = new GovernanceReviewLifecycle(this.repository, options);
-    this.records = new GovernanceRecordStore(options.db);
-    this.decisions = {
-      materializeAtomically: (operation) => this.repository.immediate(operation),
-    };
+    this.records = new GovernanceRecordStore(options.db, options.errorFactory);
+    this.decisions = new GovernanceDecisionTransactions(options.db);
     this.query = {
+      hasCandidateBootstrap: (boardId, candidateId, goalId, proposalId) =>
+        this.repository.hasCandidateBootstrap(boardId, candidateId, goalId, proposalId),
+      listLifecycleEvents: boardId => this.repository.listLifecycleEvents(boardId),
+      eventCursor: (boardId) => this.repository.eventCursor(boardId),
       snapshot: (boardId) => this.repository.snapshot(boardId),
       getReviewObligation: (boardId, obligationId) =>
         this.repository.getReviewObligation(boardId, obligationId),
@@ -71,6 +81,7 @@ export class GovernanceCollaborationModule implements GovernanceApplicationApi {
 }
 
 export { GovernanceError, type GovernanceErrorFactory } from "./errors.js";
+export { GovernanceProvenance } from "./provenance.js";
 export {
   json as governanceJson,
   mapCandidate,

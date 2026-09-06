@@ -6,7 +6,7 @@ import {
   buildGoalMomentumView,
   type GoalMomentumGoalInput,
   type GoalMomentumRelationInput,
-} from "../src/web/goal-momentum.js";
+} from "@adeptify/goalboard-plugin-goals";
 
 const NOW = new Date("2026-08-30T12:00:00.000Z");
 

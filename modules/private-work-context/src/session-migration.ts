@@ -7,7 +7,7 @@ import type {
 } from "./contract-aliases.js";
 import { GoalBoardSessionError } from "./errors.js";
 import { SessionRecordRepository } from "./session-records.js";
-import { DEFAULT_CORRELATION_TTL_SECONDS, mapSession } from "./session-schema.js";
+import { DEFAULT_CORRELATION_TTL_SECONDS } from "./session-schema.js";
 
 export class LegacySessionMigrator {
   constructor(
@@ -105,8 +105,10 @@ export class LegacySessionMigrator {
             );
           }
           if (!session.project_id) {
-            this.db.prepare("UPDATE sessions SET project_id = ?, updated_at = ? WHERE session_id = ?")
-              .run(binding.project_id, binding.updated_at, session.session_id);
+            this.sessions.setAssociationReferences(session.session_id, binding.project_id,
+              session.current_goal_id, session.workspace_id, binding.bound_by || "legacy-session-migration", binding.updated_at);
+            this.db.prepare("UPDATE sessions SET updated_at = ? WHERE session_id = ?")
+              .run(binding.updated_at, session.session_id);
             session = this.sessions.get(session.session_id);
           }
           reusedSessions += 1;
@@ -132,7 +134,7 @@ export class LegacySessionMigrator {
       INNER JOIN sessions ON sessions.session_id = receipts.session_id
       WHERE receipts.source_id = ?
     `).get(sourceId) as Record<string, unknown> | undefined;
-    return row ? mapSession(row) : null;
+    return row ? this.sessions.get(String(row.session_id)) : null;
   }
 
   private writeReceipt(sourceId: string, sessionId: string, source: unknown): number {
@@ -164,20 +166,14 @@ export class LegacySessionMigrator {
       throw new GoalBoardSessionError("session.identity_conflict", "旧 panel 已连接另一个 Runtime 原生 Session");
     }
     const now = panel.updated_at || this.now().toISOString();
-    if (panel.goal_id !== current.current_goal_id) {
-      this.db.prepare(`
-        UPDATE session_goal_links SET relation = 'history', ended_at = ?
-        WHERE session_id = ? AND relation = 'current'
-      `).run(now, current.session_id);
-      this.sessions.insertGoalLink(current.session_id, panel.goal_id, "legacy-session-migration", now);
-    }
+    this.sessions.setAssociationReferences(current.session_id, current.project_id ?? panel.project_id,
+      panel.goal_id, current.workspace_id ?? panel.workspace_id, "legacy-session-migration", now);
     this.db.prepare(`
       UPDATE sessions
       SET native_runtime_session_id = COALESCE(native_runtime_session_id, ?),
           correlation_token = CASE WHEN ? IS NULL THEN correlation_token ELSE NULL END,
           correlation_expires_at = CASE WHEN ? IS NULL THEN correlation_expires_at ELSE NULL END,
-          surface_id = COALESCE(surface_id, ?), project_id = COALESCE(project_id, ?),
-          current_goal_id = ?, workspace_id = COALESCE(workspace_id, ?),
+          surface_id = COALESCE(surface_id, ?),
           workspace_path = COALESCE(workspace_path, ?), title = COALESCE(title, ?),
           status = ?, updated_at = ?
       WHERE session_id = ?
@@ -186,9 +182,6 @@ export class LegacySessionMigrator {
       panel.host_session_id,
       panel.host_session_id,
       panel.panel_id,
-      panel.project_id,
-      panel.goal_id,
-      panel.workspace_id,
       panel.workspace_path,
       panel.title,
       panel.status === "open" ? "active" : "closed",

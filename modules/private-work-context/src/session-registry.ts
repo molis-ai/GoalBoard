@@ -1,3 +1,7 @@
+import type { WorkSessionApi } from "@adeptify/goalboard-contracts/modules/private-work-context";
+import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
+import { SessionAssociationRepository } from "./session-associations.js";
+import { HandoffAssociationRepository } from "./handoff-associations.js";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -29,6 +33,7 @@ import { SessionRecordRepository } from "./session-records.js";
 import { initializeOrValidateSessionSchema } from "./session-schema.js";
 
 export interface GoalBoardSessionRegistryOptions {
+  createLedger(db: Database.Database): ContextLedgerApi;
   homeDirectory?: string;
   now?: () => Date;
 }
@@ -40,7 +45,7 @@ export interface GoalBoardSessionRegistryOptions {
  * components; callers keep the established API while their imports move to the
  * package public entrypoint.
  */
-export class GoalBoardSessionRegistry {
+export class GoalBoardSessionRegistry implements WorkSessionApi {
   readonly homeDirectory: string;
   readonly databasePath: string;
 
@@ -56,7 +61,7 @@ export class GoalBoardSessionRegistry {
     this.databasePath = path.join(homeDirectory, "sessions", "sessions.db");
   }
 
-  static async open(options: GoalBoardSessionRegistryOptions = {}): Promise<GoalBoardSessionRegistry> {
+  static async open(options: GoalBoardSessionRegistryOptions): Promise<GoalBoardSessionRegistry> {
     const homeDirectory = path.resolve(options.homeDirectory ?? path.join(os.homedir(), ".goalboard"));
     const sessionsDirectory = path.join(homeDirectory, "sessions");
     await fs.mkdir(sessionsDirectory, { recursive: true });
@@ -67,11 +72,19 @@ export class GoalBoardSessionRegistry {
       db.pragma("synchronous = FULL");
       db.pragma("foreign_keys = ON");
       db.pragma("busy_timeout = 5000");
-      initializeOrValidateSessionSchema(db);
       const now = options.now ?? (() => new Date());
       const contentStore = createSessionContentStore(path.join(sessionsDirectory, "content"));
-      const sessions = new SessionRecordRepository(db, now);
-      const handoffs = new SessionHandoffRepository(db, now, contentStore, sessions);
+      const { associations, handoffAssociations } = db.transaction(() => {
+        initializeOrValidateSessionSchema(db);
+        const ledger = options.createLedger(db);
+        const owner = new SessionAssociationRepository(ledger);
+        owner.migrate(db);
+        const handoffOwner = new HandoffAssociationRepository(ledger);
+        handoffOwner.migrate(db);
+        return { associations: owner, handoffAssociations: handoffOwner };
+      }).immediate();
+      const sessions = new SessionRecordRepository(db, now, associations);
+      const handoffs = new SessionHandoffRepository(db, now, contentStore, sessions, handoffAssociations);
       const registry = new GoalBoardSessionRegistry(
         db,
         homeDirectory,

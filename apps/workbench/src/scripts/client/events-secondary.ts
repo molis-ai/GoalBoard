@@ -241,77 +241,16 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         setDesktopDirectory("root");
         return;
       }
-      const closeWorkTab = target.closest("[data-close-work-tab]");
-      if (closeWorkTab && workTabs && !decisionView && !collectionView) {
-        const goalId = closeWorkTab.dataset.closeWorkTab;
-        const index = openWorkTabs.indexOf(goalId);
-        if (index < 0) return;
-        if (openWorkTabs.length === 1) {
-          showToast(L("至少保留一个打开的 Goal"));
-          return;
-        }
-        openWorkTabs.splice(index, 1);
-        persistWorkTabs();
-        if (goalId === selected) {
-          const nextGoalId = openWorkTabs[Math.min(index, openWorkTabs.length - 1)];
-          if (nextGoalId) {
-            await selectGoal(nextGoalId);
-            focusWorkTab(nextGoalId);
-          }
-        } else {
-          renderWorkTabs();
-          focusWorkTab(selected);
-        }
+      const goalWorkTabClick = handleGoalWorkTabClick(target);
+      if (goalWorkTabClick) { await goalWorkTabClick; return; }
+      if (handleTreeSearchFocus(target)) return;
+      const recordEventsClick = handleGoalRecordEventsClick(target);
+      if (recordEventsClick) {
+        await recordEventsClick;
         return;
       }
-      const workTab = target.closest("[data-work-tab]");
-      if (workTab) {
-        setDesktopDirectory("goals", true, false, workTab);
-        setDesktopWorkSurface("goal", true, true);
-        await selectGoal(workTab.dataset.workTab);
-        return;
-      }
-      if (target.closest("[data-personal-search]")) {
-        treeSearch?.focus();
-        treeSearch?.select();
-        return;
-      }
-      const loadMoreEventsButton = target.closest("[data-load-more-goal-events]");
-      if (loadMoreEventsButton) {
-        await loadMoreGoalEvents(loadMoreEventsButton);
-        return;
-      }
-      if (!treeFilter?.hidden && !target.closest("[data-tree-filter], [data-tree-filter-trigger]")) setTreeFilterOpen(false);
-      if (target.closest("[data-clear-status-filter]")) {
-        setSelectedStatuses([]);
-        filterTree(treeSearch.value);
-        queueSave();
-        return;
-      }
-      if (target.closest("[data-clear-tree-filter]")) {
-        treeSearch.value = "";
-        setSelectedStatuses([]);
-        filterTree("");
-        queueSave();
-        return;
-      }
-      const treeToggle = target.closest("[data-tree-toggle]");
-      if (treeToggle) {
-        const item = treeToggle.closest("[data-tree-item]");
-        const collapsed = item.classList.toggle("is-collapsed");
-        treeToggle.setAttribute("aria-expanded", String(!collapsed));
-        saveUiState();
-        return;
-      }
-      if (target.closest("[data-retry-goal-momentum]")) {
-        void loadGoalGraph();
-        return;
-      }
-      const navigatorViewButton = target.closest("button[data-navigator-view]");
-      if (navigatorViewButton) {
-        setNavigatorView(navigatorViewButton.dataset.navigatorView);
-        return;
-      }
+      if (handleTreeDisclosureClick(target)) return;
+      if (handleMomentumNavigationClick(target)) return;
       const workbenchViewButton = target.closest("button[data-workbench-view]");
       if (workbenchViewButton) {
         setWorkspaceMode(workbenchViewButton.dataset.workbenchView);
@@ -325,78 +264,15 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         setDirectoryCollapsed(!workspace.classList.contains("is-directory-collapsed"));
         return;
       }
-      const momentumFilterButton = target.closest("[data-momentum-filter]");
-      if (momentumFilterButton) {
-        momentumOpenOnly = momentumFilterButton.dataset.momentumFilter === "open";
-        updateGraphVisibility();
-        queueSave();
-        return;
-      }
-      const momentumPeriodButton = target.closest("[data-momentum-period]");
-      if (momentumPeriodButton) {
-        setMomentumPeriod(momentumPeriodButton.dataset.momentumPeriod);
-        return;
-      }
-      const momentumSelectButton = target.closest("[data-momentum-select], [data-momentum-node]");
-      if (momentumSelectButton) {
-        updateMomentumSelection(momentumSelectButton.dataset.momentumSelect || momentumSelectButton.dataset.goalId);
-        return;
-      }
+      if (handleMomentumSelectionClick(target)) return;
       if (target.closest("[data-companion-runtime-open]")) {
         setWorkspaceMode("runtime");
         return;
       }
-      const graphZoomButton = target.closest("[data-graph-zoom]");
-      if (graphZoomButton) {
-        const action = graphZoomButton.dataset.graphZoom;
-        if (action === "fit") {
-          fitGoalGraph();
-        } else {
-          setGraphZoom(action === "in" ? graphZoom + .1 : graphZoom - .1, true, false);
-        }
-        return;
-      }
-      const goalLink = target.closest("[data-select-goal]");
-      if (goalLink) {
-        selectGoal(goalLink.dataset.selectGoal);
-        return;
-      }
-      if (target.closest("[data-open-create]")) {
-        formError.hidden = true;
-        dialog.showModal();
-        updateRelationPreviews();
-        requestAnimationFrame(() => form.elements.title.focus());
-        return;
-      }
-      if (target.closest("[data-close-create]")) {
-        dialog.close();
-        refreshBoard();
-        return;
-      }
-      const trashAction = target.closest("[data-open-goal-trash]");
-      if (trashAction) {
-        openGoalTrashDialog(trashAction, true);
-        return;
-      }
-      const restoreAction = target.closest("[data-open-goal-restore]");
-      if (restoreAction) {
-        openGoalTrashDialog(restoreAction, false);
-        return;
-      }
-      if (target.closest("[data-close-goal-trash]")) {
-        closeGoalTrashDialog();
-        return;
-      }
-      if (target.closest("[data-collapse-all]")) {
-        const items = [...document.querySelectorAll("[data-tree-item]")];
-        const shouldCollapse = items.some((item) => !item.classList.contains("is-collapsed"));
-        items.forEach((item) => item.classList.toggle("is-collapsed", shouldCollapse));
-        document.querySelectorAll("[data-tree-toggle]").forEach((button) => {
-          button.setAttribute("aria-expanded", String(!shouldCollapse));
-        });
-        saveUiState();
-        return;
-      }
+      if (handleMomentumZoomClick(target)) return;
+      if (handleGoalSelectClick(target)) return;
+      if (handleGoalDialogClick(target)) return;
+      if (handleTreeCollapseAllClick(target)) return;
       const mobileTarget = target.closest("[data-mobile-target]");
       if (mobileTarget) {
         const mobileView = mobileTarget.dataset.mobileTarget;
@@ -406,17 +282,7 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         saveUiState();
         return;
       }
-      const goalTab = target.closest("[data-goal-tab]");
-      if (goalTab) {
-        setGoalPanel(goalTab.dataset.goalTab, true, true, true);
-        return;
-      }
-      const retryGoalPanel = target.closest("[data-retry-goal-panel]");
-      if (retryGoalPanel) {
-        const article = retryGoalPanel.closest("[data-goal-view]");
-        void loadGoalPanel(article, retryGoalPanel.dataset.retryGoalPanel);
-        return;
-      }
+      if (handleGoalPanelClick(target)) return;
       const focusSectionTrigger = target.closest("[data-focus-section-trigger]");
       if (focusSectionTrigger) {
         const factor = focusSectionTrigger.dataset.goalFactorTab;
@@ -424,11 +290,7 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         else activateFocusSection(focusSectionTrigger);
         return;
       }
-      const factorTab = target.closest("[data-goal-factor-tab]");
-      if (factorTab) {
-        setGoalFactor(factorTab.dataset.goalFactorTab, true, true);
-        return;
-      }
+      if (handleGoalFactorClick(target)) return;
       const openQuickRecord = target.closest("[data-open-quick-record]");
       if (openQuickRecord) {
         await loadAndOpenQuickRecord(openQuickRecord);
@@ -462,16 +324,8 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         requestAnimationFrame(() => quickDialog?.querySelector("[data-quick-record-type]")?.focus());
         return;
       }
-      if (target.closest("[data-open-goal-edit]")) {
-        setGoalPanel("completion", true, true, true);
-        const editor = document.querySelector(".goal-edit-disclosure");
-        if (editor) {
-          editor.open = true;
-          editor.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-          requestAnimationFrame(() => editor.querySelector("input, textarea, select")?.focus());
-        }
-        return;
-      }
+      const draftOpen = handleGoalDraftOpen(target);
+      if (draftOpen) { await draftOpen; return; }
       if (target.closest("[data-open-goal-tui]")) {
         setWorkspaceMode("runtime");
         const addTerminal = document.querySelector("[data-tui-add]");
@@ -506,98 +360,8 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         }
         return;
       }
-      const openRelationDeactivate = target.closest("[data-relation-deactivate-open]");
-      if (openRelationDeactivate) {
-        const record = openRelationDeactivate.closest("[data-relation-id]");
-        const deactivateForm = record?.querySelector("[data-relation-deactivate-form]");
-        if (!deactivateForm) return;
-        deactivateForm.hidden = false;
-        openRelationDeactivate.hidden = true;
-        openRelationDeactivate.setAttribute("aria-expanded", "true");
-        deactivateForm.querySelector("textarea")?.focus();
-        return;
-      }
-      const cancelRelationDeactivate = target.closest("[data-relation-deactivate-cancel]");
-      if (cancelRelationDeactivate) {
-        const record = cancelRelationDeactivate.closest("[data-relation-id]");
-        const deactivateForm = record?.querySelector("[data-relation-deactivate-form]");
-        const openButton = record?.querySelector("[data-relation-deactivate-open]");
-        if (deactivateForm) deactivateForm.hidden = true;
-        if (openButton) {
-          openButton.hidden = false;
-          openButton.setAttribute("aria-expanded", "false");
-          openButton.focus();
-        }
-        return;
-      }
-      const addCriterion = target.closest("[data-add-criterion]");
-      if (addCriterion) {
-        const editor = addCriterion.closest("[data-draft-editor]");
-        const list = editor?.querySelector("[data-criteria-list]");
-        const template = editor?.querySelector("[data-criterion-template]");
-        if (list && template) {
-          list.append(template.content.cloneNode(true));
-          renumberCriteria(list);
-          list.lastElementChild?.querySelector('[data-criterion-field="statement"]')?.focus();
-        }
-        return;
-      }
-      const removeCriterion = target.closest("[data-remove-criterion]");
-      if (removeCriterion) {
-        const row = removeCriterion.closest("[data-criterion-row]");
-        const list = row?.parentElement;
-        if (!row || !list) return;
-        if (list.querySelectorAll("[data-criterion-row]").length === 1) {
-          row.querySelectorAll("input, textarea").forEach((control) => { control.value = ""; });
-          const method = row.querySelector('[data-criterion-field="decision_method"]');
-          if (method) method.value = "inspection";
-        } else {
-          row.remove();
-          renumberCriteria(list);
-        }
-        return;
-      }
-      const archiveAction = target.closest("[data-goal-archive]");
-      const activeGoalAction = target.closest("[data-set-active-goal]");
-      if (activeGoalAction) {
-        activeGoalAction.disabled = true;
-        const goalId = activeGoalAction.dataset.goalId;
-        try {
-          const response = await fetch(route("/api/goals/" + encodeURIComponent(goalId) + "/active"), {
-            method: "POST",
-            headers: goalboardControlHeaders(),
-            body: JSON.stringify({ reason: "用户在 GoalBoard 设为当前 Goal" }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || "无法设为当前 Goal");
-          await refreshBoard(true);
-          showToast("已设为当前 Goal；Runtime 的执行状态没有改变");
-        } catch (error) {
-          activeGoalAction.disabled = false;
-          showToast(error.message || "无法设为当前 Goal", true);
-        }
-        return;
-      }
-      if (archiveAction) {
-        archiveAction.disabled = true;
-        const archived = archiveAction.dataset.goalArchive === "true";
-        const goalId = archiveAction.dataset.goalId;
-        try {
-          const response = await fetch(route("/api/goals/" + encodeURIComponent(goalId) + "/archive"), {
-            method: "POST",
-            headers: goalboardControlHeaders(),
-            body: JSON.stringify({
-              archived,
-              reason: archived ? "用户在 GoalBoard 手动归档已完成 Goal" : "用户在 GoalBoard 恢复归档 Goal",
-            }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || "操作失败");
-          location.assign(globalThis.goalboardNavigationUrl(route((archived ? "/archive/goals/" : "/goals/") + encodeURIComponent(goalId))));
-        } catch (error) {
-          archiveAction.disabled = false;
-          showToast(error.message || "操作失败", true);
-        }
-        return;
+      if (handleGoalRelationDisclosureClick(target)) return;
+      if (handleGoalDraftCriteriaClick(target)) return;
+      const lifecycleClick = handleGoalLifecycleClick(target);
+      if (lifecycleClick) { await lifecycleClick; return; }
 `;
-

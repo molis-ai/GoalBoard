@@ -1,4 +1,14 @@
 import type { ContractDescriptor } from "./package.js";
+export * from "./runtime-project-host.js";
+
+/** Async boundary for an existing, finite method API; does not add or dispatch operation names. */
+export type AsyncApplicationMethods<Application> = {
+  [Method in keyof Application]: Application[Method] extends (...args: infer Args) => infer Result
+    ? (...args: Args) => Promise<Awaited<Result>> : never;
+};
+
+export type HostMethodCapability<Method> = Method extends (...args: infer Args) => infer Result
+  ? HostCapabilityDefinition<Args, Result> : never;
 
 export const platformAppHostContract = {
   contractId: "io.goalboard.platform.app-host.v1",
@@ -9,6 +19,53 @@ export const platformAppHostContract = {
 } as const satisfies ContractDescriptor;
 
 export type HostCapabilityOperation = "query" | "command";
+
+export interface DesktopPanelRecord {
+  panel_id: string;
+  project_id: string;
+  goal_id: string;
+  runtime_kind: string;
+  launch_command: string;
+  launch_args: string[];
+  cwd: string | null;
+  work_context_id: string;
+  host_session_id: string | null;
+  tab_index: number;
+  title: string;
+  status: "open" | "exited";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OpenDesktopPanelInput {
+  project_id: string;
+  goal_id: string;
+  runtime_kind: string;
+  launch_command: string;
+  launch_args?: string[];
+  cwd?: string | null;
+  title?: string;
+  actor_id: string;
+  host_session_id?: string | null;
+  user_confirmed: boolean;
+}
+
+export interface AliasDesktopPanelSessionInput {
+  panel_id: string;
+  runtime_id: string;
+  host_session_id: string;
+  actor_id: string;
+}
+
+/** Public panel lifecycle used by Work; repositories remain private to the app implementation. */
+export interface DesktopPanelApi {
+  list(projectId: string, goalId?: string): DesktopPanelRecord[];
+  get(panelId: string): DesktopPanelRecord;
+  open(input: OpenDesktopPanelInput): DesktopPanelRecord;
+  close(panelId: string, actorId: string): void;
+  markOpen(panelId: string): DesktopPanelRecord;
+  markExited(panelId: string): DesktopPanelRecord;
+}
 
 export interface HostCapabilityDescriptor {
   capability_id: string;
@@ -54,6 +111,8 @@ export interface LocalHostStatus {
 export interface LocalHostProjectClient {
   readonly host_instance_id: string;
   readonly project: LocalHostProjectReference;
+  /** Open before adapting the request and retain resources through response composition; exposes no Runtime. */
+  withScope<Result>(operation: (client: LocalHostProjectClient) => Result | Promise<Result>): Promise<Result>;
   invoke<Input, Output>(
     capability: HostCapabilityDefinition<Input, Output>,
     input: Input,

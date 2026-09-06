@@ -28,7 +28,9 @@
     "@adeptify/goalboard-contracts": "workspace:*",
     "@adeptify/goalboard-plugin-goals": "workspace:*",
     "@adeptify/goalboard-plugin-feed": "workspace:*",
-    "@adeptify/goalboard-ui-host": "workspace:*"
+    "@adeptify/goalboard-plugin-artifacts": "workspace:*",
+    "@adeptify/goalboard-ui-host": "workspace:*",
+    "@adeptify/goalboard-plugin-work": "workspace:*"
   },
   "goalboard": {
     "path": "apps/workbench",
@@ -45,11 +47,13 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
+      "workbench.goals-proposal-composition.v1",
       "workbench.shell.v1",
       "workbench.ui-slots.v1",
       "workbench.feed-composition.v1",
       "workbench.goals-command-adapter.v1",
-      "workbench.execution-validation-adapter.v1"
+      "workbench.execution-validation-adapter.v1",
+      "workbench.work-composition.v1", "workbench.goals-policy-composition.v1", "workbench.goals-safety-composition.v1", "workbench.goals-relation-composition.v1", "workbench.goals-tree-composition.v1", "workbench.goals-momentum-composition.v1", "workbench.goals-document-composition.v1", "workbench.goals-context-composition.v1", "workbench.goals-planning-composition.v1", "workbench.goals-status-composition.v1", "workbench.goals-factors-composition.v1", "workbench.goals-dialogs-composition.v1", "workbench.goals-document-routes.v1"
     ]
   }
 }

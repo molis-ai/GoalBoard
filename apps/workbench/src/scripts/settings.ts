@@ -1,4 +1,6 @@
-export const SETTINGS_CLIENT_SCRIPT = `
+import { WEB_SERVICE_SETTINGS_SCRIPT } from "./settings-web-service.js";
+
+export const SETTINGS_CLIENT_SCRIPT = WEB_SERVICE_SETTINGS_SCRIPT + `
   (() => {
     const dialog = document.querySelector("[data-runtime-plan-dialog]");
     if (!dialog) return;
@@ -166,41 +168,6 @@ export const SETTINGS_CLIENT_SCRIPT = `
         }
       });
     });
-    document.querySelectorAll("[data-web-service-action]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const error = document.querySelector("[data-web-service-error]");
-        button.disabled = true;
-        if (error) error.hidden = true;
-        try {
-          const previewResponse = await fetch("/api/settings/web-service/plan", { method: "POST", headers: goalboardControlHeaders(), body: JSON.stringify({ action: button.dataset.webServiceAction }) });
-          const plan = await previewResponse.json();
-          if (!previewResponse.ok) throw new Error(plan.error || L("无法生成常驻服务预览"));
-          if (plan.status === "no_change") {
-            showToast(plan.message);
-            button.disabled = false;
-            return;
-          }
-          if (plan.status !== "ready") throw new Error(plan.message || L("当前不能执行这项常驻服务操作"));
-          const changes = (plan.changes || []).map((change) => "• " + change.operation + "：" + change.target).join("\\n");
-          if (!window.confirm(plan.message + "\\n\\n" + changes + "\\n\\n" + plan.confirmation)) {
-            await fetch("/api/settings/web-service/confirm", { method: "POST", headers: goalboardControlHeaders(), body: JSON.stringify({ plan_id: plan.plan_id, decision: "declined" }) });
-            button.disabled = false;
-            return;
-          }
-          const confirmResponse = await fetch("/api/settings/web-service/confirm", { method: "POST", headers: goalboardControlHeaders(), body: JSON.stringify({ plan_id: plan.plan_id, decision: "confirmed" }) });
-          const result = await confirmResponse.json();
-          if (!confirmResponse.ok) throw new Error(result.error || L("常驻服务操作失败"));
-          showToast(result.message);
-          setTimeout(() => location.reload(), 450);
-        } catch (caught) {
-          if (error) {
-            error.textContent = caught.message || L("常驻服务操作失败");
-            error.hidden = false;
-          }
-          button.disabled = false;
-        }
-      });
-    });
     function escapeText(value) {
       return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => {
         if (character === "&") return "&amp;";
@@ -213,113 +180,6 @@ export const SETTINGS_CLIENT_SCRIPT = `
   })();
 `;
 
-export const PROJECT_RULES_CLIENT_SCRIPT = `
-  (() => {
-    const form = document.querySelector("[data-policy-form]");
-    if (!form) return;
-    const routePrefix = document.body.dataset.routePrefix || "";
-    const receiptKey = "goalboard-project-rules-receipt:" + routePrefix;
-    const receipt = document.querySelector("[data-project-rules-receipt]");
-    const errorBox = form.querySelector("[data-policy-error]");
-    const submit = form.querySelector('button[type="submit"]');
-    try {
-      const savedReceipt = JSON.parse(sessionStorage.getItem(receiptKey) || "null");
-      sessionStorage.removeItem(receiptKey);
-      if (receipt && savedReceipt?.title && savedReceipt?.detail) {
-        receipt.querySelector("[data-project-rules-receipt-title]").textContent = savedReceipt.title;
-        receipt.querySelector("[data-project-rules-receipt-detail]").textContent = savedReceipt.detail;
-        receipt.hidden = false;
-        receipt.focus({ preventScroll: true });
-      }
-    } catch {}
-    const reveal = (field) => {
-      let parent = field.parentElement;
-      while (parent && parent !== form) {
-        if (parent.tagName === "DETAILS") parent.open = true;
-        parent = parent.parentElement;
-      }
-    };
-    const fail = (field, message) => {
-      reveal(field);
-      field.setAttribute("aria-invalid", "true");
-      errorBox.textContent = message;
-      errorBox.hidden = false;
-      field.focus();
-    };
-    form.addEventListener("input", (event) => {
-      event.target?.removeAttribute?.("aria-invalid");
-      errorBox.hidden = true;
-    });
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const values = new FormData(form);
-      const reason = String(values.get("reason") || "").trim();
-      if (!reason) {
-        fail(form.elements.reason, L("请说明为什么要调整项目默认规则。"));
-        return;
-      }
-      const crossReviewers = Number(values.get("cross_reviewers"));
-      const adversarialReviewers = Number(values.get("adversarial_reviewers"));
-      const leaseSeconds = Number(values.get("max_lease_seconds"));
-      if (!Number.isInteger(crossReviewers) || crossReviewers < 0) {
-        fail(form.elements.cross_reviewers, L("独立复核人数需要是 0 或正整数。"));
-        return;
-      }
-      if (!Number.isInteger(adversarialReviewers) || adversarialReviewers < 0) {
-        fail(form.elements.adversarial_reviewers, L("反例检查人数需要是 0 或正整数。"));
-        return;
-      }
-      if (!Number.isInteger(leaseSeconds) || leaseSeconds <= 0) {
-        fail(form.elements.max_lease_seconds, L("一次领取时长需要是正整数秒数。"));
-        return;
-      }
-      const capabilities = String(values.get("required_capabilities") || "")
-        .split(/[\\n,，]/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-      const submitLabel = submit.textContent;
-      submit.disabled = true;
-      submit.textContent = L("正在保存…");
-      errorBox.hidden = true;
-      try {
-        const response = await fetch(routePrefix + "/api/policy-bindings", {
-          method: "POST",
-          headers: goalboardControlHeaders(),
-          body: JSON.stringify({
-            scope: "project_default",
-            reason,
-            policy: {
-              goal_mode: values.get("goal_mode"),
-              self_verification: values.has("self_verification"),
-              cross_reviewers: crossReviewers,
-              adversarial_reviewers: adversarialReviewers,
-              human_approval: values.has("human_approval"),
-              required_capabilities: [...new Set(capabilities)],
-              max_lease_seconds: leaseSeconds,
-            },
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || L("项目默认工作规则保存失败"));
-        const modeLabels = { disabled: L("不要求"), preferred: L("建议使用"), required: L("必须使用") };
-        sessionStorage.setItem(receiptKey, JSON.stringify({
-          title: L("项目工作规则已保存"),
-          detail: L("这个项目的共同规则已更新：按 Goal 工作“{mode}”，执行者自检“{self}”，用户确认“{human}”。之后开始或重新领取的 Goal 会采用这些规则。", {
-            mode: modeLabels[values.get("goal_mode")] || String(values.get("goal_mode") || ""),
-            self: values.has("self_verification") ? L("需要") : L("不需要"),
-            human: values.has("human_approval") ? L("需要") : L("不需要"),
-          }),
-        }));
-        location.reload();
-      } catch (error) {
-        errorBox.textContent = error.message || L("项目默认工作规则保存失败，请检查输入后重试");
-        errorBox.hidden = false;
-        submit.disabled = false;
-        submit.textContent = submitLabel;
-      }
-    });
-  })();
-`;
 
 export const PROJECT_GUIDANCE_CLIENT_SCRIPT = `
   (() => {
@@ -483,5 +343,3 @@ export const PROJECT_GUIDANCE_CLIENT_SCRIPT = `
     }
   })();
 `;
-
-

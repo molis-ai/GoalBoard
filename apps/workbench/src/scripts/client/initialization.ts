@@ -1,79 +1,5 @@
 /** AP3 Workbench client segment: initialization. */
-export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
-          let disclosure = policyLimitViolation.closest("details");
-          while (disclosure) {
-            disclosure.open = true;
-            disclosure = disclosure.parentElement?.closest("details");
-          }
-          const label = policyLimitViolation.closest("label")?.querySelector("strong")?.textContent?.trim() || L("这项规则");
-          errorBox.textContent = minimumViolation
-            ? L("{label}不能低于项目共同规则要求的 {value}。", { label, value: minimumViolation.dataset.policyMin })
-            : L("{label}不能超过项目共同规则允许的 {value} 秒。", { label, value: maximumViolation.dataset.policyMax });
-          errorBox.hidden = false;
-          policyLimitViolation.setAttribute("aria-invalid", "true");
-          policyLimitViolation.focus();
-          return;
-        }
-        const values = new FormData(policyForm);
-        const submitLabel = submit.textContent;
-        submit.disabled = true;
-        submit.textContent = L("正在保存…");
-        errorBox.hidden = true;
-        const capabilities = String(values.get("required_capabilities") || "")
-          .split(/[\\n,，]/)
-          .map((item) => item.trim())
-          .filter(Boolean);
-        try {
-          const response = await fetch(route("/api/policy-bindings"), {
-            method: "POST",
-            headers: goalboardControlHeaders(),
-            body: JSON.stringify({
-              scope: values.get("scope"),
-              goal_id: values.get("goal_id") || undefined,
-              reason: String(values.get("reason") || "").trim(),
-              policy: {
-                goal_mode: values.get("goal_mode"),
-                self_verification: values.has("self_verification"),
-                cross_reviewers: Number(values.get("cross_reviewers")),
-                adversarial_reviewers: Number(values.get("adversarial_reviewers")),
-                human_approval: values.has("human_approval"),
-                required_capabilities: [...new Set(capabilities)],
-                max_lease_seconds: Number(values.get("max_lease_seconds")),
-              },
-            }),
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || L("工作规则保存失败"));
-          await refreshBoard(true);
-          if (values.get("scope") === "goal") {
-            const policy = result?.resolved_policy || {
-              goal_mode: values.get("goal_mode"),
-              self_verification: values.has("self_verification"),
-              human_approval: values.has("human_approval"),
-            };
-            const modeLabels = { disabled: L("不要求"), preferred: L("建议使用"), required: L("必须使用") };
-            showFactorReceipt(
-              "rules",
-              L("工作规则已保存"),
-              L("最终生效：按 Goal 工作“{mode}”，推进者自检“{self}”，用户确认“{human}”。", {
-                mode: modeLabels[policy.goal_mode] || String(policy.goal_mode || ""),
-                self: policy.self_verification ? L("需要") : L("不需要"),
-                human: policy.human_approval ? L("需要") : L("不需要"),
-              }),
-            );
-          } else {
-            showToast(L("项目默认工作规则已保存"));
-          }
-        } catch (error) {
-          errorBox.textContent = humanDecisionError(error.message, L("工作规则保存失败，请检查输入后重试"));
-          errorBox.hidden = false;
-          submit.disabled = false;
-          submit.textContent = submitLabel;
-        }
-        return;
-      }
-
-      const reviewForm = submittedForm.closest?.("[data-human-review-form]");
+export const CLIENT_INITIALIZATION_SCRIPT = `      const reviewForm = submittedForm.closest?.("[data-human-review-form]");
       if (reviewForm) {
         event.preventDefault();
         const submit = reviewForm.querySelector('button[type="submit"]');
@@ -129,96 +55,13 @@ export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
       }
     });
 
-    form?.addEventListener("change", updateRelationPreviews);
-
-    form?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const submit = form.querySelector('button[type="submit"]');
-      submit.disabled = true;
-      formError.hidden = true;
-      const values = new FormData(form);
-      const payload = {
-        goal_id: String(values.get("goal_id") || "").trim() || undefined,
-        title: String(values.get("title") || "").trim(),
-        outcome: String(values.get("outcome") || "").trim(),
-        why: String(values.get("why") || "").trim(),
-        business_logic: String(values.get("business_logic") || "").trim(),
-        priority: Number(values.get("priority") || 0),
-        parent_goal_id: String(values.get("parent_goal_id") || "").trim() || undefined,
-        dependency_goal_ids: values.getAll("dependency_goal_ids").map(String),
-        acceptance_criteria: String(values.get("acceptance_criteria") || "").split("\\n").map((line) => line.trim()).filter(Boolean),
-      };
-      try {
-        const response = await fetch(route("/api/goals"), {
-          method: "POST",
-          headers: goalboardControlHeaders(),
-          body: JSON.stringify(payload),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "创建失败");
-        sessionStorage.removeItem(currentGoalUiStorageKey);
-        location.assign(globalThis.goalboardNavigationUrl(result.goal_path));
-      } catch (error) {
-        formError.textContent = error.message || "创建失败，请检查输入后重试";
-        formError.hidden = false;
-        submit.disabled = false;
-      }
-    });
-
-    addEventListener("popstate", (event) => {
-      const pathname = localPathname();
-      const match = pathname.match(
-        trashView ? /^\\/trash\\/goals\\/(.+)$/ : archiveView ? /^\\/archive\\/goals\\/(.+)$/ : /^\\/goals\\/(.+)$/,
-      );
-      const collectionRoot = trashView ? "/trash" : archiveView ? "/archive" : "/";
-      const rootGoalId = pathname === collectionRoot
-        ? String(event.state?.goalId || state.active_goal_id || visibleGoals()[0]?.goal.goal_id || "")
-        : "";
-      const goalId = match ? decodeURIComponent(match[1]) : rootGoalId;
-      if (goalId) void selectGoal(goalId, false);
-    });
-    addEventListener("hashchange", () => {
-      const targetId = decodeURIComponent(location.hash.slice(1));
-      const panel = goalPanelFromHash();
-      if (panel) setGoalPanel(panel, true);
-      const factor = goalFactorFromHash();
-      if (factor) setGoalFactor(factor, true);
-      const target = targetId ? document.getElementById(targetId) : null;
-      if (target?.matches?.("[data-goal-panel]")) documentPane.scrollTop = 0;
-      if (targetId) void revealDeepLinkFromId(targetId);
-    });
+    bindGoalCreateEvents();
+    addEventListener("popstate", handleGoalPopState);
+    addEventListener("hashchange", handleGoalHashChange);
     addEventListener("pagehide", saveUiState);
     addEventListener("keydown", (event) => {
-      const currentWorkTab = event.target?.closest?.("[data-work-tab]");
-      if (currentWorkTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-        const tabs = [...currentWorkTab.closest('[role="tablist"]').querySelectorAll("[data-work-tab]")];
-        const currentIndex = tabs.indexOf(currentWorkTab);
-        const nextIndex = event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? tabs.length - 1
-            : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-        event.preventDefault();
-        const nextTab = tabs[nextIndex];
-        const nextGoalId = nextTab.dataset.workTab;
-        void selectGoal(nextGoalId).then(() => focusWorkTab(nextGoalId));
-        return;
-      }
-      const currentTab = event.target?.closest?.("[data-goal-tab]");
-      if (currentTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-        const tabs = [...currentTab.closest('[role="tablist"]').querySelectorAll("[data-goal-tab]")];
-        const currentIndex = tabs.indexOf(currentTab);
-        const nextIndex = event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? tabs.length - 1
-            : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-        event.preventDefault();
-        const nextTab = tabs[nextIndex];
-        setGoalPanel(nextTab.dataset.goalTab, true, true, true);
-        nextTab.focus();
-        return;
-      }
+      if (handleGoalWorkTabKeyboard(event)) return;
+      if (handleGoalPanelKeyboard(event)) return;
       const currentFocusSection = event.target?.closest?.("[data-focus-section-trigger]:not([data-goal-factor-tab])");
       if (currentFocusSection && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
         const triggers = [...currentFocusSection.closest("[data-focus-section-deck]").querySelectorAll("[data-focus-section-card-row] > [data-focus-section-card] > [data-focus-section-trigger]")];
@@ -235,31 +78,8 @@ export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
         nextTrigger.focus();
         return;
       }
-      const currentFactorTab = event.target?.closest?.("[data-goal-factor-tab]");
-      if (currentFactorTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-        const tabs = [...currentFactorTab.closest('[role="tablist"]').querySelectorAll("[data-goal-factor-tab]")];
-        const currentIndex = tabs.indexOf(currentFactorTab);
-        const nextIndex = event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? tabs.length - 1
-            : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-        event.preventDefault();
-        const nextTab = tabs[nextIndex];
-        setGoalFactor(nextTab.dataset.goalFactorTab, true, true);
-        nextTab.focus();
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        globalSearch?.focus();
-      }
-      if (event.key === "Escape" && !treeFilter?.hidden) {
-        event.preventDefault();
-        setTreeFilterOpen(false);
-        treeFilterTrigger?.focus();
-        return;
-      }
+      if (handleGoalFactorKeyboard(event)) return;
+      if (handleTreeKeyboard(event)) return;
       if (event.key === "Escape" && !feedFilterPanel?.hidden) {
         event.preventDefault();
         setFeedFilterOpen(false);
@@ -274,11 +94,7 @@ export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
         quickDialog._opener?.focus();
         return;
       }
-      if (event.key === "Escape" && dialog.open) {
-        dialog.close();
-        refreshBoard();
-      }
-      if (event.key === "Escape" && trashDialog?.open) closeGoalTrashDialog();
+      handleGoalDialogEscape(event);
     });
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refreshBoard();
@@ -288,7 +104,7 @@ export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
       if (nextCompanionActive && !desktopCompanionActive && selected) setMobileView("document");
       desktopCompanionActive = nextCompanionActive;
       setTreeWidth(treePane.getBoundingClientRect().width, false);
-      requestAnimationFrame(() => graphAutoFit ? fitGoalGraph(false) : drawGoalGraph());
+      scheduleGoalGraphLayout();
     });
 
     setTreeWidth(treePane.getBoundingClientRect().width, false);
@@ -381,4 +197,3 @@ export const CLIENT_INITIALIZATION_SCRIPT = `        if (policyLimitViolation) {
     setInterval(refreshBoard, 4000);
   })();
 `;
-

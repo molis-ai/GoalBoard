@@ -13,6 +13,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./terminal": {
+      "types": "./dist/terminal/index.d.ts",
+      "import": "./dist/terminal/index.js"
+    },
+    "./terminal-client": {
+      "types": "./dist/terminal/client.d.ts",
+      "import": "./dist/terminal/client.js"
     }
   },
   "files": [
@@ -25,12 +33,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@adeptify/goalboard-contracts": "workspace:*"
+    "@adeptify/goalboard-contracts": "workspace:*",
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0"
   },
   "goalboard": {
     "path": "plugins/native/work",
     "kind": "native-plugin",
-    "maturity": "contract-only",
+    "maturity": "partial",
     "contract": "@adeptify/goalboard-contracts/platform/plugin",
     "migrationGoals": [
       "goal-reorg-f2",

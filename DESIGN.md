@@ -266,6 +266,8 @@ Promote and Start create or reuse one Draft Goal and bind the Item as its input.
 
 ### Goal Focus
 
+GW5 preserves this visual structure while moving templates into the native Goals Plugin. Its targeted interaction repair makes a draft's primary action wait for the lazily loaded editor before expanding and focusing it; the selected panel changes immediately. Desktop and 390px browser captures confirm the existing form remains visible and usable. No colors, layout, input rules, or save semantics were changed by this repair.
+
 The selected Goal remains the main work document. Its compact header reads status and facts → title → three-part Goal Contract → detail navigation. The facts line shows owner, priority, and update time without competing with the title. Contract content states result, reason, and operating logic directly beneath the title; it is not hidden behind a tab or replaced by a repeated outcome subtitle.
 
 The current panel then reads Next Step → completion requirements, with context and bound Runtime state in a visibly subordinate supporting rail. Contract, current-work, context, and Runtime blocks use related paper tones, 14px corners, and low shadows rather than a page-wide mesh of divider lines. Status appears once in the header, not again inside Next Step. The primary action appears once and uses stable short copy so the layout never bends around a dynamic title.
@@ -308,12 +310,14 @@ Desktop settings reuse the same single directory, local-identity footer, flat Li
 
 - **Don't** add a second persistent navigation column or repeat project context across the shell.
 - **Don't** restore permanent search, group headings, and tool blocks at the root directory.
+- **Do** keep the existing Goal search usable inside the Goals drill-down. GW5 restored the search field above its compact toolbar after real browser tests found it hidden by desktop CSS; this does not add search to the root directory or change the visual direction. Desktop and 390px captures were inspected; details and evidence are in `specs/goalboard-architecture-reorganization/gw5-progress.md`.
 - **Don't** let open Goal tabs grow without limit or leak across projects.
 - **Don't** place tabs, buttons, or the directory resizer in the traffic-light safe zone, or mark an interactive topbar container as draggable.
 - **Don't** use a lightweight home screen with large empty regions where current Goal facts and work should be.
 - **Don't** present reserved placeholder views as working modules or fill them with fake content, counts, or activity.
 - **Don't** treat the Goal Tree or an AI chat homepage as the entire application.
 - **Don't** blur project-setting and global-setting scope.
+- **Do** treat an explicit “加入组合” click as the project-adoption confirmation and send it to the existing guarded API. GW5 repaired the missing client field; it did not weaken the server check or auto-adopt methods. Real failed/retried saves, independent personal/project versions and desktop/390px captures were verified; no visual redesign was made (impeccable harden).
 - **Don't** force the Desktop two-pane arrangement into the narrow Companion; Feed must switch between Item and Detail.
 - **Don't** turn unrelated filters and navigation into segmented pills; grouped selection surfaces are reserved for compact Goal Detail and Runtime switches.
 - **Don't** stack unrelated detail sections into one unbroken page or give every nested content block another decorative border.

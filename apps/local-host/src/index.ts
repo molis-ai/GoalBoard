@@ -1,4 +1,24 @@
+export { installGoalBoardHome } from "./installer/home.js";
+export { GoalBoardHomeInstallError } from "./installer/home-contract.js";
+export type { GoalBoardHomeInstallOptions, GoalBoardHomeInstallResult, GoalBoardHomeInstallStatus, GoalBoardHomeInstallStep } from "./installer/home-contract.js";
+export { computeBuildSourceDigest, writeGoalBoardBuildManifest, digestPaths } from "./installer/fingerprint.js";
+export type { GoalBoardBuildManifest } from "./installer/fingerprint.js";
+export { RuntimeIntegrationService } from "./installer/runtime-integration.js";
+export { RuntimeIntegrationError, SUPPORTED_RUNTIME_IDS, isSupportedRuntimeId } from "./installer/runtime-integration-contract.js";
+export type { SupportedRuntimeId, RuntimeIntegrationAction, RuntimeConnectionState, RuntimeIntegrationDetection, RuntimeIntegrationChange, RuntimeIntegrationPlan, RuntimeIntegrationConfirmation, RuntimeIntegrationResultStatus, RuntimeIntegrationResult, RuntimeIntegrationValidationContext, RuntimeIntegrationServiceOptions } from "./installer/runtime-integration-contract.js";
+export { runtimeGoalTreeDecisionAuthority } from "./runtime-decision.js";
 import { randomUUID } from "node:crypto";
+export { openWorkSessionRegistry } from "./session-registry.js";
+export { RuntimeSessionHost } from "./runtime-session.js";
+export { RuntimeProjectConnection } from "./runtime-project-connection.js";
+export { createRuntimePanelSessionLinker } from "./runtime-panel-session.js";
+export { runtimeContextHostFromEnvironment, runtimeSessionHostSignalsFromEnvironment, sessionSignalsForHost } from "./runtime-context.js";
+export type { GoalBoardRuntimeContextHost } from "./runtime-context.js";
+export { prepareLocalProjectStorage } from "./project-storage.js";
+export { PluginHostExecutor } from "./plugin-executor.js";
+export type { PluginHostExecutorOptions } from "./plugin-executor.js";
+export { runPluginDevelopment } from "./plugin-development.js";
+export type { LocalProjectStoragePreparation } from "./project-storage.js";
 
 import type {
   HostCapabilityDefinition,
@@ -92,14 +112,17 @@ export class LocalHost<Runtime> {
   client(reference: LocalHostProjectReference): LocalHostProjectClient {
     const project = normalizeReference(reference);
     this.assertCompatibleReference(project);
-    return {
+    const client: LocalHostProjectClient = {
       host_instance_id: this.instanceId,
       project,
+      withScope: <Result>(operation: (client: LocalHostProjectClient) => Result | Promise<Result>) =>
+        this.withRuntime(project, () => operation(client)),
       invoke: <Input, Output>(
         capability: HostCapabilityDefinition<Input, Output>,
         input: Input,
       ) => this.invoke(project, capability, input),
     };
+    return client;
   }
 
   async invoke<Input, Output>(
@@ -222,3 +245,10 @@ export class LocalHost<Runtime> {
     if (this.state !== "running") throw new LocalHostError("host.closed", "Local Host 已关闭");
   }
 }
+export { GoalBoardWebServiceManager } from "./installer/web-service.js";
+export { GoalBoardWebServiceError, type GoalBoardWebServiceAction, type GoalBoardWebServiceState, type GoalBoardWebServiceDetection, type GoalBoardWebServicePlan, type GoalBoardWebServiceResult, type GoalBoardWebServiceManagerOptions } from "./installer/web-service-contract.js";
+export { GoalBoardUninstallService } from "./installer/uninstall.js";
+export { GoalBoardUninstallError, type GoalBoardUninstallPlan, type GoalBoardUninstallResult, type GoalBoardUninstallServiceOptions, type GoalBoardUninstallChange, type UninstallProjectAccess } from "./installer/uninstall-contract.js";
+export { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "./web-control-token.js";
+export { createGoalBoardRuntimePayload, type GoalBoardRuntimePayloadOptions } from "./installer/runtime-payload.js";
+export { createGoalBoardNpmPackageDirectory } from "./installer/npm-package.js";

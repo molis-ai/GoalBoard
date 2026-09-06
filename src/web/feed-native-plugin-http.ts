@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
 
 import {
   FeedPluginRouteTable,
@@ -342,9 +343,9 @@ function promoteFeedItemToGoal(
       throw new FeedStoreError("feed_invalid_transition", isInboxMessage ? "请先恢复这条已归档的 Inbox Message" : "请先恢复这条已忽略的 Feed Item");
     }
     const existingGoal = item.linked_goal_id
-      ? store.db.prepare(`SELECT goal_id FROM goals WHERE board_id = ? AND goal_id = ? AND trashed_at IS NULL AND archived_at IS NULL`).get(options.boardId, item.linked_goal_id) as { goal_id: string } | undefined
-      : undefined;
-    if (existingGoal) {
+      ? new GoalsQueryService(new GoalsRepository(store.db)).getGoal(options.boardId, item.linked_goal_id)
+      : null;
+    if (existingGoal && existingGoal.trashed_at === null && existingGoal.archived_at === null) {
       const linked = startProcessing && item.disposition !== "processing"
         ? feed.linkGoal(options.boardId, itemId, existingGoal.goal_id, "processing")
         : item;
@@ -374,21 +375,14 @@ function promoteFeedItemToGoal(
       reason: "用户从 Feed Item 升格为 Goal",
     });
     const now = new Date().toISOString();
-    store.db.prepare(`
-      INSERT INTO input_bindings (
-        binding_id, board_id, goal_id, input_name, source_type, source_ref,
-        snapshot_digest, state, reason, created_by, created_at
-      ) VALUES (?, ?, ?, ?, 'feed_item', ?, ?, 'confirmed', ?, 'web-user', ?)
-    `).run(
-      `binding-feed-${randomUUID()}`,
-      options.boardId,
-      created.goal.goal_id,
-      `${itemTypeLabel} 输入`,
-      `feed-item:${item.item_id}`,
-      `sha256:${createHash("sha256").update(context).digest("hex")}`,
-      `用户从 ${itemTypeLabel} 创建 Goal 时确认该输入`,
-      now,
-    );
+    coordinator.goalInputs.register({
+      binding_id: `binding-feed-${randomUUID()}`, board_id: options.boardId,
+      goal_id: created.goal.goal_id, input_name: `${itemTypeLabel} 输入`,
+      source_type: "feed_item", source_ref: `feed-item:${item.item_id}`,
+      snapshot_digest: `sha256:${createHash("sha256").update(context).digest("hex")}`,
+      state: "confirmed", reason: `用户从 ${itemTypeLabel} 创建 Goal 时确认该输入`,
+      created_by: "web-user", created_at: now,
+    });
     const linked = feed.linkGoal(
       options.boardId,
       item.item_id,

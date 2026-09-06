@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
+import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import {
   GoalBoardSessionRegistry,
   RuntimeContextBindingRepository,
@@ -15,7 +16,7 @@ import {
 test("Private Work Context public entrypoint preserves private Session facts across restart", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-private-work-context-"));
   const home = path.join(directory, ".goalboard");
-  let registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+  let registry = await openWorkSessionRegistry({ homeDirectory: home });
   try {
     const session = registry.createSession({
       runtime_id: "codex",
@@ -56,7 +57,7 @@ test("Private Work Context public entrypoint preserves private Session facts acr
     });
     registry.close();
 
-    registry = await GoalBoardSessionRegistry.open({ homeDirectory: home });
+    registry = await openWorkSessionRegistry({ homeDirectory: home });
     assert.equal(registry.get(session.session_id).status, "closed");
     assert.equal(registry.get(session.session_id).metadata.adapter_hint, "kept-local");
     assert.equal(registry.events(session.session_id)[0]?.content, "local-only-content");
@@ -77,7 +78,10 @@ test("Runtime context binding facts are stored by the Private Work Context repos
     createRuntimeContextBindingTables(db);
     createRuntimeContextSetupRequestTable(db);
     createRuntimeContextSuggestionRejectionTable(db);
-    const repository = new RuntimeContextBindingRepository(db);
+    const repository = new RuntimeContextBindingRepository(db, {
+      ledger: createContextLedger(db, { authorize: () => true }),
+      assertProject: (id) => { assert.equal(id, "project-context-owner"); },
+    });
     const binding = {
       binding_id: "binding-context-owner",
       runtime_id: "codex",
@@ -110,9 +114,10 @@ test("Runtime context binding facts are stored by the Private Work Context repos
       binding.stable_work_context_id,
       "setup-context-owner",
     )?.project_id, binding.project_id);
-    assert.equal(repository.removeProjectFacts(binding.project_id), 1);
+    assert.equal(repository.removeProjectFacts(binding.project_id, "user", binding.updated_at), 1);
     assert.equal(repository.list().length, 0);
   } finally {
     db.close();
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

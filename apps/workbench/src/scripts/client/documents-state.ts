@@ -1,197 +1,12 @@
+import { GOALS_RECORDS_CLIENT_FACTORY_SCRIPT, GOALS_PANELS_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 /** AP3 Workbench client segment: documents-state. */
-export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target?.closest?.("[data-goal-panel]")?.dataset.goalPanel;
-      if (renderedPanel) return renderedPanel;
-      const panelTarget = targetId.match(/^goal-panel-(overview|completion|progress|factors|records)-/);
-      if (panelTarget) return panelTarget[1];
-      if (targetId.startsWith("completion-") || targetId.startsWith("acceptance-")) return "completion";
-      if (targetId.startsWith("progress-")) return "progress";
-      if (/^(?:goal-factor-panel|relation|risk|impact)-/.test(targetId)) return "factors";
-      return "";
-    };
+export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) => error instanceof DOMException && error.name === "AbortError";
 
-    const goalPanelFromHash = () => {
-      const targetId = decodeURIComponent(location.hash.slice(1));
-      return goalPanelFromTargetId(targetId);
-    };
-
-    const goalFactorFromTargetId = (targetId) => {
-      if (!targetId) return "";
-      const target = document.getElementById(targetId);
-      const renderedFactor = target?.closest?.("[data-goal-factor-panel]")?.dataset.goalFactorPanel;
-      if (renderedFactor) return renderedFactor;
-      const factorTarget = targetId.match(/^goal-factor-panel-(relations|risks|impacts|rules)-/);
-      if (factorTarget) return factorTarget[1];
-      if (targetId.startsWith("relation-")) return "relations";
-      if (targetId.startsWith("risk-")) return "risks";
-      if (targetId.startsWith("impact-")) return "impacts";
-      return "";
-    };
-
-    const goalFactorFromHash = () => {
-      const targetId = decodeURIComponent(location.hash.slice(1));
-      return goalFactorFromTargetId(targetId);
-    };
-
-    const isAbortError = (error) => error instanceof DOMException && error.name === "AbortError";
-
-    const abortGoalRecordsRequest = () => {
-      goalRecordsRequest?.abort();
-    };
-
-    const loadGoalRecords = async (article) => {
-      const container = article?.querySelector("[data-goal-records-content]");
-      if (!container || container.dataset.loaded === "true" || container.dataset.loading === "true") return;
-      const goalId = article.dataset.goalView;
-      if (!goalId) return;
-      abortGoalRecordsRequest();
-      const controller = new AbortController();
-      goalRecordsRequest = controller;
-      container.dataset.loading = "true";
-      container.setAttribute("aria-busy", "true");
-      try {
-        const response = await fetch(
-          route("/api/goals/" + encodeURIComponent(goalId) + "/records?view=" + documentCollection),
-          { cache: "no-store", signal: controller.signal },
-        );
-        if (!response.ok) throw new Error(L("无法读取这条 Goal 的完整记录"));
-        const template = document.createElement("template");
-        template.innerHTML = (await response.text()).trim();
-        const records = template.content.querySelector('[data-goal-section="technical"]');
-        if (!records) throw new Error(L("Goal 记录响应不完整"));
-        if (!article.isConnected || article.dataset.goalView !== goalId) return;
-        container.replaceChildren(records);
-        container.dataset.loaded = "true";
-        const hashTargetId = decodeURIComponent(location.hash.slice(1));
-        if (hashTargetId) void revealDeepLinkFromId(hashTargetId);
-      } catch (error) {
-        if (isAbortError(error)) return;
-        if (!article.isConnected || article.dataset.goalView !== goalId) return;
-        const message = error instanceof Error ? error.message : L("无法载入完整记录");
-        const errorRow = document.createElement("p");
-        errorRow.className = "empty-row";
-        errorRow.setAttribute("role", "alert");
-        errorRow.textContent = message;
-        container.replaceChildren(errorRow);
-        showToast(message, true);
-      } finally {
-        if (goalRecordsRequest === controller) {
-          goalRecordsRequest = null;
-          container.dataset.loading = "false";
-          container.removeAttribute("aria-busy");
-        }
-      }
-    };
-
-    const abortGoalPanelRequest = () => {
-      goalPanelRequest?.abort();
-    };
-
-    const loadGoalPanel = async (article, panelName) => {
-      const panel = article?.querySelector('[data-goal-panel="' + panelName + '"]');
-      if (!panel || panel.dataset.loaded === "true" || panel.dataset.loading === "true") return;
-      const goalId = article.dataset.goalView;
-      if (!goalId || !["completion", "progress", "factors"].includes(panelName)) return;
-      abortGoalPanelRequest();
-      const controller = new AbortController();
-      goalPanelRequest = controller;
-      panel.dataset.loading = "true";
-      panel.setAttribute("aria-busy", "true");
-      const status = panel.querySelector("[data-goal-panel-status]");
-      if (status) status.textContent = L("正在载入…");
-      try {
-        const response = await fetch(
-          route("/api/goals/" + encodeURIComponent(goalId) + "/panels/" + panelName + "?view=" + documentCollection),
-          { cache: "no-store", signal: controller.signal },
-        );
-        if (!response.ok) throw new Error(L("无法读取这个 Goal 区域"));
-        const template = document.createElement("template");
-        template.innerHTML = (await response.text()).trim();
-        if (!template.content.childNodes.length) throw new Error(L("Goal 区域响应不完整"));
-        if (!article.isConnected || article.dataset.goalView !== goalId || goalPanelRequest !== controller) return;
-        panel.replaceChildren(...template.content.childNodes);
-        panel.dataset.loaded = "true";
-        updateAllRelationFormPreviews();
-        document.querySelectorAll("[data-risk-state-form]").forEach(updateRiskStatePreview);
-        document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
-        if (panelName === "factors") {
-          setGoalFactor(goalFactorFromHash() || article.dataset.activeFactor || "relations", false);
-        }
-        const hashTarget = document.getElementById(decodeURIComponent(location.hash.slice(1)));
-        if (hashTarget) revealFocusTarget(hashTarget);
-      } catch (error) {
-        if (isAbortError(error) || goalPanelRequest !== controller) return;
-        if (!article.isConnected || article.dataset.goalView !== goalId) return;
-        const message = error instanceof Error ? error.message : L("无法载入这个 Goal 区域");
-        const errorRow = document.createElement("button");
-        errorRow.type = "button";
-        errorRow.className = "empty-row goal-panel-lazy-retry";
-        errorRow.dataset.retryGoalPanel = panelName;
-        errorRow.textContent = L("{message}，点击重试", { message });
-        panel.replaceChildren(errorRow);
-        showToast(message, true);
-      } finally {
-        if (goalPanelRequest === controller) {
-          goalPanelRequest = null;
-          panel.dataset.loading = "false";
-          panel.removeAttribute("aria-busy");
-        }
-      }
-    };
-
-    const loadMoreGoalEvents = async (button) => {
-      const pagination = button.closest("[data-goal-event-pagination]");
-      const article = button.closest("[data-goal-view]");
-      const eventList = article?.querySelector("[data-goal-event-list]");
-      const goalId = article?.dataset.goalView;
-      const offset = Number.parseInt(pagination?.dataset.nextOffset || "", 10);
-      if (!pagination || !eventList || !goalId || !Number.isSafeInteger(offset) || offset < 0) return;
-      abortGoalRecordsRequest();
-      const controller = new AbortController();
-      goalRecordsRequest = controller;
-      const defaultLabel = button.textContent;
-      const errorBox = pagination.querySelector("[data-goal-event-error]");
-      button.disabled = true;
-      button.textContent = L("正在载入…");
-      if (errorBox) errorBox.hidden = true;
-      try {
-        const response = await fetch(
-          route("/api/goals/" + encodeURIComponent(goalId) + "/record-events?view=" + documentCollection + "&offset=" + offset),
-          { cache: "no-store", signal: controller.signal },
-        );
-        if (!response.ok) throw new Error(L("无法读取更早的 Goal 记录"));
-        const template = document.createElement("template");
-        template.innerHTML = (await response.text()).trim();
-        const page = template.content.querySelector("[data-goal-event-page]");
-        const pageList = page?.querySelector("ol");
-        if (!page || !pageList) throw new Error(L("Goal 事件响应不完整"));
-        if (!article.isConnected || article.dataset.goalView !== goalId) return;
-        eventList.append(...Array.from(pageList.children));
-        const nextOffset = Number.parseInt(page.dataset.nextOffset || "", 10);
-        const total = Number.parseInt(page.dataset.total || "", 10);
-        if (!Number.isSafeInteger(nextOffset) || !Number.isSafeInteger(total)) throw new Error(L("Goal 事件响应不完整"));
-        pagination.dataset.nextOffset = String(nextOffset);
-        pagination.dataset.total = String(total);
-        const progress = pagination.querySelector("[data-goal-event-progress]");
-        if (progress) progress.textContent = L("已显示 {shown}/{total} 条事件", { shown: nextOffset, total });
-        if (page.dataset.hasMore !== "true") button.remove();
-      } catch (error) {
-        if (isAbortError(error)) return;
-        if (!article.isConnected || article.dataset.goalView !== goalId) return;
-        const message = error instanceof Error ? error.message : L("无法载入更早记录");
-        if (errorBox) {
-          errorBox.textContent = message;
-          errorBox.hidden = false;
-        }
-      } finally {
-        if (goalRecordsRequest === controller) {
-          goalRecordsRequest = null;
-          if (button.isConnected) {
-            button.disabled = false;
-            button.textContent = defaultLabel;
-          }
-        }
-      }
-    };
+    const { abortGoalRecordsRequest, loadGoalRecords, handleGoalRecordEventsClick } = (${GOALS_RECORDS_CLIENT_FACTORY_SCRIPT})({
+      documentCollection, route, translate: L, isAbortError,
+      showError: (message) => showToast(message, true),
+      afterLoad: (targetId) => { void revealDeepLinkFromId(targetId); },
+    });
 
     const activateFocusSection = (trigger) => {
       const card = trigger?.closest?.("[data-focus-section-card]");
@@ -302,53 +117,20 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
       return target;
     };
 
-    const setGoalPanel = (panelName, persist = true, updateHash = false, resetScroll = false) => {
-      const article = documentPane.querySelector("[data-goal-view]");
-      if (!article) return false;
-      const panel = goalPanelKeys.includes(panelName) ? panelName : "overview";
-      const activePanel = article.querySelector('[data-goal-panel="' + panel + '"]');
-      if (!activePanel) return false;
-      article.dataset.activePanel = panel;
-      article.querySelectorAll("[data-goal-tab]").forEach((button) => {
-        const active = button.dataset.goalTab === panel;
-        button.setAttribute("aria-selected", String(active));
-        button.setAttribute("tabindex", active ? "0" : "-1");
-      });
-      article.querySelectorAll("[data-goal-panel]").forEach((candidate) => {
-        candidate.hidden = candidate !== activePanel;
-      });
-      if (panel === "records") void loadGoalRecords(article);
-      else {
-        abortGoalRecordsRequest();
-        if (panel !== "overview") void loadGoalPanel(article, panel);
-      }
-      if (updateHash) history.replaceState(history.state, "", "#" + activePanel.id);
-      if (resetScroll) documentPane.scrollTop = 0;
-      if (persist) queueSave();
-      return true;
-    };
-
-    const setGoalFactor = (factorName, persist = true, updateHash = false) => {
-      const article = documentPane.querySelector("[data-goal-view]");
-      if (!article) return false;
-      const factor = goalFactorKeys.includes(factorName) ? factorName : "relations";
-      const activePanel = article.querySelector('[data-goal-factor-panel="' + factor + '"]');
-      if (!activePanel) {
-        article.dataset.activeFactor = factor;
-        return false;
-      }
-      const trigger = article.querySelector('[data-goal-factor-tab="' + factor + '"]');
-      if (trigger) activateFocusSection(trigger);
-      article.dataset.activeFactor = factor;
-      article.querySelectorAll("[data-goal-factor-tab]").forEach((button) => {
-        const active = button.dataset.goalFactorTab === factor;
-        button.setAttribute("aria-selected", String(active));
-        button.setAttribute("tabindex", active ? "0" : "-1");
-      });
-      if (updateHash) history.replaceState(history.state, "", "#" + activePanel.id);
-      if (persist) queueSave();
-      return true;
-    };
+    const { abortGoalPanelRequest, setGoalPanel, setGoalFactor,
+      goalPanelFromTargetId, goalPanelFromHash, goalFactorFromTargetId, goalFactorFromHash,
+      handleGoalPanelClick, handleGoalFactorClick, handleGoalPanelKeyboard, handleGoalFactorKeyboard,
+    } = (${GOALS_PANELS_CLIENT_FACTORY_SCRIPT})({
+      documentPane, documentCollection, route, translate: L, isAbortError,
+      loadGoalRecords, abortGoalRecordsRequest, revealFocusTarget, activateFocusSection,
+      queueSave: () => queueSave(),
+      showError: (message) => showToast(message, true),
+      afterReplace: () => {
+        updateAllRelationFormPreviews();
+        document.querySelectorAll("[data-risk-state-form]").forEach(updateRiskStatePreview);
+        document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
+      },
+    });
 
     const resetQuickRecordDialog = (quickDialog) => {
       if (!quickDialog) return;
@@ -424,7 +206,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
       const width = Math.round(Math.min(maximum, Math.max(260, Number(value) || 320)));
       workspace.style.setProperty("--tree-width", width + "px");
       treeResizer.setAttribute("aria-valuenow", String(width));
-      requestAnimationFrame(() => graphAutoFit ? fitGoalGraph(false) : drawGoalGraph());
+      scheduleGoalGraphLayout();
       if (persist) queueSave();
     };
 
@@ -441,7 +223,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
         button.setAttribute("title", nextCollapsed ? L("展开目录") : L("收起目录"));
       });
       treeResizer?.setAttribute("aria-hidden", String(nextCollapsed));
-      requestAnimationFrame(() => graphAutoFit ? fitGoalGraph(false) : drawGoalGraph());
+      scheduleGoalGraphLayout();
       if (persist) queueSave();
     };
 
@@ -449,7 +231,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
       rememberFeedPresetState();
       return ({
       selected,
-      collapsed: [...document.querySelectorAll("[data-tree-item].is-collapsed")].map((item) => item.dataset.goalId),
+      collapsed: getCollapsedTreeGoals(),
       disclosures: [...document.querySelectorAll("[data-persist-open][open]")].map((item) => item.dataset.persistOpen),
       treeTop: treeScroll.scrollTop,
       documentTop: activeDesktopSurface === "goal" ? documentPane.scrollTop : Number(desktopSurfaceScroll.goal || 0),
@@ -460,15 +242,11 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
         ? parseFloat(workspace.style.getPropertyValue("--tui-width")) || undefined
         : tuiPane?.getBoundingClientRect().width,
       query: treeSearch.value,
-      statuses: [...selectedStatuses],
+      statuses: getSelectedStatuses(),
       mobileView: workspace.dataset.mobileView || "tree",
       navigatorView,
       workspaceMode: activeDesktopSurface === "goal" ? workspace.dataset.workspaceMode || "focus" : goalWorkspaceMode,
-      momentumOpenOnly,
-      momentumPeriod,
-      momentumSelected,
-      graphZoom,
-      graphAutoFit,
+      ...readMomentumState(),
       navigationVersion: desktopNavigationStateVersion,
       directory: treePane?.dataset.desktopDirectory || "root",
       directoryCollapsed: workspace.classList.contains("is-directory-collapsed"),
@@ -507,23 +285,17 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
           : decisionView ? "feed" : "root";
         setDesktopDirectory(restoredDirectory, false, false);
       }
-      const collapsed = new Set(ui?.collapsed || []);
-      document.querySelectorAll("[data-tree-item]").forEach((item) => {
-        const isCollapsed = collapsed.has(item.dataset.goalId);
-        item.classList.toggle("is-collapsed", isCollapsed);
-        item.querySelector(":scope > .tree-row [data-tree-toggle]")?.setAttribute("aria-expanded", String(!isCollapsed));
-      });
+      restoreTreeCollapsed(ui?.collapsed);
       const disclosures = new Set(ui?.disclosures || []);
       document.querySelectorAll("[data-persist-open]").forEach((item) => {
         item.open = disclosures.has(item.dataset.persistOpen);
       });
       treeSearch.value = ui?.query || "";
       setSelectedStatuses(ui?.statuses || []);
-      momentumOpenOnly = ui?.momentumOpenOnly === true;
-      momentumPeriod = Number(ui?.momentumPeriod) === 30 ? 30 : 7;
-      momentumSelected = String(ui?.momentumSelected || selected || "");
-      graphZoom = Number(ui?.graphZoom) || graphZoom;
-      graphAutoFit = ui?.graphAutoFit !== false;
+      restoreMomentumState({
+        momentumOpenOnly: ui?.momentumOpenOnly, momentumPeriod: ui?.momentumPeriod,
+        momentumSelected: ui?.momentumSelected, graphZoom: ui?.graphZoom, graphAutoFit: ui?.graphAutoFit,
+      });
       filterTree(ui?.query || "");
       if (feedDirectory) {
         const deepLinkedDecisionEntry = decisionFeedEntryFromHash();
@@ -582,9 +354,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
         const selectedDetail = sourceWorkbench?.querySelector('[data-source-detail="' + CSS.escape(selectedSource) + '"]');
         setSourceDetailTab(selectedDetail, restoredSourceDetailTab);
       }
-      bindGoalGraphViewport();
-      if (graphAutoFit) requestAnimationFrame(() => fitGoalGraph(false));
-      else setGraphZoom(graphZoom, false, false);
+      restoreGoalGraphViewport();
       setGoalPanel(goalPanelFromHash() || (ui?.selected === selected ? ui?.goalPanel : "overview"), false);
       setGoalFactor(goalFactorFromHash() || (ui?.selected === selected ? ui?.goalFactor : "relations"), false);
       const hashTargetId = decodeURIComponent(location.hash.slice(1));
@@ -600,4 +370,3 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `      const renderedPanel = target
         if (restoredMobileView === "tui") setWorkspaceMode("runtime", false);
         if (restoredMobileView === "document") setWorkspaceMode("focus", false);
 `;
-

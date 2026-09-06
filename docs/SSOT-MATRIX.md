@@ -1,5 +1,9 @@
 # GoalBoard 架构 SSOT 索引
 
+GW6（2026-09-06）：Goals 基础 schema、15/25/26/30 的 Goals 升级及 V3 `coverage_items` Query/导入写入已归 Goals；Host 只组合公开 schema/迁移并保留跨 owner 事务，importer/Web 只消费公开端口。规范见 [Goals](modules/goals.md)，证据见 [GW6](../specs/goalboard-architecture-reorganization/gw6-validation.md)。这不代表整个旧 Host/Store 或总重组完成。
+
+DD2 工程状态（2026-09-06）：原生/历史提案应用与决定 UI/copy/client 已按 owner 迁移，209 项串行回归和 12 项边界反证通过。当前 Coordinator / root renderer / server 为 2,771 / 2,240 / 3,243 行；它们仍未整体退出。真实 caller 与验收见 `specs/goalboard-architecture-reorganization/dd2-caller-audit.md`、`dd2-validation.md`。下文旧阶段记录只保留当时边界；canonical 完成状态以 GoalBoard 为准。
+
 状态：已确认（F1）；Goals Query、GW1–GW4、EX1–EX4、AR1 与 AP1–AP4 已迁入  
 权威需求书：[`specs/goalboard-architecture-reorganization/spec.md`](../specs/goalboard-architecture-reorganization/spec.md)  
 适用范围：GoalBoard、Relay 与 Loreport 相关能力的 Monorepo 重组
@@ -55,8 +59,8 @@ F2 已创建完整 package 树。AR1 后有 18 个目标 package 仍为 `contrac
 | --- | --- | --- | --- | --- |
 | `packages/contracts` | Module、Service、Platform 的可发布类型与 Schema | `src/v1/types.ts` 及各目录公开类型 | `contract-only` | F2、F3、各业务 Goal |
 | `packages/kernel` | Capability 注册、选择、权限与生命周期骨架 | AP2 已实现 versioned Capability registry；grant/provider policy 待各平台 Goal | `partial` | F2、F3、AP2 |
-| `packages/plugin-runtime` | Plugin 安装、签名身份、grant、隔离和生命周期 | FD3 本地参考 Runtime；持久 Host/隔离待 AP2/DV3 | `partial` | F2、FD3；DV3/AP2 完成产品化 |
-| `packages/plugin-sdk` | 外部 Plugin 作者使用的稳定 API 与测试入口 | FD3 Manifest/definition/polling Integration surface | `partial` | F2、FD3；DV3 补 UI/testing/tooling surface |
+| `packages/plugin-runtime` | Plugin 安装、签名身份、grant、隔离和生命周期 | 本地 Runtime、持久开发状态、可撤销授权和签名校验；不是 OS sandbox | `partial` | F2、FD3、DV3；分发收口见 DV4 |
+| `packages/plugin-sdk` | 外部 Plugin 作者使用的稳定 API 与测试入口 | Manifest/definition/polling、公开 Artifact/UI/private client 类型；fixture 由 Local Host 实现 | `partial` | F2、FD3、DV3 |
 | `packages/storage` | SQLite、Filesystem、Blob、事务和 migration 技术能力 | 各 Store 与文件辅助 | `contract-only` | F2、各事实迁移 Goal |
 | `packages/exchange` | Envelope、ACK、Cursor、Replay、CAS 与 Blob 交换 | 当前不存在正式 Server/Exchange | `contract-only` | F2；未来独立功能 Spec |
 | `packages/ui-host` | UI Contribution、Slot、嵌入、隔离和桥接 | FD4 registry/render 与 AP3 surface/Slot mount 校验已落地；Installed Plugin 隔离与完整安全 bridge 仍待独立实现 | `partial` | F2、FD4、AP3 |
@@ -72,19 +76,19 @@ F2 已创建完整 package 树。AR1 后有 18 个目标 package 仍为 `contrac
 | --- | --- | --- | --- | --- |
 | `modules/identity-team-access` | User、Team、membership、Access Decision | 当前无完整实现 | `contract-only` | F2；未来独立功能 Spec |
 | `modules/projects` | Project 身份、Catalog、workspace membership、`board_id` 兼容与迁移 | AP1 已迁正式事实；AP4 已移出 Desktop Panel 规则和 SQL，Catalog 仅保留文件/Runtime 与旧 Panel 方法转发 | `partial` | AP1 已迁事实与 Repository；AP2/WK1 清剩余兼容 composition，Cutover 删除旧 Panel facade |
-| `modules/context-ledger` | ObjectRef、跨模块关系、publication、materialization | Coordinator/Feed/Session 的散落关系 | `contract-only` | AR2 |
+| `modules/context-ledger` | ObjectRef、跨模块关系、publication、materialization | Feed / Session / Handoff / Runtime 关联、输入来源、临时重建与 Coordinator 归属审计已通过；未来 publication / 异步 materialization 未实现 | `partial` | AR2 已验收；[验收记录](../specs/goalboard-architecture-reorganization/ar2-validation.md) |
 | `modules/sync-replication` | 发布意图、replica、冲突和用户可见同步状态 | 当前无完整实现 | `contract-only` | F2；未来独立功能 Spec |
 | `modules/sources` | “监听哪里”与用户期望的 Source 配置 | 新 Sources Repository；旧 service caller 待清 | `partial` | FD1；FD3/FD4 清 caller |
 | `modules/signals` | 已观察到的外部事件与去重 provenance | 新 Signal/Revision Repository；公开来源待切 | `partial` | FD1；FD2/FD3 完成消费与 provider 切换 |
 | `modules/feed` | Feed Item、Signal reference、material、read/archive/disposition 与 promotion provenance | 新 Feed Repository；旧 `FeedStore` 仅转发 | `partial` | FD2 已迁；FD4 清 UI/route facade |
 | `modules/actions` | 个人/外部 Action 请求、状态和结果引用 | 当前无正式实现 | `contract-only` | F2；未来独立功能 Spec |
 | `modules/attention-resumption` | Attention reference、reason 与最小处置状态 | 新 Attention Repository；旧 Inbox API 仅转发 | `partial` | FD2 已迁；完整 snooze/resume 为未来功能 Spec |
-| `modules/goals` | Goal Contract、Graph、Policy、Risk、Lifecycle、Planning | Goals Query 与 GW1–GW4 已迁；EX4 已迁 action/work projection 和执行验收入口；Draft Dialogue/Goal Tree 决定入口仍在兼容路径 | `partial` | Goals Query、GW1–GW4、EX4 已迁；后续入口 Goal 收口 Draft Dialogue |
-| `modules/private-work-context` | 私人 Session、内容引用、workspace / Goal 关联、Runtime context binding 与 Handoff 事实 | `src/sessions/`、Project Catalog binding SQL | `partial` | WK1 已迁移事实 owner；WK2 / WK3 清理 Runtime 与 UI caller |
+| `modules/goals` | Goal Contract、Graph、Policy、Risk、Lifecycle、Planning | Goals Query 与 GW1–GW5 已迁；EX4 已迁执行验收入口；DD1/DD2 草稿与提案决定应用由 Goals Plugin 组合公开 API，Goal/Relation/Policy/Risk 写入归 Goals，不吸收应用进 Module；root Host/query 与兼容退出仍待总收口 | `partial` | DD1/DD2 已完成；证据见 dd1-validation.md、dd2-validation.md、dd2-caller-audit.md |
+| `modules/private-work-context` | 私人 Session、内容引用、关联语义、Runtime context binding 与 Handoff 事实 | Session / Handoff / Runtime 当前 Project 关联经 Ledger API 保存；私人内容与控制历史留在 Work | `partial` | WK1–WK3 已迁移；AR2 切换 Session schema v5、Catalog v10 与应用层组合 |
 | `modules/execution` | Claim、Run、lease、attempt 与执行生命周期 | EX1 已迁事实与状态机；EX4 已让 Web/CLI/MCP 走统一 application port 并删除 Coordinator 公开 facade | `partial` | EX1、EX4 已迁 |
 | `modules/artifacts` | Artifact、版本、类型、内容引用与 provenance | AR1 已建立唯一正式事实；旧代码仅有各 owner 的字符串引用，没有第二套 Artifact Store | `partial` | AR1 已迁 Core；AR3 切换现有结果入口 |
 | `modules/evidence-verification` | Evidence、Correction 与验证义务 | EX2 已迁事实与门禁；EX4 已迁入口授权与跨 owner application commands | `partial` | EX2、EX4 已迁 |
-| `modules/governance-collaboration` | Review、Proposal、Decision 与确认 provenance | EX3 已迁事实与状态机；EX4 已迁执行链 Review 入口，Proposal/Decision 继续走 Governance public API | `partial` | EX3、EX4 已迁 |
+| `modules/governance-collaboration` | Review、Proposal、Decision 与确认 provenance | EX3 已迁事实与状态机；EX4 已迁执行链 Review 入口；AR2 将来源校验和旧提案展示收回本 owner | `partial` | EX3、EX4、AR2 已迁；规划决定入口另行收口 |
 | `modules/automation` | Trigger、Rule、Automation Run 与产生的 Action Request | 当前无正式实现 | `contract-only` | F2；未来独立功能 Spec |
 
 每个 Module 的 API、事件和非职责见 [`docs/modules/`](modules/README.md)。Module 之间只通过公开 Capability Contract 调用，不导入彼此 implementation 或 Store。
@@ -96,7 +100,7 @@ F2 已创建完整 package 树。AR1 后有 18 个目标 package 仍为 `contrac
 | `horizontal/connector-host` | Provider 连接、凭据引用和调用 Receipt | Provider-neutral Host；Driver 由官方 Plugin contribution 注册 | `partial` | FD1、FD3；AP2 迁最终 composition caller |
 | `horizontal/listener-host` | cursor、lease、重试、Raw Event 到 Signal Draft 投递 | 新 Listener 状态与接收链；Web timer 待迁 | `partial` | FD1；FD4 清入口 caller |
 | `horizontal/scheduler` | Durable one-shot wakeup | Feed scheduler 与 Web timer | `contract-only` | FD1；后续消费者按 Contract 接入 |
-| `horizontal/runtime-host` | Runtime 启动、恢复、中断、stream 与技术 Receipt | Runtime router、Codex app-server 与 PTY server host 已迁；Work UI transport 待 WK3 | `partial` | WK2 已迁 Host/Adapter；WK3 迁产品编排 |
+| `horizontal/runtime-host` | Runtime 启动、恢复、中断、stream 与技术 Receipt | Runtime router、Codex app-server 与 PTY server host 已迁；浏览器 transport/reconnect 由 Work 消费 | `partial` | WK2 已迁 Host/Adapter；WK3 已迁产品编排 |
 
 Horizontal Service 只保存可恢复的技术状态，不拥有 Goal、Signal、Action、Session 或 Run 等业务事实。
 
@@ -104,11 +108,11 @@ Horizontal Service 只保存可恢复的技术状态，不拥有 Goal、Signal�
 
 | 目标 package | 产品能力 | 当前来源 | F2 后初始状态 | 迁移 / 实现 Goal |
 | --- | --- | --- | --- | --- |
-| `plugins/native/goals` | Goals 一级入口与组合 UI | EX4 已接管执行验收 Contract、action/work projection；Goals 导航、编辑、Planning 与文案仍在旧 renderer/i18n | `partial` | EX4 已迁执行验收组合；GW5 继续迁 Goals UI/文案 |
-| `plugins/native/artifacts` | Artifacts 一级入口、浏览和嵌入 | 旧结果/文件展示 | `contract-only` | AR3 |
+| `plugins/native/goals` | Goals 一级入口与产品 UI | Goals 页面、文案、专属客户端、route descriptor 和执行验收公开 contribution；Module 拥有事实/规则，Workbench 装配 | `implemented; legacy composition pending cutover` | GW5 整项工程验收见 gw5-validation.md；剩余跨 owner Execution/Decision/共享 Shell 组合由最终 Cutover 审查 |
+| `plugins/native/artifacts` | Artifacts 一级入口、浏览和嵌入 | 已迁结果链接/项目文件打开；正式版本列表、详情与本地导出已接入 Web；Goal 上下文按明确输入/产出关系嵌入精确版本 | `partial` | AR3 已完成迁移验收；不包含未来安装/Team 同步 |
 | `plugins/native/feed` | Feed 一级入口和处置 UI | Feed/Attention/Source UI 与 HTTP route table 已迁；promotion 已调用公开 Goals Command，Node Host binding 仍是兼容 adapter | `partial` | FD4、GW4；AP2 清最终 Host binding |
 | `plugins/native/actions` | Actions 一级入口 | 当前无正式实现 | `contract-only` | F2；未来独立功能 Spec |
-| `plugins/native/work` | Session、Runtime、resume、handoff UI | Web/TUI/Session UI | `contract-only` | WK3 |
+| `plugins/native/work` | Session、Runtime、resume、handoff 应用和 UI | WK3 已迁应用编排、Session/Terminal contribution、浏览器控制器、HTTP 用例和工作目录恢复 | `partial` | WK3；边界与证据见 `specs/goalboard-architecture-reorganization/wk3-validation.md` |
 | `plugins/native/automation` | Automation 一级入口 | 当前无正式实现 | `contract-only` | F2；未来独立功能 Spec |
 | `plugins/official-integrations/github` | GitHub connector/listener/signal adapter | Provider 已迁；旧 OAuth/credential 仅 App 接线 | `partial` | FD3；AP2/DV3 清安装接线 |
 | `plugins/official-integrations/gmail` | Gmail OAuth/connector/listener/signal adapter | Provider/scope/cursor/error 已迁；旧 OAuth secret lifecycle 由 Host 注入 | `partial` | FD3；AP2/DV3 清安装接线 |
@@ -122,9 +126,9 @@ Goals 与 Artifacts 是官方签名保护的一等 Plugin。Plugin 之间不依�
 
 | 目标 / 当前入口 | 最终 owner | 当前状态 | 退出或完成条件 |
 | --- | --- | --- | --- |
-| `tooling/plugin-cli` | DV3 | `contract-only` | DV3 实现后可在干净环境创建、校验、调试、打包和签名 Plugin |
+| `tooling/plugin-cli` | DV3 | `partial` | create/validate/pack/sign/verify；dev 经具名 Host runner 真实运行，不是生产安装器或市场 |
 | `tooling/migrations` | 各迁移 Goal；DV4 维护执行说明 | `absent` | 每个脚本有输入、输出、幂等/回滚说明；目录本身不是 package |
-| `examples/plugin-sample` | DV3 | `absent` | SDK 可用后提供首个真实结果；不进生产 workspace |
+| `examples/plugin-sample` | DV3 | `partial` | 公开 SDK 样例经外部离线安装和实际应用 CLI 产生 Artifact/UI；不进生产 workspace 或产品 pack |
 | `package.json`、`pnpm-workspace.yaml` | F2 建 workspace；DV4 / Cutover 管发布 | `workspace-root + legacy-release` | workspace 已覆盖全部 48 个目标 package；DV4 / Cutover 再切换最终发布清单 |
 | `src/index.ts` library entry | F3 / 各 Module；最终 Cutover | `legacy-mixed` | public export 迁入明确 Contract subpath；根入口只保留有期限兼容或删除 |
 | 根 `@adeptify/goalboard` export | 最终 Cutover | `legacy-mixed` | public caller 转到新 Contract，旧入口有明确兼容期或删除 |

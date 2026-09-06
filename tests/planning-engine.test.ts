@@ -1,3 +1,4 @@
+import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -446,6 +447,7 @@ test("Goals public Planning API owns method versions, graph checks, and change i
       idempotency_key: "init-module-planning",
     });
     const goals = new GoalsModule(store.db, {
+      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
       currentActionToken: () => "token:planning",
       authorizeRiskUpdate: () => undefined,
       authorizeRiskState: () => undefined,

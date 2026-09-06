@@ -5,8 +5,8 @@ import { chmod, copyFile, lstat, mkdtemp, mkdir, readFile, realpath, rm, stat, s
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { GoalBoardHomeInstallError, installGoalBoardHome } from "../src/install/home.js";
-import { writeGoalBoardBuildManifest } from "../src/install/fingerprint.js";
+import { GoalBoardHomeInstallError, installGoalBoardHome } from "@adeptify/goalboard-app-local-host";
+import { writeGoalBoardBuildManifest } from "@adeptify/goalboard-app-local-host";
 
 const execFileAsync = promisify(execFile);
 
@@ -65,6 +65,31 @@ async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>)
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+test("public CLI without --source installs its product root even when invoked from another directory", async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const productRoot = process.cwd();
+    const home = join(directory, ".goalboard");
+    const output = await execFileAsync(process.execPath, [
+      join(productRoot, "dist", "cli", "main.js"), "install", "--home", home, "--json",
+    ], { cwd: directory });
+    const installed = JSON.parse(output.stdout);
+    assert.equal(installed.status, "installed");
+    const sourcePackage = JSON.parse(await readFile(join(productRoot, "package.json"), "utf8"));
+    const installedPackage = JSON.parse(await readFile(join(installed.release_directory, "package.json"), "utf8"));
+    assert.equal(installedPackage.name, "@adeptify/goalboard-home-runtime");
+    assert.equal(installedPackage.version, sourcePackage.version);
+    assert.equal(await readFile(join(installed.release_directory, "dist", "cli", "main.js"), "utf8"),
+      await readFile(join(productRoot, "dist", "cli", "main.js"), "utf8"));
+    const help = await execFileAsync(installed.launchers.cli, ["--help"], { cwd: directory });
+    assert.match(help.stdout, /GoalBoard commands/);
+    assert.match(help.stdout, /goalboard plugin/);
+    const again = await execFileAsync(process.execPath, [
+      join(productRoot, "dist", "cli", "main.js"), "install", "--home", home, "--json",
+    ], { cwd: directory });
+    assert.equal(JSON.parse(again.stdout).status, "unchanged");
+  });
+});
 
 test("home install is scoped, idempotent, and produces an owned release layout", async () => {
   await withTemporaryDirectory(async (directory) => {
@@ -168,6 +193,43 @@ test("repository sources require a current build fingerprint and local install a
       scripts?: Record<string, string>;
     };
     assert.match(packageMetadata.scripts?.["install:local"] ?? "", /^pnpm build && /);
+  });
+});
+
+test("workspace source changes reject an old build before touching the installed release, while generated files are not source inputs", async () => {
+  await withTemporaryDirectory(async directory => {
+    const source = await fixtureSource(directory, "1.0.0");
+    const workspace = join(source, "apps", "local-host");
+    await mkdir(join(source, "src"), { recursive: true });
+    await mkdir(join(workspace, "src"), { recursive: true });
+    await mkdir(join(workspace, "dist"), { recursive: true });
+    await mkdir(join(workspace, "node_modules"), { recursive: true });
+    await writeFile(join(source, "src", "entry.ts"), "export const root = 1;\n");
+    await writeFile(join(source, "tsconfig.json"), "{}\n");
+    await writeFile(join(source, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n");
+    await writeFile(join(workspace, "package.json"), '{"name":"fixture-workspace","version":"1.0.0"}\n');
+    await writeFile(join(workspace, "tsconfig.json"), "{}\n");
+    const workspaceSource = join(workspace, "src", "entry.ts");
+    await writeFile(workspaceSource, "export const implementation = 1;\n");
+    await writeGoalBoardBuildManifest(source);
+    const home = join(directory, "home");
+    const installed = await installGoalBoardHome({ homeDirectory: home, sourceDirectory: source });
+    const installationPath = join(home, "config", "installation.json");
+    const before = await readFile(installationPath, "utf8");
+    const launcherBefore = await readFile(installed.launchers.cli, "utf8");
+    await writeFile(join(workspace, "dist", "entry.js"), "generated output\n");
+    await writeFile(join(workspace, "node_modules", "generated.txt"), "package manager output\n");
+    assert.equal((await installGoalBoardHome({ homeDirectory: home, sourceDirectory: source })).status, "unchanged");
+
+    await writeFile(workspaceSource, "export const implementation = 2;\n");
+    await assert.rejects(installGoalBoardHome({ homeDirectory: home, sourceDirectory: source }),
+      (error: unknown) => error instanceof GoalBoardHomeInstallError && error.code === "source.build_stale");
+    assert.equal(await readFile(installationPath, "utf8"), before);
+    assert.equal(await readFile(installed.launchers.cli, "utf8"), launcherBefore);
+    const execution = await execFileAsync(installed.launchers.cli, []);
+    assert.match(execution.stdout, /cli:embedded/, "the old installation remains runnable after rejection");
+    await writeGoalBoardBuildManifest(source);
+    assert.equal((await installGoalBoardHome({ homeDirectory: home, sourceDirectory: source })).status, "refreshed");
   });
 });
 

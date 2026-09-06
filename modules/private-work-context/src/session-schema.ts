@@ -7,7 +7,7 @@ import type {
 import { GoalBoardSessionError } from "./errors.js";
 
 export const SESSION_REGISTRY_OWNER = "goalboard-session-registry-v1";
-export const SESSION_REGISTRY_SCHEMA_VERSION = 3;
+export const SESSION_REGISTRY_SCHEMA_VERSION = 5;
 export const DEFAULT_CORRELATION_TTL_SECONDS = 15 * 60;
 
 export function initializeOrValidateSessionSchema(db: Database.Database): void {
@@ -70,7 +70,7 @@ export function initializeOrValidateSessionSchema(db: Database.Database): void {
       db.prepare("INSERT INTO session_meta (key, value) VALUES (?, ?)").run("owner", SESSION_REGISTRY_OWNER);
       db.prepare("INSERT INTO session_meta (key, value) VALUES (?, ?)").run(
         "schema_version",
-        String(SESSION_REGISTRY_SCHEMA_VERSION),
+        "3",
       );
     })();
     return;
@@ -89,11 +89,11 @@ export function initializeOrValidateSessionSchema(db: Database.Database): void {
       if (version === 1) db.exec(sessionEventsSchema());
       db.exec(sessionHandoffsSchema());
       db.prepare("UPDATE session_meta SET value = ? WHERE key = 'schema_version'")
-        .run(String(SESSION_REGISTRY_SCHEMA_VERSION));
+        .run("3");
     })();
     return;
   }
-  if (version !== SESSION_REGISTRY_SCHEMA_VERSION) {
+  if (version !== 3 && version !== 4 && version !== SESSION_REGISTRY_SCHEMA_VERSION) {
     throw new GoalBoardSessionError(
       "session.registry_reader_too_old",
       `Session Registry schema=${version}，当前 reader 支持 ${SESSION_REGISTRY_SCHEMA_VERSION}`,

@@ -10,11 +10,9 @@ import {
   runWithLocale,
   safeNextPath,
 } from "../src/web/i18n.js";
-import {
-  explainDecision,
-  explainWorkState,
-  type GoalPresentationState,
-} from "../src/web/human-language.js";
+import { explainGoalDecision } from "@adeptify/goalboard-plugin-goals";
+import { createGoalStateExplainer, type GoalPresentationState } from "@adeptify/goalboard-plugin-goals";
+const { explainWorkState } = createGoalStateExplainer(L);
 
 test("locale defaults to Chinese, then cookie, then Accept-Language", () => {
   assert.equal(resolveWebLocale(undefined, undefined), "zh");
@@ -52,7 +50,11 @@ test("L translates chrome in an English request and keeps Chinese as source", ()
 });
 
 test("every static renderer label has an English translation", () => {
-  const source = readFileSync(new URL("../src/web/render.ts", import.meta.url), "utf8");
+  // Keep checking the labels after the page and Goals directory move to their owners.
+  const source = ["../src/web/render.ts", "../apps/workbench/src/goals-page-renderer.ts",
+    "../plugins/native/goals/src/tree-ui.ts", "../plugins/native/goals/src/policy-ui.ts",
+    "../plugins/native/goals/src/project-policy-client.ts"]
+    .map(path => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
   const labels = [...source.matchAll(/\bL\("((?:[^"\\]|\\.)*)"/g)]
     .map((match) => JSON.parse(`"${match[1]}"`) as string);
   const missing = [...new Set(labels.filter((label) => EN[label] == null))];
@@ -92,11 +94,11 @@ test("work state labels stay concise and professional", () => {
 test("all five decision types start with the user's question and explain missing evidence", () => {
   const kinds = ["contract", "candidate", "rewire", "review", "risk"] as const;
   for (const kind of kinds) {
-    const zh = explainDecision(kind);
+    const zh = explainGoalDecision(kind, L);
     assert.match(zh.question, /[？?]$/);
     assert.match(zh.insufficientEvidence, /不能可靠|不能可靠判断/);
     runWithLocale("en", () => {
-      const en = explainDecision(kind);
+      const en = explainGoalDecision(kind, L);
       assert.match(en.question, /\?$/);
       assert.match(en.insufficientEvidence, /not enough evidence/i);
     });

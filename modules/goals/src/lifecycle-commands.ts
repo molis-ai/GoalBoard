@@ -88,6 +88,17 @@ implements GoalsLifecycleApi<TTransition> {
     return this.revalidation.revalidate(input);
   }
 
+  markCandidateAwaitingRewire(boardId: string, goalId: string, at: string): void {
+    this.revalidation.setValidityState(boardId, goalId, "needs_revalidation", at);
+  }
+
+  reconcileRewireGoalValidity(boardId: string, formalGoalId: string, revalidatedGoalIds: readonly string[], at: string): void {
+    for (const goalId of revalidatedGoalIds) {
+      this.revalidation.setValidityState(boardId, goalId, "needs_revalidation", at);
+    }
+    if (formalGoalId) this.revalidation.setValidityState(boardId, formalGoalId, "valid", at);
+  }
+
   setValidityState(
     boardId: string,
     goalId: string,

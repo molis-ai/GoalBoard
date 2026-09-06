@@ -5,10 +5,11 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
-import { installGoalBoardHome } from "../src/install/home.js";
-import { RuntimeIntegrationService } from "../src/install/runtime-integration.js";
-import { GoalBoardUninstallError, GoalBoardUninstallService } from "../src/install/uninstall.js";
-import { GoalBoardWebServiceManager } from "../src/install/web-service.js";
+import { installGoalBoardHome } from "@adeptify/goalboard-app-local-host";
+import { RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardUninstallError } from "@adeptify/goalboard-app-local-host";
+import { createLocalUninstallService } from "../src/local-host/uninstall.js";
+import { GoalBoardWebServiceManager } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,7 +33,7 @@ async function fixture() {
     userHomeDirectory: userHome,
     platform: "linux",
   });
-  const service = new GoalBoardUninstallService({ homeDirectory: home, runtimeIntegrationService, webServiceManager });
+  const service = createLocalUninstallService({ homeDirectory: home, runtimeIntegrationService, webServiceManager });
   return { directory, userHome, home, userProject, demo: demo.project, service };
 }
 
@@ -188,7 +189,7 @@ test("changed owned files block uninstall and a failed service step leaves a rec
       userHomeDirectory: failed.userHome,
       runtimeExecutables: { codex: null, "claude-code": null, opencode: null, "pi-agent": null, "grok-build": null },
     });
-    const service = new GoalBoardUninstallService({
+    const service = createLocalUninstallService({
       homeDirectory: failed.home,
       runtimeIntegrationService,
       webServiceManager,

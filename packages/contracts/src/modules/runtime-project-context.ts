@@ -1,0 +1,83 @@
+import type { ProjectSelection as GoalBoardProjectSelection } from "./projects.js";
+import type { RuntimeWorkContext, NormalizedRuntimeWorkContext, RuntimeProjectSuggestionClue } from "./private-work-context.js";
+
+export type GoalBoardProjectBindingScope = "session" | "workspace_default";
+
+export interface GoalBoardProjectSuggestion extends GoalBoardProjectSelection {
+  /** Generic, user-safe explanation; never includes the host clue value. */
+  reasons: string[];
+}
+
+export interface GoalBoardProjectConnection {
+  project_id: string;
+  board_id: string;
+  database_path: string;
+}
+
+export interface GoalBoardRuntimeContextResolution {
+  status: "bound" | "suggested" | "unbound";
+  reason: "missing_stable_context" | "unknown_context" | null;
+  next_action:
+    | "continue"
+    | "use_explicit_existing_selection_or_ask_user_to_confirm_suggestion"
+    | "use_explicit_existing_selection_or_ask_user_to_select_or_create";
+  context: NormalizedRuntimeWorkContext;
+  project: GoalBoardProjectSelection | null;
+  connection: GoalBoardProjectConnection | null;
+  suggested_projects: GoalBoardProjectSuggestion[];
+  available_projects: GoalBoardProjectSelection[];
+}
+
+export interface BindRuntimeWorkContextInput {
+  context: RuntimeWorkContext;
+  project_id: string;
+  actor_id: string;
+  /** The user selected this project in the current Runtime conversation. */
+  user_confirmed: boolean;
+  /** Required only when a previously bound entry switches to another project. */
+  rebind_confirmed?: boolean;
+  /** Omit to record a workspace candidate; `session` only affects the current native Session. */
+  binding_scope?: GoalBoardProjectBindingScope;
+}
+
+export interface UnbindRuntimeWorkContextInput {
+  context: RuntimeWorkContext;
+  actor_id: string;
+  /** The user explicitly asked to disconnect this current Runtime entry. */
+  user_confirmed: boolean;
+  /** Session override by default; workspace removes one long-lived membership. */
+  binding_scope?: "session" | "workspace";
+  project_id?: string;
+}
+
+export interface GoalBoardRuntimeContextUnbindResult {
+  resolution: GoalBoardRuntimeContextResolution;
+  unbound_project: GoalBoardProjectSelection | null;
+  changed: boolean;
+}
+
+export interface RejectRuntimeContextSuggestionInput {
+  context: RuntimeWorkContext;
+  project_id: string;
+  actor_id: string;
+  /** The user explicitly rejected this candidate in the current conversation. */
+  user_confirmed: boolean;
+  /** Host-only ranking hints. The model never supplies them through MCP. */
+  suggestion_clues: readonly RuntimeProjectSuggestionClue[];
+}
+
+export interface GoalBoardRuntimeContextSuggestionRejectionResult {
+  resolution: GoalBoardRuntimeContextResolution;
+  rejected_project: GoalBoardProjectSelection;
+  changed: boolean;
+}
+
+export interface CreateAndBindRuntimeContextInput {
+  context: RuntimeWorkContext;
+  display_name: string;
+  actor_id: string;
+  user_confirmed: boolean;
+  rebind_confirmed?: boolean;
+  binding_scope?: GoalBoardProjectBindingScope;
+  idempotency_key: string;
+}

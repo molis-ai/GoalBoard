@@ -117,7 +117,7 @@ test("embedded onboarding Runtime exposes only the real TUI work surface", () =>
 });
 
 test("live xterm sessions receive the selected terminal palette", () => {
-  const ptyClientSource = readFileSync(new URL("../src/web/pty-client.ts", import.meta.url), "utf8");
+  const ptyClientSource = readFileSync(new URL("../plugins/native/work/src/terminal/screens.ts", import.meta.url), "utf8");
   assert.match(ptyClientSource, /theme: terminalPalette\(\)/);
   assert.match(ptyClientSource, /goalboard:terminal-theme-change/);
   assert.match(ptyClientSource, /term\.options\.theme = palette/);

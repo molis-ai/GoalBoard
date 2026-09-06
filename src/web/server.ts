@@ -14,7 +14,7 @@ import {
 import { GoalBoardV1Error, type GoalBoardCoordinator } from "../v1/coordinator.js";
 import { seedDemoBoard } from "../v1/demo.js";
 import type { SqliteGoalBoardStore } from "../v1/store.js";
-import type { GoalPolicy, GoalRelationRecord, GoalTreeProposalItemInput, RiskRecord } from "../v1/types.js";
+import type { GoalPolicy, GoalRelationRecord, RiskRecord } from "../v1/types.js";
 import {
   GoalBoardProjectCatalog,
   GoalBoardProjectCatalogError,
@@ -23,13 +23,14 @@ import {
 } from "../projects/catalog.js";
 import { withGoalBoardProjectCatalog } from "../projects/catalog-session.js";
 import { reconcileLegacySessionCatalog } from "../sessions/compatibility.js";
-import { SessionContentService } from "../sessions/content.js";
-import { SessionDirectoryService } from "../sessions/directory.js";
-import { SessionHandoffService } from "../sessions/handoff.js";
+import { SessionContentService } from "@adeptify/goalboard-plugin-work";
+import { buildWorkSessionView, handleWorkPanelHttp, handleWorkSessionHttp } from "@adeptify/goalboard-plugin-work";
+import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
+import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import { RegistryFallbackSessionAdapter } from "../sessions/registry-fallback-adapter.js";
-import { SessionTuiRecorder } from "../sessions/tui-recorder.js";
-import { GoalBoardSessionError, type RuntimeSessionTransport } from "../sessions/types.js";
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
+import { SessionTuiRecorder } from "@adeptify/goalboard-plugin-work";
+import type { RuntimeSessionTransport } from "../sessions/types.js";
 import {
   CodexAppServerTransport,
   CodexRuntimeSessionAdapter,
@@ -50,14 +51,13 @@ import {
   onboardingPlanningHint,
   type OnboardingIntentFrame,
 } from "./onboarding-intent.js";
-import { goalTreeProposalItemValidationIssues } from "../v1/goal-tree-proposal-validation.js";
-import { goalTreeProposalDecompositionIssues } from "@adeptify/goalboard-module-goals";
 import {
   createWorkbenchExecutionValidationAdapter,
   createWorkbenchGoalsAdapter,
 } from "@adeptify/goalboard-app-workbench";
 import { attachGoalBoardPtySocket } from "./pty-socket.js";
-import { resolveWebControlToken } from "./control-token.js";
+import { renderWorkbenchPlanningRequest, renderWorkbenchGoalsReadRequest, renderWorkbenchGoalsPageRequest } from "@adeptify/goalboard-app-workbench";
+import { resolveWebControlToken } from "@adeptify/goalboard-app-local-host";
 import type {
   GoalBoardProjectRecord,
   GoalBoardWorkspaceDirectoryRecord,
@@ -67,11 +67,11 @@ import {
   SUPPORTED_RUNTIME_IDS,
   isSupportedRuntimeId,
   type SupportedRuntimeId,
-} from "../install/runtime-integration.js";
+} from "@adeptify/goalboard-app-local-host";
 import {
   GoalBoardWebServiceManager,
   type GoalBoardWebServiceAction,
-} from "../install/web-service.js";
+} from "@adeptify/goalboard-app-local-host";
 import {
   renderGoalDocumentFragment,
   renderGoalPanelFragment,
@@ -121,17 +121,21 @@ import {
   runWithLocale,
   safeNextPath,
 } from "./i18n.js";
-import { goalPresentationState } from "./human-language.js";
-import { presentGoalAction } from "./action-presentation.js";
+import { goalPresentationState, createGoalActionPresenter } from "@adeptify/goalboard-app-workbench";
+const { presentGoalAction } = createGoalActionPresenter(L);
 import { handleFeedNativePluginHttp } from "./feed-native-plugin-http.js";
+import { handleArtifactNativePluginHttp, renderGoalArtifactContext } from "./artifact-native-plugin-http.js";
+import { openArtifactProjectReference, ArtifactProjectReferenceError } from "@adeptify/goalboard-plugin-artifacts";
 import { buildCapsuleSnapshot, renderCapsuleShell } from "./capsule.js";
 import {
   ProjectReferenceError,
   readProjectReference,
 } from "@adeptify/goalboard-module-evidence-verification";
-import { FeedStore } from "../feed/store.js";
+import { FeedStore, FeedStoreError } from "../feed/store.js";
 import { detectRelayImport } from "../feed/relay-import.js";
 import { feedItemContext, type FeedSnapshot } from "../feed/types.js";
+import { readLinkedFeedContext } from "@adeptify/goalboard-plugin-feed";
+import { createContextLedger, createContextMaterializer } from "@adeptify/goalboard-module-context-ledger";
 import {
   listFeedSourceCatalog,
 } from "../feed/sources/service.js";
@@ -140,21 +144,20 @@ import { FeedConnectorService } from "../feed/connectors/service.js";
 import { hydrateFeedItemContent } from "../feed/content.js";
 import type {
   ProjectOperationsData,
-  ProjectSessionRecord,
   ProjectWorkspaceRecord,
-} from "./project-session-workspaces.js";
+} from "@adeptify/goalboard-plugin-work";
 import {
   GoalBoardWorkspaceActionError,
   repairProjectWorkspace,
   unlinkProjectWorkspace,
-} from "./workspace-project-actions.js";
+} from "@adeptify/goalboard-plugin-work";
 import {
   completeGoalBoardOnboarding,
   dismissGoalBoardOnboarding,
   goalBoardOnboardingStatus,
 } from "./onboarding.js";
 
-export { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "./control-token.js";
+export { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "@adeptify/goalboard-app-local-host";
 
 export interface WebServerOptions {
   /**
@@ -250,10 +253,6 @@ function rowText(value: unknown): string {
   return value == null ? "" : String(value);
 }
 
-function rowOptionalText(value: unknown): string | null {
-  return value == null ? null : String(value);
-}
-
 function rowJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string") return fallback;
   try {
@@ -299,8 +298,8 @@ function webRiskFacts(
 function webImpactFacts(
   body: Record<string, unknown>,
   fallbackGoalId?: string,
-): Omit<Parameters<GoalBoardCoordinator["addImpact"]>[1], "binding_id"> {
-  const access = String(body.access ?? "read") as Parameters<GoalBoardCoordinator["addImpact"]>[1]["access"];
+): Omit<import("@adeptify/goalboard-contracts/modules/goals").ImpactFactsInput, "binding_id"> {
+  const access = String(body.access ?? "read") as import("@adeptify/goalboard-contracts/modules/goals").ImpactAccess;
   const state = String(body.state ?? "confirmed") as "proposed" | "confirmed";
   if (!["read", "write", "decide", "exclusive"].includes(access)) {
     throw new Error("Impact access 无效");
@@ -357,45 +356,10 @@ export function buildGoalBoardWebView(
 ): GoalBoardWebView {
   const snapshot = store.snapshot(options.boardId);
   const executionAdapter = createWorkbenchExecutionValidationAdapter(coordinator.executionValidation);
-  const coverage = (store.db
-    .prepare("SELECT * FROM coverage_items WHERE board_id = ? ORDER BY created_at, requirement_id")
-    .all(options.boardId) as DatabaseRow[]).map<WebCoverageItem>((row) => ({
-    requirement_id: rowText(row.requirement_id),
-    statement: rowText(row.statement),
-    disposition: rowText(row.disposition),
-    owner_goal_id: rowOptionalText(row.owner_goal_id),
-    reason: rowOptionalText(row.reason),
-    revisit_condition: rowOptionalText(row.revisit_condition),
-    blocking: Boolean(row.blocking),
-    created_at: rowText(row.created_at),
-    updated_at: rowText(row.updated_at),
-  }));
-  const inputBindings = (store.db
-    .prepare("SELECT * FROM input_bindings WHERE board_id = ? ORDER BY created_at, binding_id")
-    .all(options.boardId) as DatabaseRow[]).map<WebInputBinding>((row) => ({
-    binding_id: rowText(row.binding_id),
-    goal_id: rowText(row.goal_id),
-    input_name: rowText(row.input_name),
-    source_type: rowText(row.source_type),
-    source_ref: rowText(row.source_ref),
-    snapshot_digest: rowOptionalText(row.snapshot_digest),
-    state: rowText(row.state),
-    reason: rowText(row.reason),
-    created_by: rowText(row.created_by),
-    created_at: rowText(row.created_at),
-  }));
-  const policyBindings = (store.db
-    .prepare("SELECT * FROM policy_bindings WHERE board_id = ? ORDER BY created_at, policy_binding_id")
-    .all(options.boardId) as DatabaseRow[]).map<WebPolicyBinding>((row) => ({
-    policy_binding_id: rowText(row.policy_binding_id),
-    goal_id: rowOptionalText(row.goal_id),
-    scope: rowText(row.scope),
-    policy: rowJson(row.policy_json, {}),
-    state: rowText(row.state),
-    created_by: rowText(row.created_by),
-    reason: rowText(row.reason),
-    created_at: rowText(row.created_at),
-  }));
+  const coverage: WebCoverageItem[] = coordinator.goalQueries.listLegacyCoverage(options.boardId);
+  const inputBindings = coordinator.goalInputs.list(options.boardId)
+    .map(({ board_id: _boardId, ...binding }): WebInputBinding => binding);
+  const policyBindings: WebPolicyBinding[] = coordinator.goalQueries.listPolicyHistory(options.boardId);
   const events = (store.db
     .prepare("SELECT * FROM events WHERE board_id = ? ORDER BY seq DESC")
     .all(options.boardId) as DatabaseRow[]).map<WebEventRecord>((row) => ({
@@ -411,11 +375,9 @@ export function buildGoalBoardWebView(
   }));
   const riskGoalIds = new Map<string, string[]>();
   const goalRiskIds = new Map<string, string[]>();
-  for (const row of store.db
-    .prepare("SELECT risk_id, goal_id FROM goal_risks ORDER BY risk_id, goal_id")
-    .all() as DatabaseRow[]) {
-    const riskId = rowText(row.risk_id);
-    const goalId = rowText(row.goal_id);
+  for (const row of coordinator.goalQueries.listGoalRiskLinks(options.boardId)) {
+    const riskId = row.risk_id;
+    const goalId = row.goal_id;
     addGroupedValue(riskGoalIds, riskId, goalId);
     addGroupedValue(goalRiskIds, goalId, riskId);
   }
@@ -737,7 +699,7 @@ async function desktopPanelSessionIds(
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   if (panelIds.length === 0) return result;
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: catalog.homeDirectory });
+  const registry = await openWorkSessionRegistry({ homeDirectory: catalog.homeDirectory });
   try {
     reconcileLegacySessionCatalog(catalog, registry);
     for (const panelId of panelIds) {
@@ -751,7 +713,7 @@ async function desktopPanelSessionIds(
 }
 
 async function openSessionRuntimeResources(options: WebServerOptions): Promise<SessionRuntimeResources> {
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: options.homeDirectory });
+  const registry = await openWorkSessionRegistry({ homeDirectory: options.homeDirectory });
   const router = new RuntimeHostRouter(
     (runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry),
   );
@@ -777,196 +739,26 @@ function sessionProjectOperationsData(
   projects: readonly WebProjectNavigation[] = [],
   catalogWorkspaces: readonly GoalBoardWorkspaceDirectoryRecord[] = [],
 ): ProjectOperationsData {
-  const goalTitles = new Map(
-    [...view.goals, ...view.archived_goals, ...view.trashed_goals]
-      .map((item) => [item.goal.goal_id, item.goal.title] as const),
-  );
-  const records = resources.registry.list({ project_id: projectId });
-  const sessions: ProjectSessionRecord[] = records.map((session) => {
-    const history = resources.registry.goalHistory(session.session_id);
-    const capabilities = resources.router.capabilities(session.runtime_id);
-    const mode = session.native_runtime_session_id
-      && capabilities.read === "native"
-      ? "native"
-      : resources.registry.eventCount(session.session_id) > 0
-        ? "fallback"
-        : "unavailable";
-    return {
-      id: session.session_id,
-      title: session.title || goalTitles.get(session.current_goal_id ?? "") || `${sessionRuntimeDisplayName(session.runtime_id)} Session`,
-      runtime: sessionRuntimeDisplayName(session.runtime_id),
-      runtimeId: session.runtime_id,
-      contentMode: mode,
-      resumeMode: session.native_runtime_session_id ? capabilities.resume : "unsupported",
-      state: session.status === "closed" ? "archived" : "idle",
-      currentGoalId: session.current_goal_id,
-      currentGoal: session.current_goal_id ? goalTitles.get(session.current_goal_id) ?? session.current_goal_id : null,
-      goalHistory: history
-        .filter((link) => link.relation === "history")
-        .map((link) => goalTitles.get(link.goal_id) ?? link.goal_id),
-      workspace: session.workspace_path || "未关联工作目录",
-      workspacePath: session.workspace_path,
-      updated: formatSessionTimestamp(session.updated_at),
-      updatedAt: session.updated_at,
-      summary: mode === "native"
-        ? "可按需读取原 Runtime 的结构化执行历史，并合并 GoalBoard TUI 记录。"
-        : mode === "fallback"
-          ? "当前显示 GoalBoard 已持久化的 TUI 与执行事实。"
-          : "这条 Session 的 Runtime 暂不提供内容读取能力。",
-    };
-  });
-
-  const byPath = new Map<string, {
-    catalog: GoalBoardWorkspaceDirectoryRecord | null;
-    sessions: typeof records;
-    canonicalPath: string;
-  }>();
-  for (const workspace of catalogWorkspaces) {
-    byPath.set(workspace.canonical_path, {
-      catalog: workspace,
-      sessions: [],
-      canonicalPath: workspace.canonical_path,
-    });
-  }
-  for (const record of records) {
-    if (!record.workspace_path) continue;
-    const normalized = normalizeRuntimeWorkContext({
+  return buildWorkSessionView({
+    projectId,
+    sessions: resources.registry,
+    runtime: resources.router,
+    goals: view.goals.map((item) => item.goal),
+    allGoals: [...view.goals, ...view.archived_goals, ...view.trashed_goals].map((item) => item.goal),
+    projects,
+    catalogWorkspaces,
+    supportedRuntimeIds: SUPPORTED_RUNTIME_IDS,
+    runtimeTitle: desktopRuntimeTitle,
+    workspaceExists: fs.existsSync,
+    normalizeWorkspace: (canonicalPath) => normalizeRuntimeWorkContext({
       runtime_id: "goalboard-web",
       stable_work_context_id: null,
       host_declares_stable: false,
-      workspace: { canonical_path: record.workspace_path, realpath_verified: false },
-    }).workspace;
-    if (!normalized) continue;
-    const grouped = byPath.get(normalized.canonical_path) ?? {
-      catalog: null,
-      sessions: [],
-      canonicalPath: normalized.canonical_path,
-    };
-    grouped.sessions.push(record);
-    byPath.set(normalized.canonical_path, grouped);
-  }
-  const workspaces: ProjectWorkspaceRecord[] = [...byPath.values()].map(({ catalog, sessions: linked, canonicalPath }) => {
-    const workspacePath = canonicalPath;
-    const workspaceIds = new Set(
-      [catalog?.workspace_id, ...linked.map((item) => item.workspace_id)].filter((value): value is string => Boolean(value)),
-    );
-    const state: ProjectWorkspaceRecord["state"] = !fs.existsSync(workspacePath)
-      ? "missing"
-      : workspaceIds.size > 1
-        ? "conflict"
-        : "healthy";
-    const lastUpdated = [catalog?.updated_at, ...linked.map((item) => item.updated_at)]
-      .filter((value): value is string => Boolean(value))
-      .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? "";
-    return {
-      id: catalog?.workspace_id
-        ?? normalizeRuntimeWorkContext({
-          runtime_id: "goalboard-web",
-          stable_work_context_id: null,
-          host_declares_stable: false,
-          workspace: { canonical_path: workspacePath, realpath_verified: false },
-        }).workspace?.workspace_id
-        ?? `workspace-path-${createHash("sha256").update(workspacePath).digest("hex").slice(0, 16)}`,
-      name: catalog?.display_name ?? (path.basename(workspacePath) || workspacePath),
-      path: workspacePath,
-      state,
-      sessionCount: linked.length,
-      runtimes: [...new Set(linked.map((item) => sessionRuntimeDisplayName(item.runtime_id)))].join("、") || "尚未启动",
-      updated: formatSessionTimestamp(lastUpdated),
-      updatedAt: lastUpdated,
-      projectLinked: Boolean(catalog?.project_ids.includes(projectId)),
-      projectCount: catalog?.project_ids.length ?? 0,
-      sessions: linked.map((session) => ({
-        id: session.session_id,
-        title: session.title || goalTitles.get(session.current_goal_id ?? "") || `${sessionRuntimeDisplayName(session.runtime_id)} Session`,
-        runtime: sessionRuntimeDisplayName(session.runtime_id),
-        state: session.status === "closed" ? "已归档" : "可查看",
-        updated: formatSessionTimestamp(session.updated_at),
-      })),
-      summary: state === "healthy"
-        ? catalog
-          ? "路径可访问，项目关系与已知 Session 均可追溯。"
-          : "路径正被当前项目的 Session 使用；尚未建立独立项目关系。"
-        : state === "missing"
-          ? "原路径当前不可访问；修复只会更新 GoalBoard 记录。"
-          : "同一路径存在多个 workspace identity，需要确认关联。",
-    };
+      workspace: { canonical_path: canonicalPath, realpath_verified: false },
+    }).workspace,
   });
-  const runtimeIds = [...new Set([...SUPPORTED_RUNTIME_IDS, ...records.map((item) => item.runtime_id)])];
-  return {
-    sessions,
-    workspaces,
-    goals: view.goals.map((item) => ({ goal_id: item.goal.goal_id, title: item.goal.title })),
-    projects: projects.map((project) => ({ project_id: project.project_id, display_name: project.display_name })),
-    runtimes: runtimeIds.map((runtimeId) => ({
-      runtime_id: runtimeId,
-      display_name: sessionRuntimeDisplayName(runtimeId),
-      capabilities: resources.router.capabilities(runtimeId),
-    })),
-  };
 }
 
-function sessionRuntimeDisplayName(runtimeId: string): string {
-  return desktopRuntimeTitle(runtimeId);
-}
-
-function formatSessionTimestamp(value: string): string {
-  const time = Date.parse(value);
-  if (!Number.isFinite(time)) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(time));
-}
-
-function publicSessionRecord(session: ReturnType<GoalBoardSessionRegistry["get"]>): Record<string, unknown> {
-  return {
-    session_id: session.session_id,
-    runtime_id: session.runtime_id,
-    native_runtime_session_id: session.native_runtime_session_id,
-    project_id: session.project_id,
-    current_goal_id: session.current_goal_id,
-    workspace_id: session.workspace_id,
-    workspace_path: session.workspace_path,
-    title: session.title,
-    status: session.status,
-    provenance: session.provenance,
-    runtime_workspace_hint: typeof session.metadata.runtime_cwd === "string" ? session.metadata.runtime_cwd : null,
-    created_at: session.created_at,
-    updated_at: session.updated_at,
-  };
-}
-
-function publicSessionHandoff(
-  handoff: ReturnType<GoalBoardSessionRegistry["getHandoff"]>,
-  includeContent = false,
-): Record<string, unknown> {
-  return {
-    package_id: handoff.package_id,
-    source_session_id: handoff.source_session_id,
-    source_project_id: handoff.source_project_id,
-    source_goal_id: handoff.source_goal_id,
-    target_runtime_id: handoff.target_runtime_id,
-    target_project_id: handoff.target_project_id,
-    target_workspace_id: handoff.target_workspace_id,
-    target_workspace_path: handoff.target_workspace_path,
-    destination_session_id: handoff.destination_session_id,
-    state: handoff.state,
-    delivery_mode: handoff.delivery_mode,
-    content_available: handoff.content_available,
-    content_digest: handoff.content_digest,
-    ...(includeContent ? { content: handoff.content } : {}),
-    attempt_count: handoff.attempt_count,
-    error_code: handoff.error_code,
-    error_message: handoff.error_message,
-    retryable: handoff.retryable,
-    created_at: handoff.created_at,
-    updated_at: handoff.updated_at,
-    sent_at: handoff.sent_at,
-  };
-}
 
 function desktopPanelSpawn(
   catalog: GoalBoardProjectCatalog,
@@ -1051,176 +843,44 @@ async function handleDesktopPanelApi(
   ptyHost: GoalBoardPtyHost,
   webUrl: string,
 ): Promise<boolean> {
-  const panelsMatch = url.pathname.match(/^\/api\/goals\/([^/]+)\/panels$/);
-  const promptMatch = url.pathname.match(/^\/api\/goals\/([^/]+)\/advance-prompt$/);
-  const panelMatch = url.pathname.match(/^\/api\/panels\/([^/]+)$/);
-  const exitedMatch = url.pathname.match(/^\/api\/panels\/([^/]+)\/exited$/);
-  const reopenMatch = url.pathname.match(/^\/api\/panels\/([^/]+)\/reopen$/);
-  if (!panelsMatch && !promptMatch && !panelMatch && !exitedMatch && !reopenMatch) return false;
-
-  try {
-    return await withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory }, async (catalog) => {
-      if (request.method === "GET" && promptMatch) {
-        const goalId = decodeURIComponent(promptMatch[1]);
-        const contract = coordinator.goalQueries.readGoalContract(boardId, goalId);
-        if (contract.goal.decomposition_state === "closed_compound") {
-          sendJson(response, 409, {
-            error: L("这条上层 Goal 由子 Goal 共同完成，不能直接推进。请选择一个具体的子 Goal。"),
-          });
-          return true;
-        }
-        const requestedFeedItemId = url.searchParams.get("feed_item_id")?.trim() || null;
-        const feed = new FeedStore(coordinator.store.db);
-        const linkedFeedItem = feed.findLinkedGoalItem(
-          boardId,
-          goalId,
-          requestedFeedItemId ?? undefined,
-        );
-        if (requestedFeedItemId && !linkedFeedItem) {
-          sendJson(response, 409, {
-            error: L("这条 Item 已不再关联当前 Goal，请返回 Inbox 或 Feed 重新开始处理。"),
-          });
-          return true;
-        }
-        const sourceContext = linkedFeedItem
-          ? feedItemContext(hydrateFeedItemContent(linkedFeedItem))
-          : undefined;
-        sendJson(response, 200, {
-          goal_id: goalId,
-          title: contract.goal.title,
-          prompt: desktopAdvancePrompt({
-            goal_id: goalId,
-            title: contract.goal.title,
-            source_context: sourceContext,
-            project_guidance_prefix: coordinator.goalQueries.readProjectGuidance(boardId).runtime_prompt_prefix,
-            onboarding: url.searchParams.get("onboarding") === "1",
-          }),
-        });
-        return true;
-      }
-      if (request.method === "GET" && panelsMatch) {
-        const goalId = decodeURIComponent(panelsMatch[1]);
-        const contract = coordinator.goalQueries.readGoalContract(boardId, goalId);
-        const panels = catalog.desktopPanels.list(projectId, goalId);
-        const sessionIds = await desktopPanelSessionIds(catalog, panels.map((panel) => panel.panel_id));
-        sendJson(response, 200, {
-          panels: panels.map((panel) => ({
-            ...panel,
-            spawn: desktopPanelSpawn(catalog, panel, webUrl, sessionIds.get(panel.panel_id) ?? null),
-          })),
-          read_only: contract.goal.decomposition_state === "closed_compound",
-        });
-        return true;
-      }
-      if (request.method === "POST" && panelsMatch) {
-        const goalId = decodeURIComponent(panelsMatch[1]);
-        const contract = coordinator.goalQueries.readGoalContract(boardId, goalId);
-        if (contract.goal.decomposition_state === "closed_compound") {
-          sendJson(response, 409, {
-            error: L("这条上层 Goal 由子 Goal 共同完成，不能直接开终端。请选择一个具体的子 Goal。"),
-          });
-          return true;
-        }
-        const body = await readBody(request);
-        const runtimeKind = typeof body.runtime_kind === "string" ? body.runtime_kind : "generic";
-        if (!isDesktopRuntimeKind(runtimeKind)) {
-          sendJson(response, 400, { error: "不支持的终端类型" });
-          return true;
-        }
-        const resume = typeof body.resume_session_id === "string" ? body.resume_session_id : null;
-        const launch = desktopLaunchSpec({
-          runtime_kind: runtimeKind,
-          command: typeof body.command === "string" ? body.command : undefined,
-          args: Array.isArray(body.args) ? body.args.map((item) => String(item)) : undefined,
-          resume_session_id: resume,
-        });
-        const cwd = typeof body.cwd === "string" && body.cwd.trim()
-          ? body.cwd.trim()
-          : catalog.preferredWorkspacePath(projectId);
-        if (!cwd) {
-          sendJson(response, 400, { error: L("打开终端需要先把这个项目关联到一个工作目录") });
-          return true;
-        }
-        const panel = catalog.desktopPanels.open({
-          project_id: projectId,
-          goal_id: goalId,
-          runtime_kind: launch.runtime_kind,
-          launch_command: launch.command,
-          launch_args: launch.args,
-          cwd,
-          title: launch.title,
-          host_session_id: resume,
-          actor_id: "desktop-user",
-          user_confirmed: true,
-        });
-        const sessionIds = await desktopPanelSessionIds(catalog, [panel.panel_id]);
-        sendJson(response, 200, {
-          panel,
-          spawn: desktopPanelSpawn(catalog, panel, webUrl, sessionIds.get(panel.panel_id) ?? null),
-        });
-        return true;
-      }
-      if (request.method === "DELETE" && panelMatch) {
-        const panelId = decodeURIComponent(panelMatch[1]);
-        const panel = catalog.desktopPanels.get(panelId);
-        if (panel.project_id !== projectId) {
-          sendJson(response, 404, { error: "找不到这个终端面板" });
-          return true;
-        }
-        catalog.desktopPanels.close(panelId, "desktop-user");
-        ptyHost.kill(panelId);
-        sendJson(response, 200, { closed: true, panel_id: panelId });
-        return true;
-      }
-      if (request.method === "POST" && exitedMatch) {
-        const panelId = decodeURIComponent(exitedMatch[1]);
-        const panel = catalog.desktopPanels.get(panelId);
-        if (panel.project_id !== projectId) {
-          sendJson(response, 404, { error: "找不到这个终端面板" });
-          return true;
-        }
-        sendJson(response, 200, { panel: catalog.desktopPanels.markExited(panelId) });
-        return true;
-      }
-      if (request.method === "POST" && reopenMatch) {
-        const panelId = decodeURIComponent(reopenMatch[1]);
-        const panel = catalog.desktopPanels.get(panelId);
-        if (panel.project_id !== projectId) {
-          sendJson(response, 404, { error: "找不到这个终端面板" });
-          return true;
-        }
-        const contract = coordinator.goalQueries.readGoalContract(boardId, panel.goal_id);
-        if (contract.goal.decomposition_state === "closed_compound") {
-          sendJson(response, 409, {
-            error: L("这是上层 Goal 的历史终端，只能查看。请到具体的子 Goal 继续。"),
-          });
-          return true;
-        }
-        const opened = catalog.desktopPanels.markOpen(panelId);
-        const sessionIds = await desktopPanelSessionIds(catalog, [opened.panel_id]);
-        sendJson(response, 200, {
-          panel: opened,
-          spawn: desktopPanelSpawn(catalog, opened, webUrl, sessionIds.get(opened.panel_id) ?? null),
-        });
-        return true;
-      }
-      return false;
-    });
-  } catch (error) {
-    if (error instanceof GoalBoardV1Error) {
-      sendJson(response, 404, { error: error.message });
-      return true;
-    }
-    if (error instanceof GoalBoardProjectCatalogError) {
-      sendJson(response, error.code === "catalog.panel_not_found" ? 404 : 400, { error: error.message });
-      return true;
-    }
-    if (error instanceof Error) {
-      sendJson(response, 400, { error: error.message });
-      return true;
-    }
-    throw error;
-  }
+  return handleWorkPanelHttp({
+    method: request.method, url, projectId, text: L,
+    readBody: () => readBody(request),
+    respond: (status, value) => sendJson(response, status, value),
+    withHost: (operation) => withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory }, (catalog) => operation({
+      panels: catalog.desktopPanels,
+      preferredWorkspacePath: (id) => catalog.preferredWorkspacePath(id),
+      sessionIds: (ids) => desktopPanelSessionIds(catalog, ids),
+      spawn: (panel, sessionId) => desktopPanelSpawn(catalog, panel, webUrl, sessionId),
+    })),
+    readGoal: (goalId) => coordinator.goalQueries.readGoalContract(boardId, goalId).goal,
+    readLinkedFeedContext: (goalId, itemId) => {
+      const feed = new FeedStore(coordinator.store.db);
+      return readLinkedFeedContext({
+        project_id: boardId, goal_id: goalId, item_id: itemId,
+        materializer: createContextMaterializer(createContextLedger(coordinator.store.db, {
+          authorize: (access) => access.scope.kind === "personal" && access.scope.id === boardId,
+        })),
+        readGoal: () => coordinator.goalQueries.readGoalContract(boardId, goalId).goal,
+        readItem: (id) => {
+          try { return feed.getItem(boardId, id); }
+          catch (error) {
+            if (error instanceof FeedStoreError && error.code === "feed_item_not_found") return null;
+            throw error;
+          }
+        },
+        renderItem: (item) => feedItemContext(hydrateFeedItemContent(item)),
+      });
+    },
+    projectGuidance: () => coordinator.goalQueries.readProjectGuidance(boardId).runtime_prompt_prefix,
+    isRuntimeKind: isDesktopRuntimeKind,
+    launchSpec: desktopLaunchSpec,
+    advancePrompt: desktopAdvancePrompt,
+    kill: (panelId) => ptyHost.kill(panelId),
+    classifyError: (error) => error instanceof GoalBoardV1Error ? 404
+      : error instanceof GoalBoardProjectCatalogError ? error.code === "catalog.panel_not_found" ? 404 : 400
+      : null,
+  });
 }
 
 type LocalMutationState = "in_flight" | "complete";
@@ -1827,37 +1487,26 @@ async function handleGoalBoardWebRequest(
           response.end();
           return;
         }
-        const globalPlanningMatch = url.pathname.match(/^\/settings\/planning(?:\/([^/]+))?(?:\/(edit))?$/);
-        if (request.method === "GET" && globalPlanningMatch) {
+        const globalPlanningPage = renderWorkbenchPlanningRequest(request.method, url.pathname, "personal", () => {
           const methods = resolvePlanningMethodPacks(readPersonalPlanningMethodPacks(serverOptions.homeDirectory));
           const contextProjectId = url.searchParams.get("project");
           const contextProject = contextProjectId
-            ? resolved.projects.find((project) => project.project_id === contextProjectId) ?? null
-            : null;
-          const methodId = globalPlanningMatch[1] ? decodeURIComponent(globalPlanningMatch[1]) : null;
-          const method = methodId && methodId !== "new"
-            ? methods.find((item) => item.method_id === methodId) ?? null
-            : null;
-          if (methodId && methodId !== "new" && !method) {
-            sendJson(response, 404, { error: L("找不到这套规划方法") });
-            return;
-          }
+            ? resolved.projects.find((project) => project.project_id === contextProjectId) ?? null : null;
+          return {
+            methods,
+            library: () => renderGoalBoardPlanningLibrary(methods, contextProject, controlToken, isDesktopShellRequest(request, url), resolved.projects),
+            method: (method, mode) => renderGoalBoardPlanningMethodPage(
+              method, mode, "personal", contextProject, controlToken, isDesktopShellRequest(request, url), resolved.projects),
+          };
+        }, L);
+        if (globalPlanningPage) {
+          if ("error" in globalPlanningPage) { sendJson(response, globalPlanningPage.status, { error: globalPlanningPage.error }); return; }
           response.writeHead(200, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
             "content-security-policy": PAGE_CSP,
           });
-          response.end(methodId
-            ? renderGoalBoardPlanningMethodPage(
-                method,
-                methodId === "new" ? "new" : globalPlanningMatch[2] === "edit" ? "edit" : "detail",
-                "personal",
-                contextProject,
-                controlToken,
-                isDesktopShellRequest(request, url),
-                resolved.projects,
-              )
-            : renderGoalBoardPlanningLibrary(methods, contextProject, controlToken, isDesktopShellRequest(request, url), resolved.projects));
+          response.end(globalPlanningPage.html);
           return;
         }
         if (request.method === "GET" && url.pathname === "/api/settings/planning-methods") {
@@ -1951,7 +1600,13 @@ async function handleGoalBoardWebRequest(
             return;
           }
           try {
-            sendJson(response, 200, await webService.confirm({ plan_id: planId, decision }));
+            const confirmation = await webService.confirmFromWeb({ plan_id: planId, decision }, serviceProcessId());
+            if (confirmation.afterResponse) {
+              response.once("finish", () => {
+                void confirmation.afterResponse!().catch((error) => console.error("GoalBoard Web restart failed:", error));
+              });
+            }
+            sendJson(response, confirmation.result.status === "restarting" ? 202 : 200, confirmation.result);
           } catch (error) {
             sendJson(response, 409, { error: error instanceof Error ? error.message : String(error) });
           }
@@ -2216,557 +1871,44 @@ async function handleGoalBoardWebRequest(
             catalogWorkspaces,
           ).workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
         };
-        if (request.method === "POST" && url.pathname === "/api/workspaces") {
-          if (!options.project) {
-            sendJson(response, 400, { error: "请先选择 Project" });
-            return;
-          }
-          const body = await readBody(request);
-          const workspacePath = typeof body.workspace_path === "string" ? body.workspace_path.trim() : "";
-          if (body.user_confirmed !== true || !workspacePath) {
-            sendJson(response, 400, { error: "请输入绝对路径并确认关联当前 Project" });
-            return;
-          }
-          try {
-            const workspace = await withGoalBoardProjectCatalog(
+        if (await handleWorkSessionHttp({
+          method: request.method,
+          pathname: url.pathname,
+          readBody: () => readBody(request),
+          respond: (status, value) => sendJson(response, status, value),
+          resourcesPromise: sessionResources,
+          projectOptions: options,
+          hasCurrentGoal: (goalId) => readWebView().goals.some((item) => item.goal.goal_id === goalId),
+          readGoalContract: (goalId) => coordinator.goalQueries.readGoalContract(options.boardId, goalId),
+          workspace: {
+            add: (canonicalPath, projectId) => withGoalBoardProjectCatalog(
               { homeDirectory: serverOptions.homeDirectory },
-              (catalog) => catalog.addWorkspaceProject({
-                canonical_path: workspacePath,
-                project_id: options.project!.project_id,
-                actor_id: "web-user",
-                user_confirmed: true,
-              }),
-            );
-            sendJson(response, 201, { workspace });
-          } catch (error) {
-            sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) });
-          }
-          return;
-        }
-        const projectWorkspaceRepairMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/path$/);
-        if (request.method === "PATCH" && projectWorkspaceRepairMatch) {
-          if (!options.project) {
-            sendJson(response, 400, { error: "请先选择 Project" });
-            return;
-          }
-          const body = await readBody(request);
-          const workspaceId = decodeURIComponent(projectWorkspaceRepairMatch[1]);
-          const nextPath = typeof body.workspace_path === "string" ? body.workspace_path.trim() : "";
-          if (body.user_confirmed !== true || !nextPath) {
-            sendJson(response, 400, { error: "请输入新的绝对路径并确认修复" });
-            return;
-          }
-          const current = await readProjectWorkspaceRecord(workspaceId);
-          if (!current) {
-            sendJson(response, 404, { error: "找不到当前 Project 的这条工作目录" });
-            return;
-          }
-          try {
-            const normalized = normalizeRuntimeWorkContext({
+              (catalog) => catalog.addWorkspaceProject({ canonical_path: canonicalPath, project_id: projectId, actor_id: "web-user", user_confirmed: true }),
+            ),
+            repair: async (current, canonicalPath, projectId) => {
+              const registry = (await sessionResources).registry;
+              const result = await withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory },
+                (catalog) => repairProjectWorkspace({ catalog, registry, current, canonicalPath, projectId, actorId: "web-user" }));
+              return { workspace: result.workspace, updated_session_count: result.sessions.length };
+            },
+            unlink: async (current, projectId) => {
+              const registry = (await sessionResources).registry;
+              const result = await withGoalBoardProjectCatalog({ homeDirectory: serverOptions.homeDirectory },
+                (catalog) => unlinkProjectWorkspace({ catalog, registry, current, projectId, actorId: "web-user" }));
+              return { changed: result.changed, updated_session_count: result.sessions.length };
+            },
+            isActionError: (error) => error instanceof GoalBoardWorkspaceActionError,
+            read: readProjectWorkspaceRecord,
+            normalize: (workspacePath) => normalizeRuntimeWorkContext({
               runtime_id: "goalboard-web",
               stable_work_context_id: null,
               host_declares_stable: false,
-              workspace: { canonical_path: nextPath, realpath_verified: false },
-            }).workspace;
-            if (!normalized) throw new Error("新的工作目录必须是绝对路径");
-            const registry = (await sessionResources).registry;
-            const { workspace, sessions } = await withGoalBoardProjectCatalog(
-              { homeDirectory: serverOptions.homeDirectory },
-              (catalog) => repairProjectWorkspace({
-                catalog,
-                registry,
-                current,
-                canonicalPath: normalized.canonical_path,
-                projectId: options.project!.project_id,
-                actorId: "web-user",
-              }),
-            );
-            sendJson(response, 200, { workspace, updated_session_count: sessions.length });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError || error instanceof GoalBoardWorkspaceActionError ? 503 : 400, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const projectWorkspaceUnlinkMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/unlink$/);
-        if (request.method === "POST" && projectWorkspaceUnlinkMatch) {
-          if (!options.project) {
-            sendJson(response, 400, { error: "请先选择 Project" });
-            return;
-          }
-          const body = await readBody(request);
-          const workspaceId = decodeURIComponent(projectWorkspaceUnlinkMatch[1]);
-          if (body.user_confirmed !== true) {
-            sendJson(response, 400, { error: "请确认解除当前 Project 的工作目录关系" });
-            return;
-          }
-          const current = await readProjectWorkspaceRecord(workspaceId);
-          if (!current) {
-            sendJson(response, 404, { error: "找不到当前 Project 的这条工作目录" });
-            return;
-          }
-          try {
-            const registry = (await sessionResources).registry;
-            const result = await withGoalBoardProjectCatalog(
-              { homeDirectory: serverOptions.homeDirectory },
-              (catalog) => unlinkProjectWorkspace({
-                catalog,
-                registry,
-                current,
-                projectId: options.project!.project_id,
-                actorId: "web-user",
-              }),
-            );
-            sendJson(response, 200, { changed: result.changed, updated_session_count: result.sessions.length });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError || error instanceof GoalBoardWorkspaceActionError ? 503 : 400, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const projectWorkspaceLaunchMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)\/sessions$/);
-        if (request.method === "POST" && projectWorkspaceLaunchMatch) {
-          if (!options.project) {
-            sendJson(response, 400, { error: "请先选择 Project" });
-            return;
-          }
-          const body = await readBody(request);
-          const workspaceId = decodeURIComponent(projectWorkspaceLaunchMatch[1]);
-          if (body.user_confirmed !== true) {
-            sendJson(response, 400, { error: "请确认 Runtime、Project、Goal 和工作目录后再启动" });
-            return;
-          }
-          const current = await readProjectWorkspaceRecord(workspaceId);
-          if (!current) {
-            sendJson(response, 404, { error: "找不到当前 Project 的这条工作目录" });
-            return;
-          }
-          if (current.state !== "healthy" || !fs.existsSync(current.path)) {
-            sendJson(response, 409, { error: "工作目录当前不可用，请先修复路径或冲突" });
-            return;
-          }
-          const runtimeId = typeof body.runtime_id === "string" ? body.runtime_id.trim() : "";
-          const currentGoalId = typeof body.current_goal_id === "string" && body.current_goal_id.trim()
-            ? body.current_goal_id.trim()
-            : null;
-          const view = readWebView();
-          if (!runtimeId) {
-            sendJson(response, 400, { error: "请选择 Runtime" });
-            return;
-          }
-          if (currentGoalId && !view.goals.some((item) => item.goal.goal_id === currentGoalId)) {
-            sendJson(response, 400, { error: "当前 Goal 不属于这个 Project，或已经不在当前 Goal Tree" });
-            return;
-          }
-          try {
-            const session = await (await sessionResources).directory.create({
-              runtime_id: runtimeId,
-              actor_id: "web-user",
-              user_confirmed: true,
-              project_id: options.project.project_id,
-              current_goal_id: currentGoalId,
-              workspace_id: current.id,
-              workspace_path: current.path,
-              title: typeof body.title === "string" && body.title.trim() ? body.title.trim() : null,
-            });
-            sendJson(response, 201, { session: publicSessionRecord(session) });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        if (request.method === "POST" && url.pathname === "/api/sessions/discover") {
-          const body = await readBody(request);
-          const runtimeId = typeof body.runtime_id === "string" ? body.runtime_id.trim() : "";
-          if (!runtimeId) {
-            sendJson(response, 400, { error: "请选择要同步的 Runtime" });
-            return;
-          }
-          const resources = await sessionResources;
-          const result = await resources.directory.discover(runtimeId);
-          sendJson(
-            response,
-            result.status === "ok" ? 200 : result.status === "unsupported" ? 409 : 503,
-            {
-              ...result,
-              records: result.records.map(publicSessionRecord),
-            },
-          );
-          return;
-        }
-        if (request.method === "POST" && url.pathname === "/api/sessions") {
-          try {
-            const body = await readBody(request);
-            if (body.user_confirmed !== true) {
-              sendJson(response, 400, { error: "请先确认这次 Session 写入" });
-              return;
-            }
-            const runtimeId = typeof body.runtime_id === "string" ? body.runtime_id.trim() : "";
-            const action = body.action === "create" ? "create" : body.action === "link" ? "link" : null;
-            const currentGoalId = typeof body.current_goal_id === "string" && body.current_goal_id.trim()
-              ? body.current_goal_id.trim()
-              : null;
-            const view = readWebView();
-            if (currentGoalId && !view.goals.some((item) => item.goal.goal_id === currentGoalId)) {
-              sendJson(response, 400, { error: "当前 Goal 不属于这个 Project，或已经不在当前 Goal Tree" });
-              return;
-            }
-            if (!runtimeId || !action) {
-              sendJson(response, 400, { error: "请选择 Runtime 和添加方式" });
-              return;
-            }
-            const resources = await sessionResources;
-            let workspaceId = typeof body.workspace_id === "string" && body.workspace_id.trim()
-              ? body.workspace_id.trim()
-              : null;
-            let workspacePath = typeof body.workspace_path === "string" && body.workspace_path.trim()
-              ? body.workspace_path.trim()
-              : null;
-            if (workspaceId) {
-              const selectedWorkspace = await readProjectWorkspaceRecord(workspaceId);
-              if (!selectedWorkspace) {
-                sendJson(response, 404, { error: "找不到当前 Project 的这个工作目录" });
-                return;
-              }
-              if (workspacePath && workspacePath !== selectedWorkspace.path) {
-                sendJson(response, 409, { error: "工作目录 ID 与路径不一致，请重新选择" });
-                return;
-              }
-              if (action === "create" && (selectedWorkspace.state !== "healthy" || !fs.existsSync(selectedWorkspace.path))) {
-                sendJson(response, 409, { error: "工作目录当前不可用，请选择其他运行位置" });
-                return;
-              }
-              workspaceId = selectedWorkspace.id;
-              workspacePath = selectedWorkspace.path;
-            } else if (workspacePath) {
-              const normalized = normalizeRuntimeWorkContext({
-                runtime_id: "goalboard-web",
-                stable_work_context_id: null,
-                host_declares_stable: false,
-                workspace: { canonical_path: workspacePath, realpath_verified: false },
-              }).workspace;
-              if (!normalized) {
-                sendJson(response, 400, { error: "工作目录必须是绝对路径" });
-                return;
-              }
-              workspaceId = normalized.workspace_id;
-              workspacePath = normalized.canonical_path;
-              if (action === "create") {
-                let usableDirectory = false;
-                try {
-                  usableDirectory = fs.statSync(workspacePath).isDirectory();
-                } catch {}
-                if (!usableDirectory) {
-                  sendJson(response, 409, { error: "工作目录当前不可访问，请选择一个存在的文件夹" });
-                  return;
-                }
-              }
-            }
-            const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : null;
-            const session = action === "create"
-              ? await resources.directory.create({
-                  runtime_id: runtimeId,
-                  actor_id: "web-user",
-                  user_confirmed: true,
-                  project_id: options.project!.project_id,
-                  current_goal_id: currentGoalId,
-                  workspace_id: workspaceId,
-                  workspace_path: workspacePath,
-                  title,
-                })
-              : resources.registry.explicitlyLinkSession({
-                  runtime_id: runtimeId,
-                  native_runtime_session_id: typeof body.native_runtime_session_id === "string"
-                    ? body.native_runtime_session_id
-                    : "",
-                  actor_id: "web-user",
-                  user_confirmed: true,
-                  project_id: options.project!.project_id,
-                  current_goal_id: currentGoalId,
-                  workspace_id: workspaceId,
-                  workspace_path: workspacePath,
-                  title,
-                });
-            sendJson(response, 201, { session: publicSessionRecord(session) });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const projectSessionHandoffPrepareMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/handoffs$/);
-        if (request.method === "POST" && projectSessionHandoffPrepareMatch) {
-          try {
-            const sessionId = decodeURIComponent(projectSessionHandoffPrepareMatch[1]);
-            const resources = await sessionResources;
-            const source = resources.registry.get(sessionId);
-            if (source.project_id !== options.project?.project_id) {
-              sendJson(response, 404, { error: "找不到当前 Project 的这条来源 Session" });
-              return;
-            }
-            if (!source.current_goal_id) {
-              sendJson(response, 409, { error: "请先为来源 Session 选择当前 Goal，再创建 Handoff" });
-              return;
-            }
-            const body = await readBody(request);
-            const targetRuntimeId = typeof body.target_runtime_id === "string" ? body.target_runtime_id.trim() : "";
-            if (!targetRuntimeId) {
-              sendJson(response, 400, { error: "请选择目标 Runtime" });
-              return;
-            }
-            const contract = coordinator.goalQueries.readGoalContract(options.boardId, source.current_goal_id);
-            const result = await resources.handoff.prepare({
-              source_session_id: source.session_id,
-              project_id: options.project!.project_id,
-              project_name: options.project!.display_name,
-              target_runtime_id: targetRuntimeId,
-              target_workspace_id: typeof body.target_workspace_id === "string" ? body.target_workspace_id : null,
-              target_workspace_path: typeof body.target_workspace_path === "string"
-                ? body.target_workspace_path.trim() || null
-                : source.workspace_path,
-              actor_id: "web-user",
-              goal_contract: contract,
-            });
-            sendJson(response, 201, {
-              handoff: publicSessionHandoff(result.handoff, true),
-              reused: result.reused,
-              source: publicSessionRecord(source),
-              goal: {
-                goal_id: contract.goal.goal_id,
-                title: contract.goal.title,
-                outcome: contract.goal.outcome,
-                work_state: contract.work_state.work_state,
-              },
-            });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const sessionHandoffMutationMatch = url.pathname.match(
-          /^\/api\/session-handoffs\/([^/]+)(?:\/(send|cancel))?$/,
-        );
-        if (sessionHandoffMutationMatch) {
-          let packageId: string;
-          try {
-            packageId = decodeURIComponent(sessionHandoffMutationMatch[1]);
-          } catch {
-            sendJson(response, 400, { error: "Handoff package ID 无效" });
-            return;
-          }
-          const resources = await sessionResources;
-          let current;
-          try {
-            current = resources.registry.getHandoff(packageId);
-          } catch {
-            sendJson(response, 404, { error: "找不到这条 Handoff package" });
-            return;
-          }
-          if (current.source_project_id !== options.project?.project_id) {
-            sendJson(response, 404, { error: "找不到这条 Handoff package" });
-            return;
-          }
-          if (request.method === "PATCH" && !sessionHandoffMutationMatch[2]) {
-            try {
-              const body = await readBody(request);
-              const handoff = resources.handoff.update({
-                package_id: current.package_id,
-                target_runtime_id: typeof body.target_runtime_id === "string" ? body.target_runtime_id : "",
-                ...(typeof body.target_workspace_id === "string"
-                  ? { target_workspace_id: body.target_workspace_id }
-                  : {}),
-                target_workspace_path: typeof body.target_workspace_path === "string"
-                  ? body.target_workspace_path.trim() || null
-                  : null,
-                content: typeof body.content === "string" ? body.content : "",
-                actor_id: "web-user",
-                user_confirmed: false,
-              });
-              sendJson(response, 200, { handoff: publicSessionHandoff(handoff, true) });
-            } catch (error) {
-              sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            return;
-          }
-          if (request.method === "POST" && sessionHandoffMutationMatch[2] === "send") {
-            try {
-              const body = await readBody(request);
-              const result = await resources.handoff.send({
-                package_id: current.package_id,
-                target_runtime_id: typeof body.target_runtime_id === "string" ? body.target_runtime_id : "",
-                ...(typeof body.target_workspace_id === "string"
-                  ? { target_workspace_id: body.target_workspace_id }
-                  : {}),
-                target_workspace_path: typeof body.target_workspace_path === "string"
-                  ? body.target_workspace_path.trim() || null
-                  : null,
-                content: typeof body.content === "string" ? body.content : "",
-                actor_id: "web-user",
-                user_confirmed: body.user_confirmed === true,
-              });
-              const status = result.handoff.state === "sent" ? 201 : 502;
-              sendJson(response, status, {
-                handoff: publicSessionHandoff(result.handoff, true),
-                destination_session: result.destination_session
-                  ? publicSessionRecord(result.destination_session)
-                  : null,
-                ...(status === 502 ? { error: result.handoff.error_message } : {}),
-              });
-            } catch (error) {
-              sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            return;
-          }
-          if (request.method === "POST" && sessionHandoffMutationMatch[2] === "cancel") {
-            try {
-              const handoff = resources.handoff.cancel(current.package_id);
-              sendJson(response, 200, { handoff: publicSessionHandoff(handoff, false) });
-            } catch (error) {
-              sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-            return;
-          }
-          sendJson(response, 405, { error: "Handoff 操作不支持这个请求方法" });
-          return;
-        }
-        const projectSessionAssociationMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/associations$/);
-        if (request.method === "PATCH" && projectSessionAssociationMatch) {
-          try {
-            const sessionId = decodeURIComponent(projectSessionAssociationMatch[1]);
-            const resources = await sessionResources;
-            const current = resources.registry.get(sessionId);
-            if (current.project_id !== options.project?.project_id) {
-              sendJson(response, 404, { error: "找不到这条 Session" });
-              return;
-            }
-            const body = await readBody(request);
-            if (body.user_confirmed !== true) {
-              sendJson(response, 400, { error: "请先确认这次关系变更" });
-              return;
-            }
-            const targetProjectId = body.project_id == null
-              ? null
-              : typeof body.project_id === "string" && body.project_id.trim()
-                ? body.project_id.trim()
-                : null;
-            if (targetProjectId && !options.projects.some((project) => project.project_id === targetProjectId)) {
-              sendJson(response, 400, { error: "目标 Project 不存在" });
-              return;
-            }
-            const requestedGoalId = typeof body.current_goal_id === "string" && body.current_goal_id.trim()
-              ? body.current_goal_id.trim()
-              : null;
-            const goalId = targetProjectId === options.project?.project_id ? requestedGoalId : null;
-            if (goalId && !readWebView().goals.some((item) => item.goal.goal_id === goalId)) {
-              sendJson(response, 400, { error: "当前 Goal 不属于这个 Project，或已经不在当前 Goal Tree" });
-              return;
-            }
-            const workspacePath = typeof body.workspace_path === "string" && body.workspace_path.trim()
-              ? body.workspace_path.trim()
-              : null;
-            const session = resources.registry.updateAssociations({
-              session_id: sessionId,
-              actor_id: "web-user",
-              user_confirmed: true,
-              project_id: targetProjectId,
-              current_goal_id: goalId,
-              workspace_id: workspacePath === current.workspace_path ? current.workspace_id : null,
-              workspace_path: workspacePath,
-            });
-            sendJson(response, 200, { session: publicSessionRecord(session) });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const projectSessionArchiveMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/archive$/);
-        if (request.method === "POST" && projectSessionArchiveMatch) {
-          try {
-            const sessionId = decodeURIComponent(projectSessionArchiveMatch[1]);
-            const resources = await sessionResources;
-            const current = resources.registry.get(sessionId);
-            if (current.project_id !== options.project?.project_id) {
-              sendJson(response, 404, { error: "找不到这条 Session" });
-              return;
-            }
-            const body = await readBody(request);
-            if (body.user_confirmed !== true || typeof body.archived !== "boolean") {
-              sendJson(response, 400, { error: "请确认归档或恢复这条 Session 记录" });
-              return;
-            }
-            const session = resources.registry.setStatus({
-              session_id: sessionId,
-              actor_id: "web-user",
-              user_confirmed: true,
-              status: body.archived ? "closed" : "active",
-            });
-            sendJson(response, 200, { session: publicSessionRecord(session) });
-          } catch (error) {
-            sendJson(response, error instanceof GoalBoardSessionError ? 400 : 503, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-          return;
-        }
-        const projectSessionApiMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/(content|resume)$/);
-        if (projectSessionApiMatch) {
-          let sessionId: string;
-          try {
-            sessionId = decodeURIComponent(projectSessionApiMatch[1]);
-          } catch {
-            sendJson(response, 400, { error: "Session ID 无效" });
-            return;
-          }
-          const resources = await sessionResources;
-          let session;
-          try {
-            session = resources.registry.get(sessionId);
-          } catch {
-            sendJson(response, 404, { error: "找不到这条 Session" });
-            return;
-          }
-          if (session.project_id !== options.project?.project_id) {
-            sendJson(response, 404, { error: "找不到这条 Session" });
-            return;
-          }
-          if (request.method === "GET" && projectSessionApiMatch[2] === "content") {
-            const result = await resources.content.read(sessionId);
-            sendJson(response, 200, {
-              ...result,
-              session: publicSessionRecord(result.session),
-            });
-            return;
-          }
-          if (request.method === "POST" && projectSessionApiMatch[2] === "resume") {
-            const result = await resources.content.resume(sessionId);
-            sendJson(response, result.status === "ok" ? 200 : result.status === "unsupported" ? 409 : 503, result);
-            return;
-          }
-          sendJson(response, 405, { error: "Session 操作不支持这个请求方法" });
-          return;
-        }
-        if (request.method === "GET" && url.pathname === "/api/sessions") {
-          const resources = await sessionResources;
-          sendJson(response, 200, {
-            sessions: resources.registry.list({ project_id: options.project?.project_id }).map(publicSessionRecord),
-          });
-          return;
-        }
+              workspace: { canonical_path: workspacePath, realpath_verified: false },
+            }).workspace,
+            exists: (workspacePath) => fs.existsSync(workspacePath),
+            isDirectory: (workspacePath) => fs.statSync(workspacePath).isDirectory(),
+          },
+        })) return;
         if (request.method === "GET" && url.pathname === "/settings/guidance") {
           response.writeHead(200, {
             "content-type": "text/html; charset=utf-8",
@@ -2794,47 +1936,25 @@ async function handleGoalBoardWebRequest(
           ));
           return;
         }
-        const projectPlanningMethodMatch = url.pathname.match(/^\/settings\/planning\/([^/]+)(?:\/(edit))?$/);
-        if (request.method === "GET" && projectPlanningMethodMatch) {
+        const projectPlanningPage = renderWorkbenchPlanningRequest(request.method, url.pathname, "project", route => {
           const view = readWebView();
-          const methodId = decodeURIComponent(projectPlanningMethodMatch[1]);
-          const method = methodId === "new"
-            ? null
-            : goalsAdapter.planning.effectiveMethods(options.boardId)
-              .find((item) => item.method_id === methodId && item.scope === "project") ?? null;
-          if (methodId !== "new" && !method) {
-            sendJson(response, 404, { error: L("找不到这个项目方法") });
-            return;
-          }
+          const methods = route.kind === "method" && route.method_id === "new"
+            ? [] : goalsAdapter.planning.effectiveMethods(options.boardId);
+          return {
+            methods,
+            library: () => renderGoalBoardPlanningSettings(view, methods, controlToken, isDesktopShellRequest(request, url)),
+            method: (method, mode) => renderGoalBoardPlanningMethodPage(
+              method, mode, "project", view.project, controlToken, isDesktopShellRequest(request, url), view.projects),
+          };
+        }, L);
+        if (projectPlanningPage) {
+          if ("error" in projectPlanningPage) { sendJson(response, projectPlanningPage.status, { error: projectPlanningPage.error }); return; }
           response.writeHead(200, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
             "content-security-policy": PAGE_CSP,
           });
-          response.end(renderGoalBoardPlanningMethodPage(
-            method,
-            methodId === "new" ? "new" : projectPlanningMethodMatch[2] === "edit" ? "edit" : "detail",
-            "project",
-            view.project,
-            controlToken,
-            isDesktopShellRequest(request, url),
-            view.projects,
-          ));
-          return;
-        }
-        if (request.method === "GET" && url.pathname === "/settings/planning") {
-          const view = readWebView();
-          response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "content-security-policy": PAGE_CSP,
-          });
-          response.end(renderGoalBoardPlanningSettings(
-            view,
-            goalsAdapter.planning.effectiveMethods(options.boardId),
-            controlToken,
-            isDesktopShellRequest(request, url),
-          ));
+          response.end(projectPlanningPage.html);
           return;
         }
         if (request.method === "GET" && url.pathname === "/api/settings/planning-methods") {
@@ -2941,36 +2061,30 @@ async function handleGoalBoardWebRequest(
           sendJson(response, 200, { observed_event_cursor: store.eventCursor(options.boardId) });
           return;
         }
-        if (request.method === "GET" && url.pathname === "/api/board/refresh") {
-          const collection = url.searchParams.get("view") ?? "current";
-          if (collection !== "current" && collection !== "archive" && collection !== "trash") {
-            sendJson(response, 400, { error: "Goal 正文集合无效" });
-            return;
-          }
-          const goalId = url.searchParams.get("goal_id")?.trim() || undefined;
-          response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-          });
-          response.end(renderGoalBoardRefreshFragment(
-            readWebView(),
-            goalId,
-            collection === "archive",
-            collection === "trash",
-          ));
-          return;
-        }
-        if (request.method === "GET" && url.pathname === "/api/board/momentum") {
-          const collection = url.searchParams.get("view") ?? "current";
-          if (collection !== "current" && collection !== "archive") {
-            sendJson(response, 400, { error: "Goal 推进态势集合无效" });
-            return;
-          }
-          const goalId = url.searchParams.get("goal_id")?.trim() || "";
-          const fragment = renderGoalBoardMomentumFragment(readWebView(), goalId, collection);
-          if (!fragment) {
-            sendJson(response, 404, { error: "Goal 推进态势不存在" });
+        const renderedGoalsRead = renderWorkbenchGoalsReadRequest(request.method, url.pathname, url.searchParams, () => {
+          const view = readWebView();
+          return {
+            refresh: (goalId, collection) => renderGoalBoardRefreshFragment(view, goalId, collection === "archive", collection === "trash"),
+            momentum: (goalId, collection) => renderGoalBoardMomentumFragment(view, goalId, collection),
+            document: (goalId, collection) => renderGoalDocumentFragment(view, goalId, collection),
+            records: (goalId, collection) => renderGoalRecordsFragment(view, goalId, collection),
+            recordEvents: (goalId, collection, offset) => renderGoalRecordEventsFragment(view, goalId, collection, offset),
+            quickRecord: (goalId, collection) => renderGoalQuickRecordFragment(view, goalId, collection),
+            panel: (goalId, panel, collection) => {
+              const visibleGoals = collection === "archive" ? view.archived_goals : view.goals;
+              const artifactContext = panel === "completion" && collection !== "trash"
+                && visibleGoals.some((item) => item.goal.goal_id === goalId)
+                ? renderGoalArtifactContext({ boardId: options.boardId, goalId, artifacts: coordinator.artifacts.query,
+                    ledger: createContextLedger(store.db, {
+                      authorize: (access, operation) => operation === "read" && access.scope.kind === "personal" && access.scope.id === options.boardId,
+                    }).query }) : "";
+              return renderGoalPanelFragment(view, goalId, panel, collection, artifactContext);
+            },
+          };
+        });
+        if (renderedGoalsRead) {
+          if ("error" in renderedGoalsRead) {
+            sendJson(response, renderedGoalsRead.status, { error: renderedGoalsRead.error });
             return;
           }
           response.writeHead(200, {
@@ -2978,7 +2092,7 @@ async function handleGoalBoardWebRequest(
             "cache-control": "no-store",
             "x-content-type-options": "nosniff",
           });
-          response.end(fragment);
+          response.end(renderedGoalsRead.html);
           return;
         }
         if (request.method === "GET" && url.pathname === "/api/board") {
@@ -3020,136 +2134,15 @@ async function handleGoalBoardWebRequest(
           );
           if (handled) return;
         }
-        const goalPanelMatch = url.pathname.match(/^\/api\/goals\/([^/]+)\/panels\/(completion|progress|factors)$/);
-        if (request.method === "GET" && goalPanelMatch) {
-          let goalId: string;
-          try {
-            goalId = decodeURIComponent(goalPanelMatch[1]);
-          } catch {
-            sendJson(response, 404, { error: "Goal 内容不存在" });
-            return;
-          }
-          const collection = url.searchParams.get("view") ?? "current";
-          if (collection !== "current" && collection !== "archive" && collection !== "trash") {
-            sendJson(response, 400, { error: "Goal 正文集合无效" });
-            return;
-          }
-          const fragment = renderGoalPanelFragment(
-            readWebView(),
-            goalId,
-            goalPanelMatch[2] as "completion" | "progress" | "factors",
-            collection,
-          );
-          if (!fragment) {
-            sendJson(response, 404, { error: `找不到这个 Goal 面板: ${goalId}` });
-            return;
-          }
-          response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-          });
-          response.end(fragment);
-          return;
-        }
-        const goalQuickRecordMatch = url.pathname.match(/^\/api\/goals\/([^/]+)\/quick-record$/);
-        if (request.method === "GET" && goalQuickRecordMatch) {
-          let goalId: string;
-          try {
-            goalId = decodeURIComponent(goalQuickRecordMatch[1]);
-          } catch {
-            sendJson(response, 404, { error: "Goal 内容不存在" });
-            return;
-          }
-          const collection = url.searchParams.get("view") ?? "current";
-          if (collection !== "current" && collection !== "archive" && collection !== "trash") {
-            sendJson(response, 400, { error: "Goal 正文集合无效" });
-            return;
-          }
-          const fragment = renderGoalQuickRecordFragment(readWebView(), goalId, collection);
-          if (!fragment) {
-            sendJson(response, 404, { error: `无法为这个 Goal 打开快速记录: ${goalId}` });
-            return;
-          }
-          response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-          });
-          response.end(fragment);
-          return;
-        }
-        const goalFragmentMatch = url.pathname.match(/^\/api\/goals\/([^/]+)\/(document|records|record-events)$/);
-        if (request.method === "GET" && goalFragmentMatch) {
-          let goalId: string;
-          try {
-            goalId = decodeURIComponent(goalFragmentMatch[1]);
-          } catch {
-            sendJson(response, 404, { error: "Goal 内容不存在" });
-            return;
-          }
-          const collection = url.searchParams.get("view") ?? "current";
-          if (collection !== "current" && collection !== "archive" && collection !== "trash") {
-            sendJson(response, 400, { error: "Goal 正文集合无效" });
-            return;
-          }
-          const fragmentKind = goalFragmentMatch[2];
-          const offsetText = url.searchParams.get("offset") ?? "0";
-          if (fragmentKind === "record-events" && !/^(0|[1-9]\d*)$/.test(offsetText)) {
-            sendJson(response, 400, { error: "Goal 事件偏移量无效" });
-            return;
-          }
-          const eventOffset = Number(offsetText);
-          if (fragmentKind === "record-events" && !Number.isSafeInteger(eventOffset)) {
-            sendJson(response, 400, { error: "Goal 事件偏移量无效" });
-            return;
-          }
-          const view = readWebView();
-          const fragment = fragmentKind === "records"
-            ? renderGoalRecordsFragment(view, goalId, collection)
-            : fragmentKind === "record-events"
-              ? renderGoalRecordEventsFragment(view, goalId, collection, eventOffset)
-              : renderGoalDocumentFragment(view, goalId, collection);
-          if (!fragment) {
-            sendJson(response, 404, { error: `找不到这个 Goal: ${goalId}` });
-            return;
-          }
-          response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-store",
-            "x-content-type-options": "nosniff",
-          });
-          response.end(fragment);
-          return;
-        }
         const projectReferenceMatch = url.pathname.match(/^\/api\/project-references\/([^/]+)$/);
         if (request.method === "GET" && projectReferenceMatch) {
           try {
             const reference = decodeURIComponent(projectReferenceMatch[1]);
             const evidenceId = url.searchParams.get("evidence_id")?.trim() || null;
-            let projectRoot = options.projectRoot;
-            if (evidenceId) {
-              const evidence = readWebView().snapshot.evidence.find((item) => item.evidence_id === evidenceId);
-              if (!evidence || evidence.locator !== reference) {
-                throw new ProjectReferenceError(404, "找不到匹配的 Evidence 项目引用");
-              }
-              if (evidence.locator_status !== "verified") {
-                throw new ProjectReferenceError(409, "只有已验证的项目内 Evidence 引用可以直接打开");
-              }
-              const source = coordinator.evidenceVerification.query.getProjectReferenceSource(
-                options.boardId,
-                evidenceId,
-              );
-              if (source?.locator_workspace_root?.trim()) {
-                projectRoot = source.locator_workspace_root;
-              } else if (!projectRoot) {
-                throw new ProjectReferenceError(409, "这条历史 Evidence 没有记录原始工作区；请提交新的验证记录并替代它");
-              }
-            }
-            if (!projectRoot) {
-              throw new ProjectReferenceError(409, "项目引用没有可确认的原始工作区");
-            }
-            const opened = readProjectReference(projectRoot, reference);
+            const opened = openArtifactProjectReference({
+              evidence: coordinator.evidenceVerification.query,
+              readProjectReference,
+            }, { boardId: options.boardId, reference, evidenceId, projectRoot: options.projectRoot });
             response.writeHead(200, {
               "content-type": "text/plain; charset=utf-8",
               "cache-control": "no-store",
@@ -3158,7 +2151,8 @@ async function handleGoalBoardWebRequest(
             });
             response.end(opened.content);
           } catch (error) {
-            const status = error instanceof ProjectReferenceError ? error.status : 400;
+            const status = error instanceof ProjectReferenceError || error instanceof ArtifactProjectReferenceError
+              ? error.status : 400;
             sendJson(response, status, {
               error: error instanceof Error ? error.message : "项目内引用无法打开",
             });
@@ -3616,7 +2610,7 @@ async function handleGoalBoardWebRequest(
         if (request.method === "POST" && goalImpactMatch) {
           const body = await readBody(request);
           try {
-            const result = coordinator.addImpact(
+            const result = goalsAdapter.impacts.add(
               options.boardId,
               webImpactFacts(body, decodeURIComponent(goalImpactMatch[1])),
               {
@@ -3636,7 +2630,7 @@ async function handleGoalBoardWebRequest(
         if (request.method === "POST" && impactUpdateMatch) {
           const body = await readBody(request);
           try {
-            const result = coordinator.updateImpact(
+            const result = goalsAdapter.impacts.update(
               options.boardId,
               {
                 binding_id: decodeURIComponent(impactUpdateMatch[1]),
@@ -3660,7 +2654,7 @@ async function handleGoalBoardWebRequest(
         if (request.method === "POST" && impactDeactivateMatch) {
           const body = await readBody(request);
           try {
-            const result = coordinator.deactivateImpact(
+            const result = goalsAdapter.impacts.deactivate(
               options.boardId,
               {
                 binding_id: decodeURIComponent(impactDeactivateMatch[1]),
@@ -4000,94 +2994,16 @@ async function handleGoalBoardWebRequest(
               return;
             }
             const proposalId = decodeURIComponent(goalTreeProposalMatch[1]);
-            const proposal = coordinator.listGoalTreeProposals({
-              board_id: options.boardId,
-              proposal_id: proposalId,
-              include_legacy: false,
-            }).proposals[0];
-            if (!proposal || (proposal.state !== "pending" && proposal.state !== "partially_applied")) {
-              sendJson(response, 400, { error: "这份方案已经变化，请刷新后重新处理" });
-              return;
-            }
-            if (proposal.items.some((item) => item.state === "conflict")) {
-              sendJson(response, 400, { error: "这份方案和当前 GoalBoard 状态有冲突，请先让 Runtime 更新方案" });
-              return;
-            }
-            const pendingItems = proposal.items.filter((item) => item.state === "pending");
-            const allowedTreatments = new Set<RiskRecord["treatment"]>(["accept", "mitigate", "avoid", "defer"]);
-            const repairMap = new Map<string, { treatment: RiskRecord["treatment"]; treatment_plan?: string }>();
-            for (const raw of body.risk_repairs) {
-              if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-                sendJson(response, 400, { error: "风险处理选择格式无效" });
-                return;
-              }
-              const value = raw as Record<string, unknown>;
-              const itemId = String(value.item_id ?? "").trim();
-              const treatment = String(value.treatment ?? "") as RiskRecord["treatment"];
-              if (!itemId || !allowedTreatments.has(treatment) || repairMap.has(itemId)) {
-                sendJson(response, 400, { error: "每条风险都必须且只能选择一种处理方式" });
-                return;
-              }
-              repairMap.set(itemId, {
-                treatment,
-                ...(Object.prototype.hasOwnProperty.call(value, "treatment_plan")
-                  ? { treatment_plan: String(value.treatment_plan ?? "").trim() }
-                  : {}),
-              });
-            }
-            if (!repairMap.size) {
-              sendJson(response, 400, { error: "请至少选择一条风险的处理方式" });
-              return;
-            }
-            for (const [itemId] of repairMap) {
-              const item = pendingItems.find((candidate) => candidate.item_id === itemId);
-              if (!item || item.kind !== "risk") {
-                sendJson(response, 400, { error: "要修订的风险已经变化，请刷新后重试" });
-                return;
-              }
-            }
-            const invalidTreatmentItems = pendingItems.filter((item) =>
-              item.kind === "risk" && !allowedTreatments.has(String(item.payload.treatment ?? "") as RiskRecord["treatment"]));
-            if (invalidTreatmentItems.some((item) => !repairMap.has(item.item_id))) {
-              sendJson(response, 400, { error: "请为页面列出的每条风险选择处理方式" });
-              return;
-            }
-            const reason = typeof body.reason === "string" && body.reason.trim()
-              ? body.reason.trim()
-              : "用户在决定中心为方案中的风险选择处理方式，并确认保留或修改具体措施。";
-            const revisionDecisions = pendingItems.map((item) => {
-              const repair = repairMap.get(item.item_id);
-              const previousTreatment = String(item.payload.treatment ?? "").trim();
-              const previousPlan = String(item.payload.treatment_plan ?? "").trim()
-                || (allowedTreatments.has(previousTreatment as RiskRecord["treatment"]) ? "" : previousTreatment);
-              const payload = repair
-                ? {
-                    ...item.payload,
-                    treatment: repair.treatment,
-                    treatment_plan: repair.treatment_plan ?? previousPlan,
-                  }
-                : { ...item.payload };
-              const revisedItem: GoalTreeProposalItemInput = {
-                item_id: `${item.item_id}-web-v${proposal.version + 1}-${randomUUID().slice(0, 8)}`,
-                kind: item.kind,
-                operation: item.operation,
-                payload,
-                source_refs: [...item.source_refs, `web-risk-repair:${proposal.proposal_id}`],
-                reason: item.reason,
-                confidence: item.confidence,
-                affected_objects: item.affected_objects,
-                requires_user_confirmation: true,
-                supersedes_item_id: item.item_id,
-              };
-              return {
-                item_id: item.item_id,
-                decision: "revise" as const,
-                reason,
-                revised_item: revisedItem,
-              };
+            const prepared = coordinator.goalTreeWebInput.prepareRiskRepair(options.boardId, proposalId, {
+              risk_repairs: body.risk_repairs, reason: body.reason,
             });
+            if ("error" in prepared) {
+              sendJson(response, 400, { error: prepared.error });
+              return;
+            }
+            const { decisions: revisionDecisions, reason } = prepared;
             try {
-              const result = coordinator.decideGoalTreeProposal({
+              const result = coordinator.goalTreeDecision.decideGoalTreeProposal({
                 board_id: options.boardId,
                 proposal_id: proposalId,
                 authority: {
@@ -4114,38 +3030,8 @@ async function handleGoalBoardWebRequest(
           try {
             const proposalId = decodeURIComponent(goalTreeProposalMatch[1]);
             const confirmsWholeProposal = body.confirm_all_pending === true;
-            let decisions = body.decisions as Parameters<GoalBoardCoordinator["decideGoalTreeProposal"]>[0]["decisions"];
-            let decisionReason = typeof body.reason === "string" ? body.reason.trim() : "";
-            if (Array.isArray(decisions) && decisions.length > 0 && decisions.every((decision) => decision.decision === "reject")) {
-              const proposal = coordinator.listGoalTreeProposals({
-                board_id: options.boardId,
-                proposal_id: proposalId,
-                include_legacy: false,
-              }).proposals[0];
-              const undecidedItems = proposal?.items.filter((item) => item.state === "pending" || item.state === "conflict") ?? [];
-              const submittedIds = new Set(decisions.map((decision) => decision.item_id));
-              const rejectsWholeOpenProposal = undecidedItems.length > 0 &&
-                submittedIds.size === undecidedItems.length &&
-                undecidedItems.every((item) => submittedIds.has(item.item_id));
-              if (proposal && rejectsWholeOpenProposal) {
-                const systemProblems = [
-                  ...undecidedItems.flatMap((item) => goalTreeProposalItemValidationIssues(item).map((issue) => issue.message)),
-                  ...goalTreeProposalDecompositionIssues(undecidedItems, store.snapshot(options.boardId)).map((issue) => issue.message),
-                  ...(undecidedItems.some((item) => item.state === "conflict")
-                    ? [`这份方案有 ${undecidedItems.filter((item) => item.state === "conflict").length} 项已和当前 GoalBoard 状态不一致。`]
-                    : []),
-                ];
-                const uniqueProblems = [...new Set(systemProblems)];
-                if (uniqueProblems.length > 0) {
-                  const automaticReason = `GoalBoard 自动退回修正：${uniqueProblems.join("；")}`;
-                  decisionReason = decisionReason
-                    ? `${automaticReason}；用户补充：${decisionReason}`
-                    : automaticReason;
-                  decisions = decisions.map((decision) => ({ ...decision, reason: decisionReason }));
-                }
-              }
-            }
-            const result = coordinator.decideGoalTreeProposal({
+            const { decisions, decisionReason } = coordinator.goalTreeWebInput.prepareDecision(options.boardId, proposalId, body);
+            const result = coordinator.goalTreeDecision.decideGoalTreeProposal({
               board_id: options.boardId,
               proposal_id: proposalId,
               authority: {
@@ -4179,7 +3065,7 @@ async function handleGoalBoardWebRequest(
             sendJson(response, 400, { error: "请填写决定理由或修改意见" });
             return;
           }
-          const result = coordinator.decideContractProposal({
+          const result = coordinator.legacyContractDecision.decideContractProposal({
             board_id: options.boardId,
             proposal_id: decodeURIComponent(contractProposalMatch[1]),
             actor_id: "web-user",
@@ -4204,7 +3090,7 @@ async function handleGoalBoardWebRequest(
             sendJson(response, 400, { error: "请填写决定理由或修改意见" });
             return;
           }
-          const result = coordinator.decideCandidate({
+          const result = coordinator.legacyCandidateDecision.decideCandidate({
             board_id: options.boardId,
             candidate_id: decodeURIComponent(candidateMatch[1]),
             actor_id: "web-user",
@@ -4229,7 +3115,7 @@ async function handleGoalBoardWebRequest(
             sendJson(response, 400, { error: "请填写决定理由或修改意见" });
             return;
           }
-          const result = coordinator.confirmRewire({
+          const result = coordinator.legacyRewireDecision.confirmRewire({
             board_id: options.boardId,
             rewire_id: decodeURIComponent(rewireMatch[1]),
             actor_id: "web-user",
@@ -4241,78 +3127,51 @@ async function handleGoalBoardWebRequest(
           sendJson(response, 200, result);
           return;
         }
-        const goalPageMatch = url.pathname.match(/^\/goals\/([^/]+)$/);
-        const archivePageMatch = url.pathname.match(/^\/archive\/goals\/([^/]+)$/);
-        const trashPageMatch = url.pathname.match(/^\/trash\/goals\/([^/]+)$/);
-        const archiveIndex = url.pathname === "/archive";
-        const trashIndex = url.pathname === "/trash";
-        const decisionIndex = url.pathname === "/decisions";
-        if (
-          request.method === "GET" &&
-          (
-            url.pathname === "/" ||
-            goalPageMatch ||
-            archiveIndex ||
-            archivePageMatch ||
-            trashIndex ||
-            trashPageMatch ||
-            decisionIndex
-          )
-        ) {
-          let requestedGoalId: string | undefined;
-          if (goalPageMatch || archivePageMatch || trashPageMatch) {
-            try {
-              requestedGoalId = decodeURIComponent((goalPageMatch ?? archivePageMatch ?? trashPageMatch)![1]);
-            } catch {
-              sendJson(response, 404, { error: "Goal 页面不存在" });
-              return;
-            }
-          }
-          const view = readWebView();
-          const requestedArchived = requestedGoalId
-            ? view.archived_goals.some((item) => item.goal.goal_id === requestedGoalId)
-            : false;
-          const requestedTrashed = requestedGoalId
-            ? view.trashed_goals.some((item) => item.goal.goal_id === requestedGoalId)
-            : false;
-          const trashView = trashIndex || Boolean(trashPageMatch) || requestedTrashed;
-          const archiveView = !trashView && (archiveIndex || Boolean(archivePageMatch) || requestedArchived);
-          const collection = trashView ? view.trashed_goals : archiveView ? view.archived_goals : view.goals;
-          if (requestedGoalId && !collection.some((item) => item.goal.goal_id === requestedGoalId)) {
-            sendJson(response, 404, { error: `找不到这个 Goal: ${requestedGoalId}` });
+        if (handleArtifactNativePluginHttp(request, response, url.pathname, {
+          boardId: options.boardId, routePrefix: options.routePrefix ?? "",
+          projectTitle: options.project?.display_name ?? "GoalBoard",
+          query: coordinator.artifacts.query, desktopShell: isDesktopShellRequest(request, url), pageCsp: PAGE_CSP,
+        })) return;
+        const renderedGoalsPage = await renderWorkbenchGoalsPageRequest(
+          request.method, url.pathname, readWebView,
+          async (view, { goalId: requestedGoalId, archiveView, trashView, decisionView }) => {
+            const desktopShell = isDesktopShellRequest(request, url);
+            const operations = options.project
+              ? sessionProjectOperationsData(
+                  await sessionResources,
+                  options.project.project_id,
+                  view,
+                  options.projects,
+                  await withGoalBoardProjectCatalog(
+                    { homeDirectory: serverOptions.homeDirectory },
+                    (catalog) => catalog.listWorkspaceDirectory(options.project!.project_id),
+                  ),
+                )
+              : { sessions: [], workspaces: [] };
+            return renderGoalBoardWeb(
+              view,
+              requestedGoalId,
+              archiveView,
+              decisionView,
+              trashView,
+              controlToken,
+              desktopShell,
+              {},
+              operations,
+            );
+        });
+        if (renderedGoalsPage) {
+          if ("error" in renderedGoalsPage) {
+            sendJson(response, renderedGoalsPage.status, { error: renderedGoalsPage.error });
             return;
           }
-          const desktopShell = isDesktopShellRequest(request, url);
-          const operations = options.project
-            ? sessionProjectOperationsData(
-                await sessionResources,
-                options.project.project_id,
-                view,
-                options.projects,
-                await withGoalBoardProjectCatalog(
-                  { homeDirectory: serverOptions.homeDirectory },
-                  (catalog) => catalog.listWorkspaceDirectory(options.project!.project_id),
-                ),
-              )
-            : { sessions: [], workspaces: [] };
-          const html = renderGoalBoardWeb(
-            view,
-            requestedGoalId,
-            archiveView,
-            decisionIndex,
-            trashView,
-            controlToken,
-            desktopShell,
-            {},
-            operations,
-          );
           const headers: Record<string, string> = {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-store",
             "content-security-policy": PAGE_CSP,
           };
           response.writeHead(200, headers);
-          response.end(html);
+          response.end(renderedGoalsPage.html);
           return;
         }
         sendJson(response, 404, { error: L("页面或接口不存在") });
@@ -4358,3 +3217,4 @@ if (isMain) {
     });
   }
 }
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

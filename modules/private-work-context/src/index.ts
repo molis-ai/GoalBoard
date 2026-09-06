@@ -1,5 +1,7 @@
 export * from "@adeptify/goalboard-contracts/modules/private-work-context";
+export { findSessionForHostSignals } from "./session-host-signals.js";
 export { createSessionContentStore, type SessionContentStore } from "./content-store.js";
+export { migrateRuntimeContextProjectReferences } from "./context-binding-references.js";
 export {
   RuntimeContextBindingRepository,
   createRuntimeContextBindingTables,

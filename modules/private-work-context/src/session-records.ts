@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { GoalBoardSessionError } from "./errors.js";
+import { SessionAssociationRepository } from "./session-associations.js";
 import type {
   CreateGoalBoardSessionInput,
   DiscoverRuntimeSessionInput,
@@ -16,7 +17,6 @@ import type {
 } from "./contract-aliases.js";
 import {
   correlationTtl,
-  mapGoalLink,
   mapSession,
   optionalAbsolutePath,
   optionalText,
@@ -48,6 +48,7 @@ export class SessionRecordRepository {
   constructor(
     private readonly db: Database.Database,
     private readonly now: () => Date,
+    private readonly associations: SessionAssociationRepository,
   ) {}
 
   createSession(input: CreateGoalBoardSessionInput): GoalBoardSessionRecord {
@@ -244,25 +245,17 @@ export class SessionRecordRepository {
     const workspacePath = optionalAbsolutePath(input.workspace_path);
     const now = this.now().toISOString();
     return this.db.transaction(() => {
-      const clauses: string[] = [];
-      const values: string[] = [projectId];
-      if (previousWorkspaceId) {
-        clauses.push("workspace_id = ?");
-        values.push(previousWorkspaceId);
-      }
-      if (previousWorkspacePath) {
-        clauses.push("workspace_path = ?");
-        values.push(previousWorkspacePath);
-      }
-      const rows = this.db.prepare(`
-        SELECT session_id FROM sessions
-        WHERE project_id = ? AND (${clauses.join(" OR ")})
-      `).all(...values) as Array<{ session_id: string }>;
+      const rows = this.list({ project_id: projectId }).filter((session) =>
+        (previousWorkspaceId && session.workspace_id === previousWorkspaceId)
+        || (previousWorkspacePath && session.workspace_path === previousWorkspacePath));
       const update = this.db.prepare(`
-        UPDATE sessions SET workspace_id = ?, workspace_path = ?, updated_at = ?
+        UPDATE sessions SET workspace_path = ?, updated_at = ?
         WHERE session_id = ?
       `);
-      for (const row of rows) update.run(workspaceId, workspacePath, now, row.session_id);
+      for (const row of rows) {
+        this.associations.set(row.session_id, { ...this.associations.read(row.session_id), workspace_id: workspaceId }, input.actor_id, now);
+        update.run(workspacePath, now, row.session_id);
+      }
       return rows.map((row) => this.get(row.session_id));
     })();
   }
@@ -272,21 +265,21 @@ export class SessionRecordRepository {
       | Record<string, unknown>
       | undefined;
     if (!row) throw new GoalBoardSessionError("session.not_found", "找不到这条 GoalBoard Session");
-    return mapSession(row);
+    return { ...mapSession(row), ...this.associations.read(String(row.session_id)) };
   }
 
   findByNativeRuntimeSession(runtimeId: string, nativeId: string): GoalBoardSessionRecord | null {
     const row = this.db.prepare(`
       SELECT * FROM sessions WHERE runtime_id = ? AND native_runtime_session_id = ?
     `).get(runtimeId.trim(), nativeId.trim()) as Record<string, unknown> | undefined;
-    return row ? mapSession(row) : null;
+    return row ? this.get(String(row.session_id)) : null;
   }
 
   findBySurface(surfaceId: string): GoalBoardSessionRecord | null {
     const row = this.db.prepare("SELECT * FROM sessions WHERE surface_id = ?").get(surfaceId.trim()) as
       | Record<string, unknown>
       | undefined;
-    return row ? mapSession(row) : null;
+    return row ? this.get(String(row.session_id)) : null;
   }
 
   list(filter: SessionListFilter = {}): GoalBoardSessionRecord[] {
@@ -294,8 +287,6 @@ export class SessionRecordRepository {
     const values: string[] = [];
     for (const [column, value] of [
       ["runtime_id", filter.runtime_id],
-      ["project_id", filter.project_id],
-      ["workspace_id", filter.workspace_id],
       ["status", filter.status],
     ] as const) {
       const normalized = optionalText(value);
@@ -308,14 +299,13 @@ export class SessionRecordRepository {
       ${conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : ""}
       ORDER BY updated_at DESC, session_id
     `).all(...values) as Array<Record<string, unknown>>;
-    return rows.map(mapSession);
+    return rows.map((row) => ({ ...mapSession(row), ...this.associations.read(String(row.session_id)) }))
+      .filter((session) => (!optionalText(filter.project_id) || session.project_id === filter.project_id!.trim())
+        && (!optionalText(filter.workspace_id) || session.workspace_id === filter.workspace_id!.trim()));
   }
 
   goalHistory(sessionId: string): GoalBoardSessionGoalLink[] {
-    return (this.db.prepare(`
-      SELECT * FROM session_goal_links WHERE session_id = ?
-      ORDER BY CASE relation WHEN 'current' THEN 0 ELSE 1 END, created_at DESC, link_id DESC
-    `).all(sessionId.trim()) as Array<Record<string, unknown>>).map(mapGoalLink);
+    return this.associations.history(sessionId.trim());
   }
 
   insertSession(input: InsertSessionRecordInput): GoalBoardSessionRecord {
@@ -328,20 +318,18 @@ export class SessionRecordRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.sessionId, input.runtimeId, input.nativeId, input.correlationToken,
-      input.correlationExpiresAt, input.surfaceId, input.projectId, input.currentGoalId,
-      input.workspaceId, input.workspacePath, input.title, input.status, input.provenance,
+      input.correlationExpiresAt, input.surfaceId, null, null,
+      null, input.workspacePath, input.title, input.status, input.provenance,
       JSON.stringify(input.metadata), input.createdAt, input.updatedAt,
     );
-    if (input.currentGoalId) this.insertGoalLink(input.sessionId, input.currentGoalId, input.actorId, input.createdAt);
+    this.associations.set(input.sessionId, { project_id: input.projectId, current_goal_id: input.currentGoalId,
+      workspace_id: input.workspaceId }, input.actorId, input.createdAt);
     return this.get(input.sessionId);
   }
 
-  insertGoalLink(sessionId: string, goalId: string, actorId: string, now: string): void {
-    this.db.prepare(`
-      INSERT INTO session_goal_links (
-        link_id, session_id, goal_id, relation, linked_by, created_at, ended_at
-      ) VALUES (?, ?, ?, 'current', ?, ?, NULL)
-    `).run(`session-goal-${randomUUID()}`, sessionId, goalId, actorId, now);
+  setAssociationReferences(sessionId: string, projectId: string | null, goalId: string | null,
+    workspaceId: string | null, actorId: string, now: string): void {
+    this.associations.set(sessionId, { project_id: projectId, current_goal_id: goalId, workspace_id: workspaceId }, actorId, now);
   }
 
   private updateAssociationsInTransaction(
@@ -361,22 +349,13 @@ export class SessionRecordRepository {
     const workspacePath = Object.hasOwn(input, "workspace_path")
       ? optionalAbsolutePath(input.workspace_path)
       : current.workspace_path;
-    if (goalId !== current.current_goal_id) {
-      this.db.prepare(`
-        UPDATE session_goal_links SET relation = 'history', ended_at = ?
-        WHERE session_id = ? AND relation = 'current'
-      `).run(now, current.session_id);
-      if (goalId) this.insertGoalLink(current.session_id, goalId, actorId, now);
-    }
+    this.associations.set(current.session_id, { project_id: projectId, current_goal_id: goalId, workspace_id: workspaceId }, actorId, now);
     this.db.prepare(`
       UPDATE sessions
-      SET project_id = ?, current_goal_id = ?, workspace_id = ?, workspace_path = ?,
+      SET workspace_path = ?,
           title = COALESCE(?, title), status = 'active', updated_at = ?
       WHERE session_id = ?
     `).run(
-      projectId,
-      goalId,
-      workspaceId,
       workspacePath,
       optionalText((input as { title?: string | null }).title),
       now,

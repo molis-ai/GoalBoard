@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "host_api_version": 1,
+  "plugin_id": "io.goalboard.example.notes",
+  "version": "1.0.0",
+  "name": "Local Plugin Sample",
+  "kind": "integration",
+  "publisher": {
+    "publisher_id": "local-developer",
+    "signature": "local-development-binding"
+  },
+  "entrypoints": [
+    {
+      "deployment": "local",
+      "entrypoint": "./index.mjs"
+    }
+  ],
+  "permissions": [
+    {
+      "permission": "storage:private",
+      "required": true,
+      "reason": "Save a personal result, consume its exact version and show the local sample"
+    },
+    {
+      "permission": "artifact:write",
+      "required": true,
+      "reason": "Save a personal result, consume its exact version and show the local sample"
+    },
+    {
+      "permission": "artifact:read",
+      "required": true,
+      "reason": "Save a personal result, consume its exact version and show the local sample"
+    },
+    {
+      "permission": "ui:register",
+      "required": true,
+      "reason": "Save a personal result, consume its exact version and show the local sample"
+    }
+  ],
+  "capabilities": {
+    "provides": [
+      "connector.sample.v1"
+    ],
+    "consumes": []
+  },
+  "artifacts": {
+    "produces": [
+      {
+        "artifact_type_id": "io.goalboard.example.note",
+        "schema_version": 1
+      }
+    ],
+    "consumes": [
+      {
+        "artifact_type_id": "io.goalboard.example.note",
+        "schema_version": 1
+      }
+    ]
+  },
+  "ui": {
+    "contributions": [
+      "io.goalboard.example.notes.main"
+    ]
+  }
+}

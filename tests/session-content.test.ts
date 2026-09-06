@@ -1,15 +1,16 @@
+import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { CodexRuntimeSessionAdapter, RuntimeSessionAdapterRouter } from "../src/sessions/adapters.js";
-import { searchSessionTimeline, SessionContentService } from "../src/sessions/content.js";
-import { GoalBoardSessionRegistry } from "../src/sessions/registry.js";
+import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
+import { searchSessionTimeline, SessionContentService } from "@adeptify/goalboard-plugin-work";
+import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 test("Session content merges native Codex items with explicitly labelled GoalBoard TUI events", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-content-"));
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
     const session = registry.explicitlyLinkSession({
       runtime_id: "codex",
@@ -29,7 +30,7 @@ test("Session content merges native Codex items with explicitly labelled GoalBoa
       content: "GoalBoard TUI fallback line",
       metadata: { panel_id: "panel-a", partial_terminal_history: true },
     });
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     router.register(new CodexRuntimeSessionAdapter({
       async request(method, params) {
         if (method === "thread/read") {
@@ -100,7 +101,7 @@ test("Session content merges native Codex items with explicitly labelled GoalBoa
 
 test("unsupported Runtime returns only proven GoalBoard events and never fabricates native history", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-fallback-"));
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
     const session = registry.explicitlyLinkSession({
       runtime_id: "future-runtime",
@@ -109,7 +110,7 @@ test("unsupported Runtime returns only proven GoalBoard events and never fabrica
       user_confirmed: true,
       project_id: "project-a",
     });
-    const empty = await new SessionContentService(registry, new RuntimeSessionAdapterRouter(registry)).read(session.session_id);
+    const empty = await new SessionContentService(registry, new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry))).read(session.session_id);
     assert.equal(empty.content_mode, "unavailable");
     assert.deepEqual(empty.events, []);
     registry.appendEvent({
@@ -119,7 +120,7 @@ test("unsupported Runtime returns only proven GoalBoard events and never fabrica
       source_id: "goal-link-a",
       content: "已关联 Goal",
     });
-    const fallback = await new SessionContentService(registry, new RuntimeSessionAdapterRouter(registry)).read(session.session_id);
+    const fallback = await new SessionContentService(registry, new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry))).read(session.session_id);
     assert.equal(fallback.content_mode, "fallback");
     assert.deepEqual(fallback.events.map((event) => event.source), ["goalboard"]);
   } finally {
@@ -130,7 +131,7 @@ test("unsupported Runtime returns only proven GoalBoard events and never fabrica
 
 test("an unknown native read shape is a visible failure while proven GoalBoard events remain available", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-read-shape-"));
-  const registry = await GoalBoardSessionRegistry.open({ homeDirectory: path.join(directory, ".goalboard") });
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
   try {
     const session = registry.explicitlyLinkSession({
       runtime_id: "codex",
@@ -146,7 +147,7 @@ test("an unknown native read shape is a visible failure while proven GoalBoard e
       source_id: "shape-fallback",
       content: "仍可验证的本地记录",
     });
-    const router = new RuntimeSessionAdapterRouter(registry);
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
     router.register(new CodexRuntimeSessionAdapter({
       async request() { return { unexpected: [] }; },
       subscribe() { return () => undefined; },
@@ -161,3 +162,4 @@ test("an unknown native read shape is a visible failure while proven GoalBoard e
     await rm(directory, { recursive: true, force: true });
   }
 });
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

@@ -1,56 +1,28 @@
-import fs from "node:fs";
-import path from "node:path";
+import { importV3Capability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability, createGoalsEntryClient, createExecutionEntryClient, createGoalEntryCompositionClient, createGoalProposalClients, readGoalContractCapability, setActiveGoalCapability } from "@adeptify/goalboard-plugin-goals";
+import { prepareLocalProjectStorage } from "@adeptify/goalboard-app-local-host";
 import {
   createGoalBoardLocalHost,
-  createGoalCapability,
   goalBoardHostProjectReference,
-  initializeBoardCapability,
-  snapshotBoardCapability,
   type GoalBoardLocalHost,
 } from "../local-host/composition.js";
-import { GoalBoardCoordinator } from "./coordinator.js";
-import type { ClaimRequest, CreateGoalInput } from "./types.js";
-import { importV3Board } from "./migration.js";
+import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
+import type { LegacyV3ImportInput } from "@adeptify/goalboard-plugin-goals";
 import {
-  createCliExecutionValidationAdapter,
-  createCliGoalsAdapter,
+  createCliGoalCommandHandlers,
+  createCliExecutionCommandHandlers,
+  createCliAvailabilityQueryHandlers,
+  createCliDraftDialogueHandlers,
+  createCliGoalTreeHandlers,
+  createCliLegacyProposalHandlers,
+  DEFAULT_CLI_DATABASE,
+  cliFlagValue as value,
+  readCliJsonPayload as payload,
+  printCliJson as print,
+  cliGoalUrl,
+  printV1Help,
 } from "@adeptify/goalboard-app-cli";
 
-const DEFAULT_DATABASE = ".goalboard/goalboard.db";
-
-function value(args: string[], name: string): string | undefined {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
-}
-
-function payload(args: string[]): Record<string, unknown> {
-  const inline = value(args, "--json");
-  const file = value(args, "--file");
-  if (inline) return JSON.parse(inline) as Record<string, unknown>;
-  if (file) return JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-  return {};
-}
-
-function print(value_: unknown): void {
-  console.log(JSON.stringify(value_, null, 2));
-}
-
-export function printV1Help(): void {
-  console.log(`goalboard v1 <operation> --db PATH --json '{...}'
-
-Operations:
-  init | create-goal | snapshot | contract | available | select-goal | ready | explain | claim | release | revoke
-  run-start | run-report | revalidate | evidence-submit | review-submit | complete
-  draft-dialogue-start | draft-dialogue-turn | draft-dialogue-resume
-  goal-tree-propose | goal-tree-read | goal-tree-check | goal-tree-decide
-  relation-add | impact-add | policy-set | risk-add | risk-state | active-goal
-  contract-propose | contract-decide | candidate-submit | dependency-propose
-  candidate-decide | rewire-confirm | import-v3
-
-Complex payloads may use --file payload.json instead of --json.
-The SQLite database defaults to ${DEFAULT_DATABASE}.`);
-  console.log("\nInstall GoalBoard itself: goalboard install [--home PATH]");
-}
+export { printV1Help } from "@adeptify/goalboard-app-cli";
 
 export interface V1CliOptions {
   localHost?: GoalBoardLocalHost;
@@ -62,11 +34,12 @@ export async function runV1Cli(args: string[], options: V1CliOptions = {}): Prom
     printV1Help();
     return 0;
   }
-  const databasePath = path.resolve(value(args, "--db") ?? DEFAULT_DATABASE);
-  if (operation === "init" || operation === "import-v3") {
-    fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-  }
-  if (operation !== "init" && operation !== "import-v3" && !fs.existsSync(databasePath)) {
+  const storage = prepareLocalProjectStorage(
+    value(args, "--db") ?? DEFAULT_CLI_DATABASE,
+    operation === "init" || operation === "import-v3" ? "create" : "existing",
+  );
+  const { databasePath } = storage;
+  if (storage.status === "missing") {
     throw new Error(`GoalBoard 数据库不存在: ${databasePath}`);
   }
   const input = payload(args);
@@ -78,9 +51,17 @@ export async function runV1Cli(args: string[], options: V1CliOptions = {}): Prom
   });
   const client = localHost.client(reference);
   try {
-    return await localHost.withProject(reference, async ({ store, coordinator }) => {
-      const goalsAdapter = createCliGoalsAdapter(coordinator.goals);
-      const executionAdapter = createCliExecutionValidationAdapter(coordinator.executionValidation);
+    return await client.withScope(async () => {
+      const { draftDialogue, goalTree, legacyProposals } = createGoalProposalClients(client);
+      const goalsAdapter = createGoalsEntryClient(client);
+      const executionCommandsClient = createExecutionEntryClient(client);
+      const availability = createGoalEntryCompositionClient(client);
+      const goalCommands = createCliGoalCommandHandlers(goalsAdapter);
+      const executionCommands = createCliExecutionCommandHandlers(executionCommandsClient);
+      const draftDialogueCommands = createCliDraftDialogueHandlers(draftDialogue);
+      const goalTreeCommands = createCliGoalTreeHandlers(goalTree);
+      const legacyProposalCommands = createCliLegacyProposalHandlers(legacyProposals);
+      const availabilityQueries = createCliAvailabilityQueryHandlers(availability);
       switch (operation) {
       case "init":
         print(
@@ -104,266 +85,94 @@ export async function runV1Cli(args: string[], options: V1CliOptions = {}): Prom
         );
         break;
       case "draft-dialogue-start":
-        print(
-          coordinator.startDraftDialogue(
-            input as unknown as Parameters<GoalBoardCoordinator["startDraftDialogue"]>[0],
-          ),
-        );
+        print(await draftDialogueCommands[operation](input));
         break;
       case "draft-dialogue-turn":
-        print(
-          coordinator.recordDraftDialogueTurn(
-            input as unknown as Parameters<GoalBoardCoordinator["recordDraftDialogueTurn"]>[0],
-          ),
-        );
+        print(await draftDialogueCommands[operation](input));
         break;
       case "draft-dialogue-resume":
-        print(
-          coordinator.resumeDraftDialogue(
-            input as unknown as Parameters<GoalBoardCoordinator["resumeDraftDialogue"]>[0],
-          ),
-        );
+        print(await draftDialogueCommands[operation](input));
         break;
       case "goal-tree-propose":
-        print(
-          coordinator.submitGoalTreeProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["submitGoalTreeProposal"]>[0],
-          ),
-        );
+        print(await goalTreeCommands[operation](input));
         break;
       case "goal-tree-read":
-        print(
-          coordinator.listGoalTreeProposals(
-            input as unknown as Parameters<GoalBoardCoordinator["listGoalTreeProposals"]>[0],
-          ),
-        );
+        print(await goalTreeCommands[operation](input));
         break;
       case "goal-tree-check":
-        print(
-          coordinator.checkGoalTreeProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["checkGoalTreeProposal"]>[0],
-          ),
-        );
+        print(await goalTreeCommands[operation](input));
         break;
       case "goal-tree-decide":
-        print(
-          coordinator.decideGoalTreeProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["decideGoalTreeProposal"]>[0],
-          ),
-        );
+        print(await goalTreeCommands[operation](input));
         break;
       case "relation-add":
-        print(
-          goalsAdapter.commands.addRelation(
-            String(input.board_id),
-            input.relation as Parameters<GoalBoardCoordinator["goals"]["commands"]["addRelation"]>[1],
-            {
-              actor_id: String(input.actor_id),
-              idempotency_key: String(input.idempotency_key),
-              reason: input.reason == null ? undefined : String(input.reason),
-            },
-          ),
-        );
-        break;
       case "impact-add":
-        print(
-          coordinator.addImpact(
-            String(input.board_id),
-            input.impact as Parameters<GoalBoardCoordinator["addImpact"]>[1],
-            { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
-          ),
-        );
-        break;
       case "policy-set":
-        print(
-          goalsAdapter.commands.setPolicy(
-            String(input.board_id),
-            input.binding as Parameters<GoalBoardCoordinator["goals"]["commands"]["setPolicy"]>[1],
-            { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
-          ),
-        );
-        break;
       case "risk-add":
-        print(
-          goalsAdapter.commands.addRisk(
-            String(input.board_id),
-            input.risk as Parameters<GoalBoardCoordinator["goals"]["commands"]["addRisk"]>[1],
-            { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
-          ),
-        );
-        break;
       case "risk-state":
-        print(
-          goalsAdapter.commands.setRiskState(
-            String(input.board_id),
-            input.risk as Parameters<GoalBoardCoordinator["goals"]["commands"]["setRiskState"]>[1],
-            { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
-          ),
-        );
+      case "revalidate":
+      case "complete":
+        print(await goalCommands[operation](input));
         break;
       case "active-goal":
         print(
-          coordinator.setActiveGoal(
-            String(input.board_id),
-            { goal_id: String(input.goal_id), reason: String(input.reason) },
-            { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
-          ),
+          await client.invoke(setActiveGoalCapability, {
+            board_id: String(input.board_id),
+            goal: { goal_id: String(input.goal_id), reason: String(input.reason) },
+            write: { actor_id: String(input.actor_id), idempotency_key: String(input.idempotency_key) },
+          }),
         );
         break;
       case "snapshot":
         print(await client.invoke(snapshotBoardCapability, { board_id: String(input.board_id) }));
         break;
       case "contract": {
-        const contract = coordinator.goalQueries.readGoalContract(String(input.board_id), String(input.goal_id));
+        const contract = await client.invoke(readGoalContractCapability, { board_id: String(input.board_id), goal_id: String(input.goal_id) });
         const baseUrl =
           value(args, "--web-base-url") ??
           process.env.GOALBOARD_WEB_URL ??
           "http://127.0.0.1:4173";
-        let goalUrl: string;
-        try {
-          goalUrl = new URL(contract.goal_path, baseUrl).toString();
-        } catch {
-          throw new Error(`无效的 GoalBoard Web 地址: ${baseUrl}`);
-        }
+        const goalUrl = cliGoalUrl(contract.goal_path, baseUrl);
         print({ ...contract, goal_url: goalUrl });
         break;
       }
       case "ready":
-        print(
-          coordinator.queryReady({
-            board_id: String(input.board_id),
-            actor_id: String(input.actor_id),
-            role: input.role as Parameters<GoalBoardCoordinator["queryReady"]>[0]["role"],
-            capabilities: (input.capabilities as string[]) ?? [],
-            goal_mode_attestation: Boolean(input.goal_mode_attestation),
-          }),
-        );
-        break;
       case "available":
-        print(
-          coordinator.queryAvailable({
-            board_id: String(input.board_id),
-            actor_id: String(input.actor_id),
-            capabilities: (input.capabilities as string[]) ?? [],
-            goal_mode_attestation: Boolean(input.goal_mode_attestation),
-          }),
-        );
-        break;
       case "explain":
-        print(
-          coordinator.explainGoal({
-            board_id: String(input.board_id),
-            goal_id: String(input.goal_id),
-            actor_id: String(input.actor_id),
-            role: input.role as Parameters<GoalBoardCoordinator["explainGoal"]>[0]["role"],
-            capabilities: (input.capabilities as string[]) ?? [],
-            goal_mode_attestation: Boolean(input.goal_mode_attestation),
-          }),
-        );
+        print(await availabilityQueries[operation](input));
         break;
       case "claim":
-        print(executionAdapter.commands.claimGoal(input as unknown as ClaimRequest));
-        break;
       case "select-goal":
-        print(executionAdapter.commands.selectGoalAndStart(input as unknown as ClaimRequest));
-        break;
       case "release":
-        print(
-          executionAdapter.commands.releaseClaim(
-            input as unknown as Parameters<typeof executionAdapter.commands.releaseClaim>[0],
-          ),
-        );
-        break;
       case "revoke":
-        print(
-          executionAdapter.commands.revokeClaim(
-            input as unknown as Parameters<typeof executionAdapter.commands.revokeClaim>[0],
-          ),
-        );
-        break;
       case "run-start":
-        print(
-          executionAdapter.commands.startRun(input as unknown as Parameters<typeof executionAdapter.commands.startRun>[0]),
-        );
-        break;
-      case "revalidate":
-        print(
-          goalsAdapter.lifecycle.revalidate(
-            input as unknown as Parameters<GoalBoardCoordinator["goals"]["lifecycle"]["revalidate"]>[0],
-          ),
-        );
-        break;
       case "run-report":
-        print(
-          executionAdapter.commands.reportRun(input as unknown as Parameters<typeof executionAdapter.commands.reportRun>[0]),
-        );
-        break;
       case "evidence-submit":
-        print(
-          executionAdapter.commands.submitEvidence(
-            input as unknown as Parameters<typeof executionAdapter.commands.submitEvidence>[0],
-          ),
-        );
-        break;
       case "review-submit":
-        print(
-          executionAdapter.commands.submitReview(
-            input as unknown as Parameters<typeof executionAdapter.commands.submitReview>[0],
-          ),
-        );
-        break;
-      case "complete":
-        print(
-          goalsAdapter.lifecycle.evaluateCompletion(
-            input as unknown as Parameters<GoalBoardCoordinator["goals"]["lifecycle"]["evaluateCompletion"]>[0],
-          ),
-        );
+        print(await executionCommands[operation](input));
         break;
       case "contract-propose":
-        print(
-          coordinator.submitContractProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["submitContractProposal"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "contract-decide":
-        print(
-          coordinator.decideContractProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["decideContractProposal"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "candidate-submit":
-        print(
-          coordinator.submitCandidate(
-            input as unknown as Parameters<GoalBoardCoordinator["submitCandidate"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "dependency-propose":
-        print(
-          coordinator.submitDependencyProposal(
-            input as unknown as Parameters<GoalBoardCoordinator["submitDependencyProposal"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "candidate-decide":
-        print(
-          coordinator.decideCandidate(
-            input as unknown as Parameters<GoalBoardCoordinator["decideCandidate"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "rewire-confirm":
-        print(
-          coordinator.confirmRewire(
-            input as unknown as Parameters<GoalBoardCoordinator["confirmRewire"]>[0],
-          ),
-        );
+        print(await legacyProposalCommands[operation](input));
         break;
       case "import-v3":
         print(
-          importV3Board(store, coordinator, input as never, {
+          await client.invoke(importV3Capability, {
+            legacy: input as unknown as LegacyV3ImportInput,
             target_board_id: String(value(args, "--board-id")),
             actor_id: String(value(args, "--actor")),
             idempotency_key: String(value(args, "--key")),

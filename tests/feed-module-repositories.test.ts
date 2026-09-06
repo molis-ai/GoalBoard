@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { AttentionModule } from "@adeptify/goalboard-module-attention-resumption";
 import { FeedModule } from "@adeptify/goalboard-module-feed";
+import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 
 import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
@@ -19,7 +20,9 @@ function feedModules(store: SqliteGoalBoardStore): {
     exists: (projectId, subjectType, subjectId) =>
       subjectType === "feed_item" && feed.query.exists(projectId, subjectId),
   });
-  feed = new FeedModule(store.db, attention);
+  feed = new FeedModule(store.db, attention, {
+    ledger: createContextLedger(store.db, { authorize: (access) => access.scope.kind === "personal" }),
+  });
   return { attention, feed };
 }
 
@@ -82,6 +85,7 @@ test("Feed and Attention repositories preserve Signal revisions and state across
         feed.events.list(DEMO_BOARD_ID, itemId).map((event) => event.type),
         ["feed_item.created", "feed_item.updated", "feed_item.saved"],
       );
+      feed.commands.linkGoal(DEMO_BOARD_ID, itemId, "CORE", "promoted");
     } finally {
       firstStore.close();
     }
@@ -92,7 +96,9 @@ test("Feed and Attention repositories preserve Signal revisions and state across
       const restored = feed.query.get(DEMO_BOARD_ID, itemId);
       assert.equal(restored.signal_revision, 2);
       assert.equal(restored.title, "第二版通知");
-      assert.equal(restored.disposition, "saved");
+      assert.equal(restored.disposition, "promoted");
+      assert.equal(restored.linked_goal_id, "CORE");
+      assert.equal(feed.query.findByLinkedGoal(DEMO_BOARD_ID, "CORE")?.item_id, itemId);
       assert.equal(attention.query.list(DEMO_BOARD_ID)[0]?.status, "done");
     } finally {
       restartedStore.close();

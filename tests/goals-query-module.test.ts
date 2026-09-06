@@ -1,4 +1,6 @@
+import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +14,43 @@ import {
 import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
 import { SqliteGoalBoardStore } from "../src/v1/store.js";
 
+test("Policy proposal versions preserve old serialized baselines and distinguish timestamp-only from fact changes", () => {
+  const directory = mkdtempSync(join(tmpdir(), "goalboard-policy-version-"));
+  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
+  try {
+    const coordinator = new GoalBoardCoordinator(store);
+    coordinator.initializeBoard({ board_id: "board", title: "Version compatibility", actor_id: "user", idempotency_key: "init" });
+    const goals = new GoalsModule(store.db, {
+      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
+      currentActionToken: (_boardId, goalId) => `token:${goalId}`,
+      authorizeRiskUpdate: () => undefined, authorizeRiskState: () => undefined,
+      transitionRevisionDependents: () => undefined, reconcileLifecycle: (_boardId, goalId) => ({ goal_id: goalId }),
+    });
+    const policyJson = '{ "self_verification": true, "max_lease_seconds": 900 }';
+    const at = "2026-09-01T00:00:00.000Z";
+    store.db.prepare(`INSERT INTO policy_bindings
+      (policy_binding_id, board_id, goal_id, scope, policy_json, state, created_by, reason, created_at)
+      VALUES ('old-rule', 'board', NULL, 'project_default', ?, 'active', 'user', 'original', ?)`).run(policyJson, at);
+    // Independently ordered, old persisted wire fields; do not call the production canonicalizer.
+    const oldRecord = { board_id: "board", created_at: at, created_by: "user", goal_id: null,
+      policy_binding_id: "old-rule", policy_json: policyJson, reason: "original", scope: "project_default", state: "active" };
+    const legacy = goals.query.policyBindingVersion("board", "old-rule", "legacy");
+    assert.deepEqual(legacy, { exists: true, version: createHash("sha256").update(JSON.stringify(oldRecord)).digest("hex") });
+    const { created_at: _ignored, ...semanticRecord } = oldRecord;
+    const semantic = goals.query.policyBindingVersion("board", "old-rule", "semantic-v1");
+    assert.deepEqual(semantic, { exists: true, version: `semantic-v1:${createHash("sha256").update(JSON.stringify(semanticRecord)).digest("hex")}` });
+    store.db.prepare("UPDATE policy_bindings SET created_at = ? WHERE policy_binding_id = 'old-rule'").run("2026-09-02T00:00:00.000Z");
+    assert.deepEqual(goals.query.policyBindingVersion("board", "old-rule", "semantic-v1"), semantic);
+    assert.notDeepEqual(goals.query.policyBindingVersion("board", "old-rule", "legacy"), legacy);
+    goals.commands.applyConfirmedPolicy({ board_id: "board", operation: "deactivate", policy_binding_id: "old-rule",
+      actor_id: "user", reason: "user confirmed", at, source_item_id: "withdraw" });
+    const withdrawn = goals.query.policyBindingVersion("board", "old-rule", "semantic-v1");
+    assert.equal(withdrawn.exists, true, "inactive facts remain versioned for saved proposals");
+    assert.notEqual(withdrawn.version, semantic.version, "real state changes invalidate the saved baseline");
+    assert.deepEqual(goals.query.policyBindingVersion("another-board", "old-rule", "semantic-v1"), { exists: false, version: "absent" });
+  } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("Goals public Query API owns list, detail, relation, policy, risk, trash, and snapshot reads", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-query-"));
   const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
@@ -24,6 +63,7 @@ test("Goals public Query API owns list, detail, relation, policy, risk, trash, a
       idempotency_key: "initialize",
     });
     const goals = new GoalsModule(store.db, {
+      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
       currentActionToken: (_boardId, goalId) => `token:${goalId}`,
       authorizeRiskUpdate: () => undefined,
       authorizeRiskState: () => undefined,

@@ -1,3 +1,4 @@
+import { GOALS_WORK_TABS_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 /** AP3 Workbench client segment: bootstrap. */
 export const CLIENT_BOOTSTRAP_SCRIPT = `  (() => {
     let state = JSON.parse(document.querySelector("#goalboard-data").textContent);
@@ -50,11 +51,6 @@ export const CLIENT_BOOTSTRAP_SCRIPT = `  (() => {
     const defaultMobileDocumentLabel = mobileDocumentTab?.textContent || L("聚焦");
     const dialog = document.querySelector("[data-create-dialog]");
     const form = document.querySelector("[data-create-form]");
-    const formError = document.querySelector("[data-create-error]");
-    const trashDialog = document.querySelector("[data-goal-trash-dialog]");
-    const trashForm = document.querySelector("[data-goal-trash-form]");
-    const trashError = document.querySelector("[data-goal-trash-error]");
-    const trashSubmit = document.querySelector("[data-goal-trash-submit]");
     const toast = document.querySelector("[data-toast]");
     const archiveView = document.body.dataset.boardView === "archive";
     const trashView = document.body.dataset.boardView === "trash";
@@ -163,51 +159,28 @@ export const CLIENT_BOOTSTRAP_SCRIPT = `  (() => {
       const initialHistoryState = history.state && typeof history.state === "object" ? history.state : {};
       history.replaceState({ ...initialHistoryState, goalId: selected }, "", location.href);
     }
-    let trashIntent = null;
     let toastTimer;
     let syncing = false;
     let saveTimer;
     let resizeStartX = 0;
     let resizeStartWidth = 0;
-    let selectedStatuses = new Set();
-    let goalDocumentRequest = null;
-    let goalPanelRequest = null;
-    let goalRecordsRequest = null;
     let quickRecordRequest = null;
-    let goalGraphRequest = null;
     let feedWorkbenchRequest = null;
     let feedDetailRequest = null;
     let searchBusyUntil = 0;
-    let searchComposing = false;
     let deferredRefreshTimer;
     let navigatorView = "list";
-    let momentumOpenOnly = false;
-    let momentumPeriod = 7;
-    let momentumSelected = selected;
-    let graphZoom = 1;
-    let graphAutoFit = true;
-    let graphResizeObserver = null;
-    let graphResizeTarget = null;
-    let graphResizeFrame = 0;
     let desktopCompanionActive = document.body.dataset.desktopShell === "true" && matchMedia("(max-width: 760px)").matches;
-    let openWorkTabs = [];
-    const goalPanelKeys = ["overview", "completion", "progress", "factors", "records"];
-    const goalFactorKeys = ["relations", "risks", "impacts", "rules"];
-
-    if (workTabs && !decisionView && !collectionView) {
-      try {
-        const storedTabs = JSON.parse(localStorage.getItem(workTabsStorageKey) || "[]");
-        if (Array.isArray(storedTabs)) openWorkTabs = storedTabs.map(String);
-      } catch {}
-      const available = new Set(visibleGoals().map((item) => item.goal.goal_id));
-      openWorkTabs = openWorkTabs.filter((goalId, index, all) => available.has(goalId) && all.indexOf(goalId) === index);
-      if (selected && !openWorkTabs.includes(selected)) openWorkTabs.push(selected);
-    }
-
-    const persistWorkTabs = () => {
-      if (!workTabs || decisionView || collectionView) return;
-      try { localStorage.setItem(workTabsStorageKey, JSON.stringify(openWorkTabs)); } catch {}
-    };
+    const { appendGoalWorkTabs, persistWorkTabs, ensureWorkTab,
+      handleGoalWorkTabClick, handleGoalWorkTabKeyboard } = (${GOALS_WORK_TABS_CLIENT_FACTORY_SCRIPT})({
+        workTabs, decisionView, collectionView, visibleGoals,
+        getSelected: () => selected, getActiveSurface: () => activeDesktopSurface,
+        readStoredTabs: () => JSON.parse(localStorage.getItem(workTabsStorageKey) || "[]"),
+        writeStoredTabs: (tabs) => localStorage.setItem(workTabsStorageKey, JSON.stringify(tabs)),
+        renderWorkTabs: () => renderWorkTabs(), selectGoal: (...args) => selectGoal(...args),
+        setDesktopDirectory: (...args) => setDesktopDirectory(...args),
+        setDesktopWorkSurface: (...args) => setDesktopWorkSurface(...args),
+        showToast: (...args) => showToast(...args), translate: L,
+      });
 
 `;
-
