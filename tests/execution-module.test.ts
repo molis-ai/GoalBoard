@@ -7,8 +7,8 @@ import test from "node:test";
 import { ExecutionError, ExecutionModule } from "@adeptify/goalboard-module-execution";
 import type { GoalPolicy } from "@adeptify/goalboard-contracts/modules/goals";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 const POLICY: GoalPolicy = {
   goal_mode: "preferred",
@@ -24,7 +24,7 @@ test("Execution public module owns Claim/Run transitions without a Coordinator",
   const directory = mkdtempSync(join(tmpdir(), "goalboard-execution-module-"));
   const databasePath = join(directory, "goalboard.sqlite");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let now = "2026-09-02T00:00:00.000Z";
   try {
     const execution = new ExecutionModule({
@@ -112,7 +112,7 @@ test("Execution recovery expires the lease and abandons its active Run exactly o
   const directory = mkdtempSync(join(tmpdir(), "goalboard-execution-recovery-"));
   const databasePath = join(directory, "goalboard.sqlite");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let now = "2026-09-02T00:00:00.000Z";
   try {
     const execution = new ExecutionModule({

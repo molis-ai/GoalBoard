@@ -6,7 +6,7 @@ import { GOALS_REFRESH_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-
 /** AP3 Workbench client segment: refresh-decisions. */
 export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
       setMobileView(restoredMobileView);
-      if (hashTargetId) void revealDeepLinkFromId(hashTargetId);
+      if (hashTargetId && (activeDesktopSurface === "goal" || decisionView)) void revealDeepLinkFromId(hashTargetId);
     };
 
     const saveUiState = () => {

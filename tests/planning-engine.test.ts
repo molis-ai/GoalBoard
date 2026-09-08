@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,12 +22,12 @@ import {
   projectPlanningRelations,
   validatePlanningGraph,
 } from "@adeptify/goalboard-module-goals";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { readPersonalPlanningMethodPacks } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { goalTreeProposalDecompositionIssues } from "@adeptify/goalboard-module-goals";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import type { GoalRecord, GoalRelationRecord } from "../src/v1/types.js";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import type { GoalRecord, GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
 
 function customMethod(methodId: string): PlanningMethodPackInput {
   return {
@@ -408,8 +409,8 @@ test("complex decomposition must include every method in the project composition
 
 test("project and personal methods persist without a second Goal truth model", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "goalboard-planning-"));
-  const store = new SqliteGoalBoardStore(path.join(root, "board.db"));
-  const coordinator = new GoalBoardCoordinator(store, () => new Date("2026-08-22T03:00:00.000Z"));
+  const store = new LocalProjectDatabase(path.join(root, "board.db"));
+  const coordinator = new GoalProjectApplication(store, () => new Date("2026-08-22T03:00:00.000Z"));
   coordinator.initializeBoard({ board_id: "board-1", title: "规划测试", actor_id: "user", idempotency_key: "init" });
   assert.throws(
     () => coordinator.goals.planning.saveProjectMethod({
@@ -430,7 +431,7 @@ test("project and personal methods persist without a second Goal truth model", a
   assert.equal(store.snapshot("board-1").planning_method_packs.length, 1);
   store.close();
 
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: root });
   const personal = normalizePlanningMethodPack(customMethod("domain-personal-research"), "personal", null, "2026-08-22T04:00:00.000Z");
   catalog.personalPlanningMethods.save(personal, personal.updated_at);
   catalog.close();
@@ -440,11 +441,11 @@ test("project and personal methods persist without a second Goal truth model", a
 test("personal method owner preserves versions and timestamps across reopen and rejects invalid writes", async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "goalboard-personal-methods-"));
   try {
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: root });
     const method = { ...customMethod("domain-personal-test"), version: 7 };
     try { catalog.personalPlanningMethods.save(method, "2026-09-01T01:00:00.000Z"); }
     finally { catalog.close(); }
-    const reopened = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const reopened = await openGoalBoardProjectCatalog({ homeDirectory: root });
     try {
       const saved = reopened.personalPlanningMethods.save({ ...method, name: "更新的方法", enabled: false }, "2026-09-02T01:00:00.000Z");
       assert.equal(saved.version, 8);
@@ -458,7 +459,7 @@ test("personal method owner preserves versions and timestamps across reopen and 
     assert.equal(stored?.enabled, false);
     assert.equal(stored?.created_at, "2026-09-01T01:00:00.000Z");
     assert.equal(stored?.updated_at, "2026-09-02T01:00:00.000Z");
-    const deleting = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const deleting = await openGoalBoardProjectCatalog({ homeDirectory: root });
     try {
       assert.equal(deleting.personalPlanningMethods.delete(method.method_id), true);
       assert.equal(deleting.personalPlanningMethods.delete(method.method_id), false);
@@ -473,7 +474,7 @@ test("personal method reads do not create a Home or migrate v8 catalogs; normal 
     const missingHome = path.join(root, "missing");
     assert.deepEqual(readPersonalPlanningMethodPacks(missingHome), []);
     assert.equal(existsSync(missingHome), false);
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: root });
     const databasePath = catalog.databasePath;
     catalog.close();
     const legacy = new Database(databasePath);
@@ -485,7 +486,7 @@ test("personal method reads do not create a Home or migrate v8 catalogs; normal 
       assert.deepEqual(unchanged.prepare("SELECT value FROM catalog_meta WHERE key = 'schema_version'").get(), { value: "8" });
       assert.equal(unchanged.prepare("SELECT name FROM sqlite_master WHERE name = 'personal_planning_method_packs'").get(), undefined);
     } finally { unchanged.close(); }
-    const upgraded = await GoalBoardProjectCatalog.open({ homeDirectory: root });
+    const upgraded = await openGoalBoardProjectCatalog({ homeDirectory: root });
     try { upgraded.personalPlanningMethods.save(customMethod("domain-after-upgrade"), "2026-09-01T01:00:00.000Z"); }
     finally { upgraded.close(); }
     assert.equal(readPersonalPlanningMethodPacks(root)[0]?.method_id, "domain-after-upgrade");
@@ -494,10 +495,10 @@ test("personal method reads do not create a Home or migrate v8 catalogs; normal 
 
 test("Goals public Planning API owns method versions, graph checks, and change impact", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "goalboard-planning-module-"));
-  const store = new SqliteGoalBoardStore(path.join(root, "board.db"));
+  const store = new LocalProjectDatabase(path.join(root, "board.db"));
   try {
     const clock = () => new Date("2026-08-22T05:00:00.000Z");
-    new GoalBoardCoordinator(store, clock).initializeBoard({
+    new GoalProjectApplication(store, clock).initializeBoard({
       board_id: "board-module-planning",
       title: "Planning Module",
       actor_id: "user",

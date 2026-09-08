@@ -33,3 +33,33 @@ export * from "./routes.js";
 export * from "./ui.js";
 export * from "./context.js";
 export { readLinkedFeedContext } from "./linked-context.js";
+
+export * from "./projection.js";
+
+export { renderFeedRichText, feedPlainText } from "./rich-content.js";
+
+export { FeedApplication } from "./application.js";
+export type { FeedApplicationPorts } from "./application-ports.js";
+export * from "./application-errors.js";
+
+export { createFeedExactRouteResolver, type FeedExactSourceDefinitions } from "./exact-source-routes.js";
+
+export { FeedSourceService } from "./source-service.js";
+export type * from "./source-ports.js";
+
+export { FeedConnectorSync } from "./connector-sync.js";
+export type { ConnectorSyncMode, FeedConnectorSyncPorts, FeedConnectorListener } from "./connector-sync-ports.js";
+
+export { FeedConnectorService } from "./connector-service.js";
+export type { FeedConnectorAccountPorts, FeedConnectorKind, ConnectorCredentialStatus, ConnectorAuthStatus } from "./connector-account-ports.js";
+
+export { FeedSourceScheduler, type FeedSourceSchedulerDispatch, type FeedSourceSchedulerResult } from "./source-scheduler.js";
+
+export { prepareRelayFeedImport } from "./relay-import.js";
+export type { RelayImportData, RelayImportPorts, RelayImportResult, RelaySourceRow, RelayItemRow, RelayMaterialRow, RelayRunRow, RelayConnectorRow, RelayCursorRow } from "./relay-import-types.js";
+
+export { promoteFeedItemToGoal, type FeedGoalPromotionPorts, type FeedGoalPromotionInput } from "./goal-promotion.js";
+
+export { createFeedRouteHandlers } from "./route-handlers.js";
+export { feedRouteErrorResponse } from "./route-error.js";
+export type { FeedRouteHandlerPorts } from "./route-handler-ports.js";

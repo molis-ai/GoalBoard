@@ -8,14 +8,14 @@ import { createPluginArtifactClient, PluginArtifactAccessError } from "@adeptify
 import { PluginRuntime, PluginRuntimeError } from "@adeptify/goalboard-plugin-runtime";
 import { createGithubIntegrationPlugin } from "@adeptify/goalboard-integration-github";
 import type { PluginArtifactClient, PluginDefinition, PluginManifest } from "@adeptify/goalboard-contracts/platform/plugin";
-import { seedDemoBoard, DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("installed Plugins exchange exact Artifact versions by type, with bound authority and real denied side effects", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-plugin-artifacts-"));
   const databasePath = join(directory, "board.db");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   const api = new ArtifactsModule({ db: store.db, appendEvent: event => store.appendEvent(event) });
   const runtime = new PluginRuntime();
   try {

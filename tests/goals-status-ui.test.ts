@@ -4,8 +4,8 @@ import { createWorkbenchGoalsStatusRenderer, createWorkbenchGoalsFactorsRenderer
 import { createGoalStateExplainer, createGoalActionPresenter, goalPresentationState,
   type GoalPresentationSnapshot, type GoalAction, type GoalActionProjection,
   type GoalsFactorsPrimitives } from "@adeptify/goalboard-plugin-goals";
-import { L, runWithLocale } from "../src/web/i18n.js";
-import { icon } from "../src/web/icons.js";
+import { L, runWithLocale } from "@adeptify/goalboard-app-local-host";
+import { icon } from "@adeptify/goalboard-design-system";
 
 const escapeHtml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const draft = { goal_id: "draft", definition_state: "draft", decomposition_state: "abstract", fulfillment_state: "unmet" } as const;

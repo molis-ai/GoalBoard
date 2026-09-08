@@ -1,5 +1,21 @@
 # 架构重组迁移矩阵
 
+2026-09-08 Cutover：原混合实现 caller 已退出。当前运行结果以 [统一验收](../../specs/goalboard-architecture-reorganization/cutover-validation.md) 为准，下面表格为最终实现位置。
+
+| 原路径 | 当前实现 | 旧路径状态 |
+| --- | --- | --- |
+| src/v1 | 各 Module 事实/状态机；Native Goals 查询、规划、执行验收和决定；Host 装配 | 已删除 |
+| src/feed | Sources/Signals/Feed/Attention；Native Feed 用例；Integration Provider；Storage Adapter；Host IO | 已删除 |
+| src/projects、src/sessions | Projects / Private Work Context；Work Plugin；Host Catalog/Session 装配；Runtime Host | 已删除 |
+| src/web/render、业务 HTTP、Capsule、PTY | Workbench / Native UI；Host Web 分组路由；Desktop 与 Runtime Host | 已删除 |
+| src/desktop、src/install、src/local-host | Desktop App、Local Host 与 App-owned tooling | 已删除 |
+| src/cli/main、src/mcp/server、src/web/server | 启动环境与公开 App 入口 | 保留 thin bin，无业务规则或 SQL |
+| src/index、sdk-store、sdk-types | 已发布 0.1.x SDK 的 owner 转发/类型别名 | 保留兼容期；内部 caller 不再使用根 SDK，移除需另行破坏性版本决策 |
+
+目标包仍为 partial 的原因是未来契约未全部实现，不表示仍依赖旧源码。Outbox、Team/Server、Exchange/Sync、Actions/Automation 与通用 Durable Scheduler 未实现，参见 SSOT-MATRIX。旧验证数字保留为迁移历史，不用于最终通过判断。
+
+## 历史迁移阶段（下列数字和待办不表示当前状态）
+
 DV4 最终状态（2026-09-06 09:24 UTC）：安装、分发与文档迁移已通过完整 Review，GoalBoard completed。公开 owner/caller、旧实现退出、当前 npm 独立消费、真实 App 升级/卸载保留/重装及供应链资产均见 [完整验收](../../specs/goalboard-architecture-reorganization/dv4-validation.md)。最终检查额外修复旧编译输出混入包的问题：根构建统一执行 workspace clean/build，新 npm 和 App 已复验。下方 DV4 未完成文字为阶段历史；Apple 公证/公开发布、总数据安全恢复、全产品 E2E 和最终清理不在该完成结论内。
 
 GW6（2026-09-06）：Goals 基础 schema、15/25/26 与 migration 30 的 Goals revision/coverage 回填已由 Goals 接管。V3 importer 与 Web 覆盖账 caller 改用公开 Command/Query，Host 保留同连接跨 owner 顺序及事务。193 项定向前后端回归通过，补强历史升级对账 6 项通过，详情见 [GW6 验收](../../specs/goalboard-architecture-reorganization/gw6-validation.md)。旧 Store 仍非整体 retired；最终清理与全产品 E2E 义务不变。

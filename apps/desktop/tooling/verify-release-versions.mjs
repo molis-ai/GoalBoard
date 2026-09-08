@@ -11,7 +11,7 @@ const tauriVersion = JSON.parse(
 ).version;
 const cargoToml = readFileSync(resolve(repoRoot, "desktop/src-tauri/Cargo.toml"), "utf8");
 const cargoLock = readFileSync(resolve(repoRoot, "desktop/src-tauri/Cargo.lock"), "utf8");
-const feedRuntime = readFileSync(resolve(repoRoot, "src/feed/sources/runtime.ts"), "utf8");
+const feedRuntime = readFileSync(resolve(repoRoot, "apps/local-host/src/feed-source-runtime.ts"), "utf8");
 const codexTransport = readFileSync(
   resolve(repoRoot, "horizontal/runtime-host/src/adapters/codex-app-server.ts"),
   "utf8",
@@ -30,7 +30,7 @@ const versions = {
   "desktop/src-tauri/tauri.conf.json": tauriVersion,
   "desktop/src-tauri/Cargo.toml": cargoTomlVersion,
   "desktop/src-tauri/Cargo.lock#goalboard-desktop": cargoLockVersion,
-  "src/feed/sources/runtime.ts#APP_VERSION": feedRuntimeVersion,
+  "apps/local-host/src/feed-source-runtime.ts#APP_VERSION": feedRuntimeVersion,
   "horizontal/runtime-host/src/adapters/codex-app-server.ts#clientInfo.version": codexTransportVersion,
 };
 const mismatches = Object.entries(versions).filter(([, version]) => version !== packageVersion);

@@ -1,19 +1,15 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
-import {
-  catalogSchemaCompatibilityError,
-  GoalBoardProjectCatalog,
-  GoalBoardProjectCatalogError,
-  type RuntimeWorkContext,
-} from "../src/projects/catalog.js";
-import { withGoalBoardProjectCatalog } from "../src/projects/catalog-session.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { catalogSchemaCompatibilityError, type GoalBoardProjectCatalog, GoalBoardProjectCatalogError, type RuntimeWorkContext } from "@adeptify/goalboard-app-local-host";
+import { withGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-project-catalog-"));
@@ -25,8 +21,8 @@ async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>)
 }
 
 function createLegacyBoard(databasePath: string): void {
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   try {
     coordinator.initializeBoard({
       board_id: "legacy-board",
@@ -154,7 +150,7 @@ test("a reader that is older than the catalog reports exact versions and a non-d
 test("opening a future catalog fails without rewriting its schema or project facts", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const created = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const created = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const project = await created.createProject({ display_name: "保留项目", actor_id: "user" });
     created.close();
 
@@ -167,7 +163,7 @@ test("opening a future catalog fails without rewriting its schema or project fac
     }
 
     await assert.rejects(
-      () => GoalBoardProjectCatalog.open({ homeDirectory: home }),
+      () => openGoalBoardProjectCatalog({ homeDirectory: home }),
       (error: unknown) =>
         error instanceof GoalBoardProjectCatalogError
         && error.code === "catalog.reader_too_old"
@@ -192,7 +188,7 @@ test("opening a future catalog fails without rewriting its schema or project fac
 });
 
 function snapshot(databasePath: string) {
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
     return store.snapshot("legacy-board");
   } finally {
@@ -227,7 +223,7 @@ test("managed projects have immutable identities, duplicate names, and isolated 
     const userProjectFile = join(directory, "user-project", "note.txt");
     await mkdir(join(directory, "user-project"), { recursive: true });
     await writeFile(userProjectFile, "untouched");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const first = await catalog.createProject({ display_name: "同名项目", actor_id: "user" });
       const second = await catalog.createProject({ display_name: "同名项目", actor_id: "user" });
@@ -238,9 +234,9 @@ test("managed projects have immutable identities, duplicate names, and isolated 
       assert.equal(first.data_class, "user");
       assert.equal(catalog.listProjects().length, 2);
 
-      const firstStore = new SqliteGoalBoardStore(first.database_path);
+      const firstStore = new LocalProjectDatabase(first.database_path);
       try {
-        new GoalBoardCoordinator(firstStore).goals.commands.createGoal(
+        new GoalProjectApplication(firstStore).goals.commands.createGoal(
           first.board_id,
           {
             goal_id: "only-first",
@@ -264,7 +260,7 @@ test("managed projects have immutable identities, duplicate names, and isolated 
       } finally {
         firstStore.close();
       }
-      const secondStore = new SqliteGoalBoardStore(second.database_path);
+      const secondStore = new LocalProjectDatabase(second.database_path);
       try {
         assert.equal(secondStore.snapshot(second.board_id).goals.length, 0);
       } finally {
@@ -288,7 +284,7 @@ test("legacy GoalBoard DB migrates to one managed source with complete facts", a
     await mkdir(legacyDirectory, { recursive: true });
     createLegacyBoard(legacyDatabase);
     const before = snapshot(legacyDatabase);
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: join(directory, "home", ".goalboard") });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: join(directory, "home", ".goalboard") });
     try {
       const migrated = await catalog.migrateLegacyDatabase({ legacy_database_path: legacyDatabase, actor_id: "user" });
       assert.equal(migrated.source, "migrated");
@@ -306,7 +302,7 @@ test("legacy GoalBoard DB migrates to one managed source with complete facts", a
 test("demo data is classified, idempotently opened, reset, and removable without affecting user projects", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const userProject = await catalog.createProject({ display_name: "用户项目", actor_id: "user" });
       await assert.rejects(
@@ -322,7 +318,7 @@ test("demo data is classified, idempotently opened, reset, and removable without
       assert.equal(existing.status, "existing");
       assert.equal(existing.project.project_id, created.project.project_id);
 
-      const demoStore = new SqliteGoalBoardStore(created.project.database_path);
+      const demoStore = new LocalProjectDatabase(created.project.database_path);
       try {
         const demoSnapshot = demoStore.snapshot(DEMO_BOARD_ID);
         assert.equal(demoSnapshot.board.title, "让第一次使用 GoalBoard 的人顺利完成一次目标协作");
@@ -340,7 +336,7 @@ test("demo data is classified, idempotently opened, reset, and removable without
         );
         assert.equal(demoSnapshot.risks.find((risk) => risk.risk_id === "RISK-FIRST-RESTART")?.state, "open");
         assert.ok(demoSnapshot.goals.find((goal) => goal.goal_id === "AUTO-CONNECT")?.trashed_at);
-        new GoalBoardCoordinator(demoStore).goals.commands.createGoal(
+        new GoalProjectApplication(demoStore).goals.commands.createGoal(
           DEMO_BOARD_ID,
           {
             goal_id: "temporary-demo-change",
@@ -359,7 +355,7 @@ test("demo data is classified, idempotently opened, reset, and removable without
       }
       const reset = await catalog.resetDemoProject({ actor_id: "user", user_confirmed: true });
       assert.equal(reset.status, "reset");
-      const resetStore = new SqliteGoalBoardStore(reset.project.database_path);
+      const resetStore = new LocalProjectDatabase(reset.project.database_path);
       try {
         const resetSnapshot = resetStore.snapshot(DEMO_BOARD_ID);
         assert.equal(resetSnapshot.goals.some((goal) => goal.goal_id === "temporary-demo-change"), false);
@@ -400,7 +396,7 @@ test("failed legacy migration keeps the old DB and does not leave a project reco
     createLegacyBoard(legacyDatabase);
     const before = snapshot(legacyDatabase);
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       await assert.rejects(
         () =>
@@ -425,7 +421,7 @@ test("failed legacy migration keeps the old DB and does not leave a project reco
 test("runtime Session/work-entry contexts reconnect only after an explicit binding and require a separate rebind confirmation", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const first = await catalog.createProject({ display_name: "同名项目", actor_id: "user" });
       const second = await catalog.createProject({ display_name: "同名项目", actor_id: "user" });
@@ -545,7 +541,7 @@ test("runtime Session/work-entry contexts reconnect only after an explicit bindi
       catalog.close();
     }
 
-    const reopened = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const reopened = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       assert.equal(
         reopened.resolveRuntimeContext(stableContext("codex", "workspace-entry-01")).status,
@@ -569,7 +565,7 @@ test("canonical workspace routing supports symlinks, multiple project candidates
     const workspaceAlias = join(directory, "project-alias");
     await mkdir(workspace, { recursive: true });
     await symlink(workspace, workspaceAlias);
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const first = await catalog.createProject({ display_name: "产品规划", actor_id: "user" });
       const second = await catalog.createProject({ display_name: "发布准备", actor_id: "user" });
@@ -656,7 +652,7 @@ test("canonical workspace routing supports symlinks, multiple project candidates
 test("a fresh Runtime Session receives host suggestions but needs confirmation, and rejection stays local", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const primary = await catalog.createProject({ display_name: "Alpha 主项目", actor_id: "user" });
       const related = await catalog.createProject({ display_name: "Alpha 文档", actor_id: "user" });
@@ -758,7 +754,7 @@ test("a fresh Runtime Session receives host suggestions but needs confirmation, 
 test("current Runtime can create and bind one new project without orphaning data on a rejected switch", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const context = stableContext("codex", "create-and-bind-entry");
     try {
       const created = await catalog.createProjectAndBindRuntimeContext({
@@ -837,7 +833,7 @@ test("current Runtime can create and bind one new project without orphaning data
 test("existing GoalBoard project catalogs migrate context-binding storage without touching project facts", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const created = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const created = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const project = await created.createProject({ display_name: "迁移项目", actor_id: "user" });
     created.close();
 
@@ -850,7 +846,7 @@ test("existing GoalBoard project catalogs migrate context-binding storage withou
       legacy.close();
     }
 
-    const migrated = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const migrated = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       assert.equal(migrated.getProject(project.project_id).database_path, project.database_path);
       const resolution = migrated.bindRuntimeContext({
@@ -871,7 +867,7 @@ test("v3 catalogs retain binding history while upgrading for unbind, deletion re
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
     const context = stableContext("codex", "v3-history-entry");
-    const created = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const created = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const project = await created.createProject({ display_name: "V3 历史项目", actor_id: "user" });
     created.bindRuntimeContext({
       context,
@@ -916,7 +912,7 @@ test("v3 catalogs retain binding history while upgrading for unbind, deletion re
       legacy.close();
     }
 
-    const migrated = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const migrated = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       assert.equal(migrated.resolveRuntimeContext(context).connection?.project_id, project.project_id);
       assert.deepEqual(migrated.listRuntimeContextBindingEvents(context).map((event) => event.type), ["context.bound"]);
@@ -953,7 +949,7 @@ test("v3 catalogs retain binding history while upgrading for unbind, deletion re
 test("unbinding removes only the current Runtime entry and preserves the managed project", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const context = stableContext("codex", "unbind-current-entry");
     try {
       const project = await catalog.createProject({ display_name: "保留数据的项目", actor_id: "user" });
@@ -1007,7 +1003,7 @@ test("unbinding removes only the current Runtime entry and preserves the managed
 test("project deletion needs separate confirmation, protects active work, and records an idempotent receipt", async () => {
   await withTemporaryDirectory(async (directory) => {
     const home = join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const context = stableContext("codex", "delete-current-entry");
     try {
       const project = await catalog.createProject({ display_name: "可删除项目", actor_id: "user" });
@@ -1030,10 +1026,10 @@ test("project deletion needs separate confirmation, protects active work, and re
           error instanceof GoalBoardProjectCatalogError && error.code === "catalog.delete_confirmation_required",
       );
 
-      const store = new SqliteGoalBoardStore(project.database_path);
+      const store = new LocalProjectDatabase(project.database_path);
       let runId = "";
       try {
-        const coordinator = new GoalBoardCoordinator(store);
+        const coordinator = new GoalProjectApplication(store);
         coordinator.goals.commands.createGoal(
           project.board_id,
           {
@@ -1079,9 +1075,9 @@ test("project deletion needs separate confirmation, protects active work, and re
       );
       assert.equal(catalog.getProject(project.project_id).project_id, project.project_id);
 
-      const cleanupStore = new SqliteGoalBoardStore(project.database_path);
+      const cleanupStore = new LocalProjectDatabase(project.database_path);
       try {
-        new GoalBoardCoordinator(cleanupStore).executionValidation.commands.reportRun({
+        new GoalProjectApplication(cleanupStore).executionValidation.commands.reportRun({
           board_id: project.board_id,
           run_id: runId,
           actor_id: "runtime-codex",
@@ -1125,7 +1121,7 @@ test("opening a desktop TUI panel binds that work context to the Goal and aliase
     const home = join(directory, "home", ".goalboard");
     const workspace = join(directory, "repo");
     await mkdir(workspace, { recursive: true });
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try {
       const project = await catalog.createProject({ display_name: "桌面项目", actor_id: "user" });
       assert.throws(

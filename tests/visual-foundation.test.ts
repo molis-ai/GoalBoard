@@ -14,7 +14,7 @@ import {
   renderGoalBoardProjectIndexStylesheet,
   renderGoalBoardSettingsStylesheet,
   renderGoalBoardWorkbenchStylesheet,
-} from "../src/web/render.js";
+} from "./workbench-renderer-fixture.js";
 
 test("visual foundation keeps Light, Dark, and System as local presentation choices", () => {
   assert.equal(GOALBOARD_THEME_STORAGE_KEY, "goalboard:theme");
@@ -242,7 +242,7 @@ test("desktop shell uses one project directory, project tabs, and soft work surf
   assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-module-item \{[\s\S]*min-height: 40px;[\s\S]*border-radius: 8px;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-module-item\.is-current \{[\s\S]*background: color-mix\(in srgb, var\(--ink\) 8%, transparent\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.inbox-item \{[\s\S]*min-height: 46px;[\s\S]*grid-template-columns: 22px minmax\(0, 1fr\) auto 22px 14px/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-goal-directory \.tree-search \{ display: none; \}/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-goal-directory \.tree-search \{ display: flex; flex: 1 0 100%; order: -1; \}/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.personal-sidebar-footer \{[\s\S]*grid-row: 3;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-work-tab\.is-selected \{[\s\S]*background: var\(--paper\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.desktop-work-tab\.is-utility \{[\s\S]*min-width: max-content;[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);

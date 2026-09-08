@@ -42,7 +42,7 @@ Web、CLI、MCP 通过各 App 的 Goals adapter 调用 `impacts`；Coordinator �
 Draft 编辑后的旧 Contract Proposal 失效现在通过必需的 `supersedePendingContractProposals` 窄 port 调用 Governance，Goals 不再读写 `contract_proposals`。Host 必须把该 port 绑定到同一数据库连接的 Governance records；不能省略或提供空实现。Governance 返回原创建时间顺序的被替代 IDs，Goals 保留原 `goal.draft_updated` 事件，任一 owner 失败由原外层事务一起回滚。
 
 - `GoalsModule.query`：Board/Goal 列表与详情、关系、Risk link、Policy 合并、Project Guidance、archive/trash 过滤和 Goal-owned snapshot。不存在的 Board/Goal 保持稳定错误。
-- Goal read application：`src/v1/goal-query-application.ts` 只组合公开 Goals Query 与其他 owner 的只读 port；Web、MCP、CLI 的 Contract/Policy/Guidance/回收站入口不再调用 Coordinator 查询实现。
+- Goal read application：`plugins/native/goals/src/goal-query-application.ts` 只组合公开 Goals Query 与其他 owner 的只读 port；Web、MCP、CLI 的 Contract/Policy/Guidance/回收站入口不再调用 Coordinator 查询实现。
 - `GoalsModule.commands`：创建 Goal、更新 Draft、建立/解除关系、设置 Policy、登记/更新/处理 Risk、添加/修订/停用/恢复 Project Guidance。
 - `GoalsModule.lifecycle`：接受 Draft、按同一 `goal_id` 增加 Contract revision、完成/重新校验、归档、回收站恢复、复合父 Goal 协调。
 - Goal lifecycle migrations：归档、回收站、历史 Run/澄清状态、Active Goal 指针和 Contract coverage schema；由旧 Store 启动流程调用公开迁移函数，不保留第二份实现。

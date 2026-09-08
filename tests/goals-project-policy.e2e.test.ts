@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
-import type { GoalBoardWebView } from "../src/web/render.js";
+import type { GoalBoardWebView } from "./workbench-renderer-fixture.js";
 
 test("project rules preserve validation, failed-save inputs, one persisted update, inheritance and one-time receipt", { timeout: 60_000 }, async t => {
   const browser = await openGoalBrowser(t, true);

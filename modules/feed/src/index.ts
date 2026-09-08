@@ -1,3 +1,4 @@
+import { FeedError } from "@adeptify/goalboard-contracts/modules/feed";
 import { migrateFeedImportReceipts } from "./import-receipts.js";
 import { randomUUID } from "node:crypto";
 import type { ContextLedgerApi } from "@adeptify/goalboard-contracts/modules/context-ledger";
@@ -59,19 +60,7 @@ export interface FeedModuleOptions {
   eventSink?: (event: FeedLegacyEvent) => void;
 }
 
-export class FeedError extends Error {
-  constructor(
-    readonly code:
-      | "feed_item_not_found"
-      | "feed_revision_conflict"
-      | "feed_invalid_transition"
-      | "feed_read_not_supported",
-    message: string,
-  ) {
-    super(message);
-    this.name = "FeedError";
-  }
-}
+export { FeedError } from "@adeptify/goalboard-contracts/modules/feed";
 
 export function migrateFeed(db: FeedSqliteDatabase): void {
   migrateFeedImportReceipts(db);
@@ -982,3 +971,5 @@ function json<T>(value: unknown, fallback: T): T {
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
 
 export { FeedReceiptStore } from "./import-receipts.js";
+
+export { type FeedEvidenceContentStore, createFeedEvidenceContentStore } from "./content-store.js";

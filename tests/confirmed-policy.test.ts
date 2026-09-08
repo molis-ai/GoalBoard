@@ -3,13 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { GoalBoardCoordinator, GoalBoardV1Error } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("confirmed Policy writes preserve resolution, replacement audit and atomic failure through the Goals owner", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd2-policy-"));
-  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(join(directory, "project.db"));
+  const coordinator = new GoalProjectApplication(store);
   try {
     coordinator.initializeBoard({ board_id: "board", title: "Policy", actor_id: "user", idempotency_key: "init" });
     coordinator.goals.commands.createGoal("board", { goal_id: "draft", title: "草稿", outcome: "", why: "", business_logic: "", acceptance_criteria: [] },

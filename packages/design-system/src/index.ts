@@ -26,3 +26,7 @@ export {
   type GoalBoardTerminalTheme,
   type GoalBoardTheme,
 } from "./visual-foundation.js";
+
+export { ONBOARDING_STYLES } from "./onboarding-styles.js";
+
+export { icon, renderIconSprite, type GoalBoardIcon } from "./icons.js";

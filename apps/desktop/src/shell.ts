@@ -51,3 +51,10 @@ export function withDesktopQuery(href: string): string {
 export function appendDesktopQueryToLocalHrefs(html: string): string {
   return html.replace(/href="(\/[^\"]*)"/g, (_match, href: string) => `href="${withDesktopQuery(href)}"`);
 }
+
+/** Shell ports consumed by the Host's Workbench renderer for both browser and native pages. */
+export const desktopWorkbenchRendererPorts = {
+  appendDesktopQueryToLocalHrefs,
+  withDesktopQuery,
+  bootstrapScript: NATIVE_DESKTOP_BOOTSTRAP_SCRIPT,
+};

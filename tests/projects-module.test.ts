@@ -139,13 +139,13 @@ test("project identity schema migration is rollback-safe and idempotent", () => 
   }
 });
 
-test("legacy Catalog reaches Projects only through the public module entrypoint", () => {
-  const source = readFileSync(new URL("../src/projects/catalog.ts", import.meta.url), "utf8");
+test("Host Catalog reaches Projects only through the public module entrypoint", () => {
+  const source = readFileSync(new URL("../apps/local-host/src/project-catalog.ts", import.meta.url), "utf8");
   assert.match(source, /from "@adeptify\/goalboard-module-projects"/u);
   assert.doesNotMatch(source, /@adeptify\/goalboard-module-projects\//u, "deep imports are forbidden");
   assert.doesNotMatch(
     source,
     /\b(?:SELECT\b[^;`]*\bFROM|INSERT\s+INTO|UPDATE|DELETE\s+FROM|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+(?:projects|project_events|workspaces|workspace_project_memberships|project_deletions)\b/iu,
-    "Project-owned tables must not be queried or mutated by the compatibility Catalog",
+    "Project-owned tables must not be queried or mutated by the Host Catalog",
   );
 });

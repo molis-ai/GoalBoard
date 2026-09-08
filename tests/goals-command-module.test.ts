@@ -13,14 +13,14 @@ import {
   type GoalRevisionDependentTransition,
 } from "@adeptify/goalboard-module-goals";
 
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Goals public Command API owns Goal, relation, Policy, Risk, and Guidance writes", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-module-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
-    new GoalBoardCoordinator(store).initializeBoard({
+    new GoalProjectApplication(store).initializeBoard({
       board_id: "board-module",
       title: "Goals Module",
       actor_id: "user-1",
@@ -168,7 +168,7 @@ test("Goals public Command API owns Goal, relation, Policy, Risk, and Guidance w
 
 test("Goals public Lifecycle API owns acceptance, revisions, completion, archive, and trash", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-lifecycle-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
     const revisionTransitions: GoalRevisionDependentTransition[] = [];
     const goals = new GoalsModule<{ observed_event_cursor: number }>(store.db, {
@@ -277,7 +277,7 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
     assert.equal(completed.satisfied, true);
     assert.equal(goals.query.getBoard("board-lifecycle")?.active_goal_id, null,
       "Goals completion clears its own Board pointer without a Host hook");
-    const persisted = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+    const persisted = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
     try { assert.equal(persisted.snapshot("board-lifecycle").board.active_goal_id, null); }
     finally { persisted.close(); }
 
@@ -310,9 +310,9 @@ test("Goals public Lifecycle API owns acceptance, revisions, completion, archive
 
 test("Goal lifecycle migration rolls back every write when one recovery event fails", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-migration-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({
       board_id: "board-migration",
       title: "Goals Migration",

@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { WebSocket } from "ws";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 // This checks the real browser clipboard, not the automation tool's virtual clipboard.
@@ -21,7 +21,7 @@ test("migrated result reference copies exact text and handles denied clipboard p
   const directory = await mkdtemp(join(tmpdir(), "goalboard-artifact-clipboard-"));
   const databasePath = join(directory, "fixture.db");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let child: ChildProcess | undefined;
   let socket: WebSocket | undefined;
   let server: ReturnType<typeof createGoalBoardWebServer> | undefined;
@@ -36,7 +36,7 @@ test("migrated result reference copies exact text and handles denied clipboard p
     store.close();
     await rm(directory, { recursive: true, force: true });
   });
-  const coordinator = new GoalBoardCoordinator(store);
+  const coordinator = new GoalProjectApplication(store);
   const reference = "artifact://迁移结果/季度?version=1&note=原始引用";
   coordinator.executionValidation.commands.submitEvidence({
     board_id: DEMO_BOARD_ID, goal_id: "V1", actor_id: "fixture-user", criterion_ids: ["V1-C1"],

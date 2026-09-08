@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,16 +7,16 @@ import test from "node:test";
 import { RuntimeProjectConnection } from "@adeptify/goalboard-app-local-host";
 import { createMcpContextPresenter, createMcpRuntimeContextHandlers } from "@adeptify/goalboard-app-mcp";
 import { readProjectGuidanceCapability } from "@adeptify/goalboard-plugin-goals";
-import { createGoalBoardLocalHost, goalBoardHostProjectReference, projectResumeFactsCapability } from "../src/local-host/composition.js";
-import { GoalBoardV1Error } from "../src/v1/coordinator.js";
+import { createGoalBoardLocalHost, goalBoardHostProjectReference, projectResumeFactsCapability } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 import type { GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
-import { GoalBoardProjectCatalog, GoalBoardProjectCatalogError } from "../src/projects/catalog.js";
-import { withGoalBoardProjectCatalog } from "../src/projects/catalog-session.js";
+import { type GoalBoardProjectCatalog, GoalBoardProjectCatalogError } from "@adeptify/goalboard-app-local-host";
+import { withGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 
 test("context handlers preserve a denied binding and hold the catalog open through async response failure", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-context-entry-"));
   const homeDirectory = join(directory, "home");
-  const fixture = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const fixture = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     const project = await fixture.createProject({ display_name: "Scoped connection", actor_id: "user" });
     const host: GoalBoardRuntimeContextHost = { homeDirectory,

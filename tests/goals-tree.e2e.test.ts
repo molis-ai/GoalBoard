@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Goals tree supports real collapse, search, status filtering and detail selection without changing project facts", { timeout: 60_000 }, async (t) => {

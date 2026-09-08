@@ -144,3 +144,15 @@ export { ensureGoalReviewObligations } from "./review-obligation-planning.js";
 export { readGoalBoardSnapshot, type GoalBoardSnapshotPorts } from "./board-snapshot-query.js";
 
 export { GoalBoardV1Error } from "./errors.js";
+
+export { TRASH_GOAL_STYLES } from "./trash-document-styles.js";
+
+export { GOALS_PRESENTATION_STATES, type GoalsDocumentView, type GoalsCoverageItem, type GoalsInputBinding } from "./document-view.js";
+
+export { countGoalDecisions } from "./decision-groups.js";
+
+export { buildGoalsDocumentCollection } from "./document-collection.js";
+export type { GoalsDocumentReadPorts } from "./document-read-ports.js";
+export * from "./board-v3-import.js";
+export { handleGoalsWebHttp } from "./http/index.js";
+export type { GoalsHttpContext } from "./http/types.js";

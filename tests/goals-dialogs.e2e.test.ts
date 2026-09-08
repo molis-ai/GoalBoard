@@ -1,8 +1,9 @@
+import { buildGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { buildGoalBoardWebView } from "../src/web/server.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("refreshing create choices preserves the unsaved draft, selected relations and text cursor without creating a Goal", { timeout: 60_000 }, async t => {
@@ -142,7 +143,7 @@ test("Goal dialogs create once after retry, cancel without writes, and trash/res
   assert.equal(goal().created_at, saved.created_at);
   assert.deepEqual(goal().acceptance_criteria, saved.acceptance_criteria);
   assert.equal(current().goals.length, before.goals.length + 1);
-  const view = buildGoalBoardWebView(store, new GoalBoardCoordinator(store), { boardId: DEMO_BOARD_ID });
+  const view = buildGoalBoardWebView(store, new GoalProjectApplication(store), { boardId: DEMO_BOARD_ID });
   const events = view.goals.find(item => item.goal.goal_id === goalId)!.events;
   assert.equal(events.filter(event => event.type === "goal.created").length, 1);
   assert.ok(events.some(event => event.reason === "Package migration browser test"));

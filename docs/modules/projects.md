@@ -8,4 +8,4 @@
 
 **不负责：** 不拥有 Session、Desktop panel、Goal、Artifact 或 Runtime binding 的业务状态；workspace membership 只表达“这个 Project 与哪个本地目录关联”，不把目录路径当成 Session ID。
 
-**当前来源与 Goal：** AP1 已把 `projects`、`project_events`、`workspaces`、`workspace_project_memberships`、`project_deletions` 的 schema、Repository 和规则迁入本模块。`src/projects/catalog.ts` 只保留文件系统 provisioning、Runtime binding、Desktop panel 与旧公开入口的组合；AP2/WK1/AP4 再分别退出这些兼容职责。
+**当前来源与 Goal：** AP1 已把 `projects`、`project_events`、`workspaces`、`workspace_project_memberships`、`project_deletions` 的 schema、Repository 和规则迁入本模块。旧 `src/projects/catalog.ts` 已删除；文件生命周期由 Local Host 装配，Runtime binding 归 Private Work Context，Desktop panel 归 Desktop。

@@ -20,7 +20,7 @@ import { GoalsRepository } from "./repository.js";
 import { GoalQueryFactsRepository } from "./query-facts-repository.js";
 import { LegacyGoalCoverage } from "./legacy-coverage.js";
 
-const DEFAULT_GOAL_POLICY: GoalPolicy = {
+export const DEFAULT_GOAL_POLICY: GoalPolicy = {
   goal_mode: "preferred",
   required_capabilities: [],
   self_verification: true,
@@ -45,6 +45,8 @@ export class GoalsQueryService implements GoalsQueryApi {
     this.guidance = new GuidanceCommands(this.context);
     this.facts = new GoalQueryFactsRepository(repository.db);
   }
+
+  listBoardIds() { return this.facts.listBoardIds(); }
 
   listActivePolicyBindings(boardId: string, goalId?: string) { return this.repository.listActivePolicyBindings(boardId, goalId); }
   listPolicyHistory(boardId: string) { return this.facts.listPolicyHistory(boardId); }

@@ -5,17 +5,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { hydrateFeedItemContent } from "../src/feed/content.js";
-import { detectRelayImport, importRelayData } from "../src/feed/relay-import.js";
-import { createFeedEvidenceContentStore } from "../src/feed/security/evidence-content-store.js";
+import { hydrateFeedItemContent } from "@adeptify/goalboard-app-local-host";
+import { detectRelayImport, importRelayData } from "@adeptify/goalboard-app-local-host";
+import { createFeedEvidenceContentStore } from "@adeptify/goalboard-module-feed";
 import {
   createFileSecretStore,
   peekSealedEntry,
   resetSecretStoreCache,
-} from "../src/feed/security/secret-store.js";
-import { FeedStore } from "../src/feed/store.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+  readRelayContent,
+} from "@adeptify/goalboard-storage";
+import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import Database from "better-sqlite3";
 
 function withFeedHome<T>(directory: string, run: () => T): T {
@@ -145,6 +146,35 @@ test("SecretStore preserves its populated backend and refuses silent key rotatio
   }
 });
 
+test("Relay retained content requires its key, authenticated reference and matching plaintext digest", () => {
+  const directory = mkdtempSync(join(tmpdir(), "goalboard-relay-content-boundary-"));
+  try {
+    const key = randomBytes(32);
+    const plaintext = "Private retained Relay fixture";
+    const digest = createHash("sha256").update(plaintext).digest("hex");
+    const ref = `relay-evidence/sha256/${digest}`;
+    const blobPath = join(directory, "evidence", "blobs", digest.slice(0, 2), `${digest}.blob`);
+    mkdirSync(dirname(blobPath), { recursive: true });
+    const seal = (body: string, aad: string) => {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      cipher.setAAD(Buffer.from(aad));
+      const ciphertext = Buffer.concat([cipher.update(body), cipher.final()]);
+      writeFileSync(blobPath, JSON.stringify({ v: 1, alg: "aes-256-gcm", iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), ct: ciphertext.toString("base64") }));
+    };
+    seal(plaintext, ref);
+    assert.equal(readRelayContent(ref, directory, key), plaintext);
+    assert.equal(readRelayContent(ref, directory, null), null);
+    assert.equal(readRelayContent(ref, directory, randomBytes(32)), null);
+    seal(plaintext, "relay-evidence/sha256/a-different-reference");
+    assert.equal(readRelayContent(ref, directory, key), null, "ciphertext cannot be moved from another authenticated ref");
+    seal("A different plaintext with a valid tag", ref);
+    assert.equal(readRelayContent(ref, directory, key), null, "successful decryption alone does not prove the content identity");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("Relay ownership migration reseals connector credentials and full evidence content", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-relay-ownership-"));
   const relayPath = join(directory, "relay.sqlite");
@@ -218,18 +248,18 @@ test("Relay ownership migration reseals connector credentials and full evidence 
       }));
 
       seedDemoBoard(goalboardPath);
-      const store = new SqliteGoalBoardStore(goalboardPath);
+      const store = new LocalProjectDatabase(goalboardPath);
       try {
-        const result = importRelayData(new FeedStore(store.db), DEMO_BOARD_ID, relayPath);
+        const result = importRelayData(createLocalFeedApplication(store.db), DEMO_BOARD_ID, relayPath);
         assert.equal(result.credentials.status, "migrated");
         assert.equal(result.credentials.migrated, 3);
         assert.equal(result.content.status, "migrated");
         assert.equal(result.content.migrated, 1);
         assert.equal(createFileSecretStore().get("connector:github:token"), "relay-github-token");
         assert.equal(createFileSecretStore().get("connector:gmail:inst:gmail-a:access"), "relay-gmail-access");
-        const hydrated = hydrateFeedItemContent(new FeedStore(store.db).getItem(DEMO_BOARD_ID, "item-1"));
+        const hydrated = hydrateFeedItemContent(createLocalFeedApplication(store.db).getItem(DEMO_BOARD_ID, "item-1"));
         assert.equal(hydrated.materials[0]?.content, fullBody);
-        const gmail = new FeedStore(store.db).snapshot(DEMO_BOARD_ID).sources.find(
+        const gmail = createLocalFeedApplication(store.db).snapshot(DEMO_BOARD_ID).sources.find(
           (source) => source.config.installation_id === "gmail-a",
         );
         assert.equal(gmail?.account_label, "a@example.com");
@@ -243,9 +273,9 @@ test("Relay ownership migration reseals connector credentials and full evidence 
 
         assert.equal(detectRelayImport(relayPath).available, false);
         assert.equal(createFileSecretStore().get("connector:github:token"), "relay-github-token");
-        const independent = hydrateFeedItemContent(new FeedStore(store.db).getItem(DEMO_BOARD_ID, "item-1"));
+        const independent = hydrateFeedItemContent(createLocalFeedApplication(store.db).getItem(DEMO_BOARD_ID, "item-1"));
         assert.equal(independent.materials[0]?.content, fullBody);
-        assert.equal(new FeedStore(store.db).snapshot(DEMO_BOARD_ID).sources.length >= 3, true);
+        assert.equal(createLocalFeedApplication(store.db).snapshot(DEMO_BOARD_ID).sources.length >= 3, true);
       } finally {
         store.close();
         if (oldRelayKey == null) delete process.env.RELAY_ENCRYPTION_KEY;

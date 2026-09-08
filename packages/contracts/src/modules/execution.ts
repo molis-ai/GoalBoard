@@ -144,6 +144,8 @@ export interface ExecutionRunWithClaim {
 }
 
 export interface ExecutionQueryApi {
+  activeClaimCount(boardId: string, at: string): number;
+  nonterminalRunCount(boardId: string): number;
   activeRunIdsForGoal(boardId: string, goalId: string): string[];
   listClaimsForGoal(boardId: string, goalId: string): ExecutionClaimRecord[];
   latestCompletedWorkRunEventSeq(boardId: string, goalId: string): number;

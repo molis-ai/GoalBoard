@@ -10,6 +10,10 @@ type EvidenceRecord = ExecutionValidationSnapshot["evidence"][number];
 type ReviewObligationRecord = ExecutionValidationSnapshot["review_obligations"][number];
 type ReviewRecord = ExecutionValidationSnapshot["reviews"][number];
 
+export function latestWorkbenchRun(runs: readonly RunRecord[]): RunRecord | undefined {
+  return [...runs].sort((a, b) => b.started_at.localeCompare(a.started_at) || b.run_id.localeCompare(a.run_id))[0];
+}
+
 export interface WorkbenchExecutionGoalView {
   goal: GoalRecord;
   action_projection: GoalActionProjection;
@@ -81,13 +85,13 @@ export function createWorkbenchExecutionValidationRenderer(
     result === "passed" ? "completed" : result === "failed" ? "blocked" : "waiting";
 
   const renderClaimCell = (item: WorkbenchExecutionGoalView): string => {
-    const claim = item.active_claim ?? item.claims.at(-1);
+    const claim = item.active_claim ?? [...item.claims].sort((a, b) => b.claimed_at.localeCompare(a.claimed_at) || b.claim_id.localeCompare(a.claim_id))[0];
     if (!claim) return `<p class="empty-row">${L("尚未被 Runtime 认领")}</p>`;
     return `<dl class="runtime-facts"><div><dt>Runtime</dt><dd>${escapeHtml(claim.actor_id)}</dd></div><div><dt>${L("角色")}</dt><dd>${escapeHtml(claim.role)}</dd></div><div><dt>${L("状态")}</dt><dd>${escapeHtml(claim.state)}</dd></div><div><dt>Goal Mode</dt><dd>${claim.goal_mode_attestation ? L("已开启") : L("未开启")}</dd></div></dl>`;
   };
 
   const renderRunCell = (item: WorkbenchExecutionGoalView): string => {
-    const run = item.runs.at(-1);
+    const run = latestWorkbenchRun(item.runs);
     if (!run) return `<p class="empty-row">${L("认领后可开始执行")}</p>`;
     const current = item.active_claim?.claim_id === run.claim_id &&
       (run.state === "started" || run.state === "blocked");

@@ -118,3 +118,58 @@ export interface LocalHostProjectClient {
     input: Input,
   ): Promise<Output>;
 }
+
+export { SUPPORTED_RUNTIME_IDS, type SupportedRuntimeId, type RuntimeConnectionState, type RuntimeIntegrationDetection, type GoalBoardWebServiceState, type GoalBoardWebServiceDetection } from "./installation-detection.js";
+
+export type DesktopPanelErrorCode =
+  | "catalog.invalid_name"
+  | "catalog.project_not_found"
+  | "catalog.panel_not_found"
+  | "catalog.panel_confirmation_required"
+  | "context.stable_identity_required"
+  | "context.user_confirmation_required";
+
+export interface DesktopPanelRepository {
+  transaction<T>(operation: () => T): T;
+  nextTabIndex(projectId: string, goalId: string): number;
+  insert(record: DesktopPanelRecord): void;
+  addAlias(panelId: string, runtimeId: string, workContextId: string, createdAt: string): void;
+  list(projectId: string, goalId?: string): DesktopPanelRecord[];
+  get(panelId: string): DesktopPanelRecord | null;
+  updateStatus(panelId: string, status: DesktopPanelRecord["status"], updatedAt: string): void;
+  updateHostSession(panelId: string, hostSessionId: string, updatedAt: string): void;
+  delete(panelId: string): void;
+  findByWorkContext(runtimeId: string, workContextId: string): DesktopPanelRecord | null;
+  deleteForProject(projectId: string): void;
+}
+
+export interface DesktopPanelContextPort {
+  assertProject(projectId: string): void;
+  bind(input: {
+    runtime_id: string;
+    stable_work_context_id: string;
+    project_id: string;
+    actor_id: string;
+    cwd?: string;
+  }): void;
+  appendProjectEvent(
+    projectId: string,
+    type: "project.desktop_panel_opened" | "project.desktop_panel_closed",
+    actorId: string,
+    payload: Record<string, unknown>,
+  ): void;
+}
+
+export interface DesktopPanelServiceOptions {
+  repository: DesktopPanelRepository;
+  context: DesktopPanelContextPort;
+  errorFactory: (code: DesktopPanelErrorCode, message: string) => Error;
+  now?: () => string;
+  createId?: () => string;
+}
+
+export interface DesktopPanelCatalogApi extends DesktopPanelApi {
+  aliasSession(input: AliasDesktopPanelSessionInput): DesktopPanelRecord;
+  findByWorkContext(runtimeId: string, workContextId: string): DesktopPanelRecord | null;
+  deleteForProject(projectId: string): void;
+}

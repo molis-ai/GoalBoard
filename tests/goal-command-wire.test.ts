@@ -5,14 +5,14 @@ import { join } from "node:path";
 import test from "node:test";
 import { createCliGoalCommandHandlers } from "@adeptify/goalboard-app-cli";
 import { createMcpGoalToolHandlers } from "@adeptify/goalboard-app-mcp";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Goal wire handlers preserve Board/actor conversion, persistent facts and Runtime risk authority", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goal-wire-"));
-  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
+  const store = new LocalProjectDatabase(join(directory, "project.db"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     for (const boardId of ["selected", "nested"]) {
       coordinator.initializeBoard({ board_id: boardId, title: boardId, actor_id: "user", idempotency_key: `init-${boardId}` });
     }

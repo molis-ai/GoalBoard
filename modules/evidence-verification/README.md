@@ -47,12 +47,8 @@ pnpm --filter @adeptify/goalboard-module-evidence-verification build
 - `goal-reorg-ex2`
 - `goal-reorg-ex4`
 
-## EX2 caller cutover
+## Current caller ownership
 
-- `src/v1/coordinator.ts` keeps Goal/Run authorization, idempotency, action tokens, lifecycle reconciliation, and Review decisions; Evidence writes and coverage rules call this package.
-- `src/v1/store.ts` composes this package's schema, migrations, Repository, and snapshot results instead of owning Evidence SQL and mappings.
-- `src/v1/action-projection.ts` calls public pure coverage functions; it no longer copies Evidence validity rules.
-- `src/web/server.ts` opens verified project references through public Evidence query/locator utilities.
-- The legacy `src/evidence/locator.ts` helper has no remaining caller and was removed.
+Native Goals owns Goal/Run authorization, idempotency, action tokens, lifecycle reconciliation and Review orchestration through public Module APIs. Evidence invariants, persistence and locator validation remain here. Local Host assembles migrations, snapshot queries and bounded Web file access. The old Coordinator, Store, action projection and locator forwarding files have been removed.
 
-Web/CLI/MCP keep their current payloads and compatibility entrypoints. EX3 migrates Review/Proposal/Decision, while EX4 removes the remaining Coordinator application facade. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [migration matrix](../../docs/system/MIGRATION.md), and [EX2 validation](../../specs/goalboard-architecture-reorganization/ex2-validation.md).
+Web/CLI/MCP keep their existing payloads. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [migration matrix](../../docs/system/MIGRATION.md), and [final validation](../../specs/goalboard-architecture-reorganization/cutover-validation.md).

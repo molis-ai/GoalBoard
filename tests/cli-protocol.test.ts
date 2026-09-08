@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { cliFlagValue, cliGoalUrl, readCliJsonPayload } from "@adeptify/goalboard-app-cli";
-import { createGoalBoardLocalHost, goalBoardHostProjectReference, snapshotBoardCapability } from "../src/local-host/composition.js";
-import { runV1Cli } from "../src/v1/cli.js";
+import { createGoalBoardLocalHost, goalBoardHostProjectReference, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
-import type { LegacyV3ImportInput } from "../src/v1/migration.js";
+import type { LegacyV3ImportInput } from "@adeptify/goalboard-plugin-goals";
 
 async function captureCli(operation: () => Promise<number>): Promise<string[]> {
   const lines: string[] = [];

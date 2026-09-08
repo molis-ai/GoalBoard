@@ -1,0 +1,52 @@
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
+import type { WebProjectNavigation } from "@adeptify/goalboard-app-workbench";
+import type { FeedSourceScheduler } from "@adeptify/goalboard-plugin-feed";
+import type { RuntimeIntegrationService } from "./installer/runtime-integration.js";
+import type { GoalBoardWebServiceManager } from "./installer/web-service.js";
+import type { GoalBoardLocalHost } from "./project-host.js";
+
+export interface WebServerOptions {
+  /**
+   * In-process fixture input. The public Web command always starts from the
+   * GoalBoard project catalog and never accepts a database path.
+   */
+  databasePath?: string;
+  boardId?: string;
+  /** Shared Web resource Home. Explicit value overrides GOALBOARD_HOME, then ~/.goalboard. */
+  homeDirectory?: string;
+  demo?: boolean;
+  /**
+   * Read-only root for Evidence locators that name a project-relative file.
+   * The server never exposes an arbitrary local path.
+   */
+  projectRoot?: string;
+  /** Shared in-process Runtime integration service. Tests may inject a fixture. */
+  runtimeIntegrationService?: RuntimeIntegrationService;
+  /** Shared service manager so Web previews and confirmations use one in-memory plan. */
+  webServiceManager?: GoalBoardWebServiceManager;
+  /** Test-only deterministic local Web control token. Production persists one per GoalBoard home. */
+  controlToken?: string;
+  /** Test/host injection. Production starts a private Codex app-server lazily on first read/resume. */
+  runtimeSessionTransport?: RuntimeSessionTransport;
+  /** Shared Local Host fixture or embedding owner. Production Web owns one when omitted. */
+  localHost?: GoalBoardLocalHost;
+}
+
+export interface ResolvedWebBoardOptions {
+  databasePath: string;
+  boardId: string;
+  demo?: boolean;
+  projectRoot?: string;
+  project: WebProjectNavigation | null;
+  projects: WebProjectNavigation[];
+  routePrefix: string;
+}
+
+export interface FeedSchedulerRuntime {
+  scheduler: FeedSourceScheduler;
+}
+
+export type ResolvedWebRequest =
+  | { kind: "catalog_index"; projects: WebProjectNavigation[] }
+  | { kind: "project_not_found" }
+  | { kind: "board"; pathname: string; options: ResolvedWebBoardOptions };

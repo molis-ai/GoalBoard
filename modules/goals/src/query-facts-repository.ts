@@ -12,6 +12,10 @@ type Row = Record<string, unknown>;
 export class GoalQueryFactsRepository {
   constructor(private readonly db: GoalsSqliteDatabase) {}
 
+  listBoardIds(): string[] {
+    return (this.db.prepare("SELECT board_id FROM boards ORDER BY board_id").all() as Array<{ board_id: string }>).map(row => row.board_id);
+  }
+
   listPolicyHistory(boardId: string): GoalPolicyHistoryRecord[] {
     return (this.db.prepare("SELECT * FROM policy_bindings WHERE board_id = ? ORDER BY created_at, policy_binding_id")
       .all(boardId) as Row[]).map(row => ({

@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { ContractProposalRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("editing Draft supersedes only its pending proposals atomically, preserves audit order and survives retry/reopen", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd2-supersession-"));
   const path = join(directory, "project.db");
-  let store = new SqliteGoalBoardStore(path);
+  let store = new LocalProjectDatabase(path);
   const now = () => new Date("2026-09-06T00:10:00.000Z");
-  let coordinator = new GoalBoardCoordinator(store, now);
+  let coordinator = new GoalProjectApplication(store, now);
   try {
     for (const board of ["board", "other-board"]) coordinator.initializeBoard({
       board_id: board, title: board, actor_id: "user", idempotency_key: `init-${board}`,
@@ -71,8 +71,8 @@ test("editing Draft supersedes only its pending proposals atomically, preserves 
     assert.deepEqual(JSON.parse(events[0]!.payload_json).superseded_contract_proposal_ids, ["early", "late"]);
     const after = store.snapshot("board");
     store.close();
-    store = new SqliteGoalBoardStore(path);
-    coordinator = new GoalBoardCoordinator(store, now);
+    store = new LocalProjectDatabase(path);
+    coordinator = new GoalProjectApplication(store, now);
     assert.equal(coordinator.goals.commands.updateDraftGoal("board", "draft", goal, write).replayed, true);
     assert.deepEqual(store.snapshot("board"), after, "reopened retry cannot repeat writes or lose proposal history");
   } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }

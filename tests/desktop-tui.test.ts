@@ -1,3 +1,5 @@
+import { buildGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -6,11 +8,11 @@ import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { WebSocket, type RawData } from "ws";
 import { desktopAdvancePrompt, desktopLaunchSpec, desktopPanelEnv } from "@adeptify/goalboard-app-desktop";
-import { FeedStore } from "../src/feed/store.js";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
+
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { resolveWebControlToken, WEB_CONTROL_TOKEN_RELATIVE_PATH } from "@adeptify/goalboard-app-local-host";
 import { NATIVE_DESKTOP_BOOTSTRAP_SCRIPT } from "@adeptify/goalboard-app-desktop";
 import {
@@ -19,7 +21,7 @@ import {
   isPtyCommandAvailable,
   resolveNvmBinDirectory,
   resolvePtyCommand,
-} from "../src/web/pty-host.js";
+} from "@adeptify/goalboard-service-runtime-host";
 import {
   CLIENT_SCRIPT,
   ONBOARDING_CLIENT_SCRIPT,
@@ -28,17 +30,14 @@ import {
   renderGoalBoardWeb,
   renderGoalBoardWorkbenchClientScript,
   renderGoalBoardWorkbenchStylesheet,
-} from "../src/web/render.js";
-import {
-  buildGoalBoardWebView,
-  createGoalBoardWebServer as createBaseGoalBoardWebServer,
-} from "../src/web/server.js";
+} from "./workbench-renderer-fixture.js";
+import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../src/web/server.js";
 
 const WEB_TEST_CONTROL_TOKEN = "goalboard-web-test-control-token-0123456789abcdef";
 const PTY_CLIENT_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/client.ts", import.meta.url), "utf8");
 const TERMINAL_AUTOFILL_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/autofill.ts", import.meta.url), "utf8");
 const TERMINAL_PANELS_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/panels.ts", import.meta.url), "utf8");
-const WEB_RENDER_SOURCE = readFileSync(new URL("../src/web/render.ts", import.meta.url), "utf8");
+const WEB_RENDER_SOURCE = readFileSync(new URL("../apps/workbench/src/renderer.ts", import.meta.url), "utf8");
 const WORKBENCH_UI_SOURCE = [WEB_RENDER_SOURCE, CLIENT_SCRIPT, ONBOARDING_CLIENT_SCRIPT].join("\n");
 const DESKTOP_CAPABILITIES = JSON.parse(
   readFileSync(new URL("../desktop/src-tauri/capabilities/default.json", import.meta.url), "utf8"),
@@ -154,9 +153,9 @@ function addProjectGoal(
   goalId: string,
   title: string,
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   try {
-    new GoalBoardCoordinator(store).goals.commands.createGoal(
+    new GoalProjectApplication(store).goals.commands.createGoal(
       project.board_id,
       {
         goal_id: goalId,
@@ -180,7 +179,7 @@ function addProjectFeedItem(
   itemId: string,
   itemType: "feed" | "inbox_message" = "feed",
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   const now = "2026-08-29T10:00:00.000Z";
   const inbox = itemType === "inbox_message";
   try {
@@ -222,7 +221,7 @@ function addProjectFeedItem(
       now,
     });
     if (inbox) {
-      new FeedStore(store.db).ensureInboxEntryForFeedItem(
+      createLocalFeedApplication(store.db).ensureInboxEntryForFeedItem(
         project.board_id,
         itemId,
         "source_rule",
@@ -257,9 +256,9 @@ function addProjectAcceptedGoal(
   title: string,
   decompositionState: "closed_leaf" | "closed_compound",
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   try {
-    new GoalBoardCoordinator(store).goals.commands.createGoal(
+    new GoalProjectApplication(store).goals.commands.createGoal(
       project.board_id,
       {
         goal_id: goalId,
@@ -292,9 +291,9 @@ function addProjectChildRelation(
   childGoalId: string,
   parentGoalId: string,
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   try {
-    new GoalBoardCoordinator(store).goals.commands.addRelation(
+    new GoalProjectApplication(store).goals.commands.addRelation(
       project.board_id,
       {
         from_goal_id: childGoalId,
@@ -311,7 +310,7 @@ function addProjectChildRelation(
 
 async function catalogFixture() {
   const homeDirectory = mkdtempSync(join(tmpdir(), "goalboard-desktop-tui-"));
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     const created = await catalog.createProject({
       display_name: "桌面 TUI 项目",
@@ -529,8 +528,8 @@ test("Web and Desktop share one project workbench; Desktop only adds native chro
   const directory = mkdtempSync(join(tmpdir(), "goalboard-desktop-render-"));
   const databasePath = join(directory, "demo.db");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   try {
     const view = buildGoalBoardWebView(store, coordinator, {
       databasePath,
@@ -683,7 +682,7 @@ test("Web and Desktop share one project workbench; Desktop only adds native chro
     assert.match(desktop, /ui\?\.navigationVersion === desktopNavigationStateVersion/);
     assert.match(desktop, /setDesktopDirectory\(restoredDirectory, false, false\)/);
     assert.match(desktop, /const directGoalRequested = .*localPathname\(\)/);
-    assert.match(desktop, /if \(directGoalRequested && selected\)[\s\S]*setDesktopDirectory\("goals", false, false\)[\s\S]*setDesktopWorkSurface\("goal", false, false\)/);
+    assert.match(desktop, /if \(directGoalRequested && selected && !restoredNavigation\)[\s\S]*setDesktopDirectory\("goals", false, false\)[\s\S]*setDesktopWorkSurface\("goal", false, false\)/);
     assert.match(desktop, /const focusWorkTab = \(goalId\) =>/);
     assert.match(desktop, /selectGoal\(nextGoalId\)\.then\(\(\) => focusWorkTab\(nextGoalId\)\)/);
     assert.match(desktop, /data-directory-back/);
@@ -794,7 +793,7 @@ test("panel APIs and the TUI pane work without a desktop shell marker", async ()
     const listedBody = await listed.json() as { panels: Array<{ panel_id: string }> };
     assert.equal(listedBody.panels.length, 1);
 
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
     try {
       assert.equal(
         catalog.resolveRuntimeContext({
@@ -827,7 +826,7 @@ test("compound parent terminals become read-only and direct execution APIs requi
   const fixture = await catalogFixture();
   addProjectAcceptedGoal(fixture.project, "TUI-PARENT", "交付完整终端体验", "closed_compound");
   addProjectAcceptedGoal(fixture.project, "TUI-CHILD", "实现具体终端交互", "closed_leaf");
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
   let historicalPanelId: string;
   try {
     historicalPanelId = catalog.openDesktopPanel({
@@ -893,7 +892,7 @@ test("compound parent terminals become read-only and direct execution APIs requi
     });
     assert.equal(childOpened.status, 200, await childOpened.clone().text());
 
-    const completionStore = new SqliteGoalBoardStore(fixture.project.database_path);
+    const completionStore = new LocalProjectDatabase(fixture.project.database_path);
     try {
       completionStore.db
         .prepare("UPDATE goals SET fulfillment_state = 'satisfied' WHERE goal_id IN (?, ?)")
@@ -1126,7 +1125,7 @@ test("Feed Item actions create one bound Goal and expose its source context to T
     assert.equal(unlinkedPrompt.status, 409);
     assert.match(await unlinkedPrompt.text(), /重新开始处理/);
 
-    const store = new SqliteGoalBoardStore(fixture.project.database_path);
+    const store = new LocalProjectDatabase(fixture.project.database_path);
     try {
       const binding = store.db.prepare(`
         SELECT source_type, source_ref, state FROM input_bindings
@@ -1141,7 +1140,7 @@ test("Feed Item actions create one bound Goal and expose its source context to T
         source_ref: "",
         state: "confirmed",
       });
-      const receipt = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+      const receipt = new GoalProjectApplication(store).goalInputs.list(fixture.project.board_id)
         .find((input) => input.goal_id === startedBody.goal_id);
       assert.equal(receipt?.source_ref, "feed-item:feed-item-test");
       assert.equal(receipt?.state, "confirmed");
@@ -1154,7 +1153,7 @@ test("Feed Item actions create one bound Goal and expose its source context to T
       };
       assert.equal(item.disposition, "processing");
       assert.equal(item.linked_goal_id, null, "Feed 不再保存第二份关联事实");
-      assert.equal(new FeedStore(store.db).findLinkedGoalItem(fixture.project.board_id, startedBody.goal_id)?.item_id, "feed-item-test");
+      assert.equal(createLocalFeedApplication(store.db).findLinkedGoalItem(fixture.project.board_id, startedBody.goal_id)?.item_id, "feed-item-test");
       assert.equal(item.read_at, readBody.item.read_at);
     } finally {
       store.close();
@@ -1239,9 +1238,9 @@ test("Feed start reuses one Draft Goal across repeat clicks and a Web restart", 
     );
   }
 
-  const store = new SqliteGoalBoardStore(fixture.project.database_path);
+  const store = new LocalProjectDatabase(fixture.project.database_path);
   try {
-    const bindings = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+    const bindings = new GoalProjectApplication(store).goalInputs.list(fixture.project.board_id)
       .filter((input) => input.source_type === "feed_item" && input.source_ref === `feed-item:${itemId}`);
     const runCount = store.db.prepare(`
       SELECT COUNT(*) AS count FROM runs WHERE board_id = ? AND goal_id = ?
@@ -1359,7 +1358,7 @@ test("Inbox Message save and start survives a Web restart without duplicating it
     );
   }
 
-  const store = new SqliteGoalBoardStore(fixture.project.database_path);
+  const store = new LocalProjectDatabase(fixture.project.database_path);
   try {
     const item = store.db.prepare(`
       SELECT disposition, linked_goal_id, read_at FROM feed_items
@@ -1372,13 +1371,13 @@ test("Inbox Message save and start survives a Web restart without duplicating it
     const goal = store.db.prepare(`
       SELECT title FROM goals WHERE board_id = ? AND goal_id = ?
     `).get(fixture.project.board_id, goalId) as { title: string };
-    const bindings = new GoalBoardCoordinator(store).goalInputs.list(fixture.project.board_id)
+    const bindings = new GoalProjectApplication(store).goalInputs.list(fixture.project.board_id)
       .filter((input) => input.goal_id === goalId && input.source_type === "feed_item" && input.source_ref === `feed-item:${itemId}`);
     const materialCount = store.db.prepare(`
       SELECT COUNT(*) AS count FROM feed_materials WHERE board_id = ? AND item_id = ?
     `).get(fixture.project.board_id, itemId) as { count: number };
     assert.deepEqual(item, { disposition: "processing", linked_goal_id: null, read_at: null });
-    assert.equal(new FeedStore(store.db).findLinkedGoalItem(fixture.project.board_id, goalId, itemId)?.linked_goal_id, goalId);
+    assert.equal(createLocalFeedApplication(store.db).findLinkedGoalItem(fixture.project.board_id, goalId, itemId)?.linked_goal_id, goalId);
     assert.equal(goal.title, "处理 Inbox Message：需要处理的 Inbox Message");
     assert.equal(bindings.length, 1);
     assert.equal(materialCount.count, 1);
@@ -1391,8 +1390,8 @@ test("TUI menu greys out runtimes whose CLI is missing", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-desktop-cli-"));
   const databasePath = join(directory, "demo.db");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   try {
     const view = buildGoalBoardWebView(store, coordinator, {
       databasePath,
@@ -1712,7 +1711,7 @@ test("Codex resume launch records host session on the same Goal panel", async ()
   const homeDirectory = mkdtempSync(join(tmpdir(), "goalboard-desktop-resume-"));
   const workspace = join(homeDirectory, "repo");
   mkdirSync(workspace);
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     const project = await catalog.createProject({ display_name: "resume", actor_id: "user" });
     const panel = catalog.openDesktopPanel({
@@ -1742,7 +1741,7 @@ test("Codex resume launch records host session on the same Goal panel", async ()
 
 test("opening a terminal without a project workspace is rejected", async () => {
   const homeDirectory = mkdtempSync(join(tmpdir(), "goalboard-desktop-nows-"));
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   let projectId = "";
   try {
     const created = await catalog.createProject({ display_name: "无目录项目", actor_id: "test-user" });

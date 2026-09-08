@@ -5,10 +5,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GoalsModule, migrateGoalImpactHistory } from "@adeptify/goalboard-module-goals";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
-function goals(store: SqliteGoalBoardStore) {
+function goals(store: LocalProjectDatabase) {
   return new GoalsModule(store.db, {
     supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
     currentActionToken: () => "unused",
@@ -20,10 +20,10 @@ function goals(store: SqliteGoalBoardStore) {
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-impact-owner-"));
   const databasePath = join(directory, "project.db");
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   const owner = goals(store);
   for (const id of ["one", "two"]) {
-    new GoalBoardCoordinator(store).initializeBoard({ board_id: id, title: id, actor_id: "user", idempotency_key: `board-${id}` });
+    new GoalProjectApplication(store).initializeBoard({ board_id: id, title: id, actor_id: "user", idempotency_key: `board-${id}` });
     owner.commands.createGoal(id, { goal_id: `goal-${id}`, title: id, outcome: "", why: "", business_logic: "", acceptance_criteria: [] },
       { actor_id: "user", idempotency_key: `goal-${id}` });
   }
@@ -60,7 +60,7 @@ test("Goals owns Impact writes, exact audit history, replay and persisted reads 
       goal_id: "goal-one", surface: "src/shared.ts", access: "write", previous_state: "confirmed",
     });
     store.close();
-    store = new SqliteGoalBoardStore(data.databasePath);
+    store = new LocalProjectDatabase(data.databasePath);
     assert.deepEqual(goals(store).impacts.list("one"), [removed.impact]);
     assert.deepEqual(store.snapshot("one").impacts, [removed.impact]);
     assert.equal(removed.impact.created_by, "user");
@@ -117,11 +117,11 @@ test("legacy Impact history schema migrates atomically and reopens without chang
     assert.equal(store.db.prepare("SELECT 1 FROM schema_migrations WHERE migration_id = 5").get(), undefined);
     store.db.exec("DROP TRIGGER reject_impact_migration");
     store.close();
-    store = new SqliteGoalBoardStore(data.databasePath);
+    store = new LocalProjectDatabase(data.databasePath);
     assert.deepEqual(goals(store).impacts.get("one", original.binding_id), original);
     assert.deepEqual(store.snapshot("one").impacts, [original]);
     store.close();
-    store = new SqliteGoalBoardStore(data.databasePath);
+    store = new LocalProjectDatabase(data.databasePath);
     assert.deepEqual(goals(store).impacts.get("one", original.binding_id), original);
   } finally { store.close(); rmSync(data.directory, { recursive: true, force: true }); }
 });

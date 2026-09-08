@@ -1,18 +1,19 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import type { RuntimeSessionTransport } from "../src/sessions/types.js";
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 import {
   PROJECT_OPERATIONS_CLIENT_SCRIPT,
   PROJECT_OPERATIONS_STYLES,
   renderProjectOperations,
 } from "@adeptify/goalboard-app-workbench";
-import { icon } from "../src/web/icons.js";
-import { renderGoalBoardWeb, type GoalBoardWebView } from "../src/web/render.js";
+import { icon } from "@adeptify/goalboard-design-system";
+import { renderGoalBoardWeb, type GoalBoardWebView } from "./workbench-renderer-fixture.js";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 const TOKEN = "goalboard-session-web-token-0123456789abcdef";
@@ -134,7 +135,7 @@ test("project operation renderer uses real records or an honest empty state with
 test("project Sessions render real Registry records and content/resume APIs stay project isolated", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-web-"));
   const home = path.join(directory, ".goalboard");
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const first = await catalog.createProject({ display_name: "Session 项目 A", actor_id: "user" });
   const second = await catalog.createProject({ display_name: "Session 项目 B", actor_id: "user" });
   catalog.close();

@@ -18,7 +18,7 @@ This package explicitly does **not** own Sessions, Desktop panels, Goals, Artifa
 
 `src/index.ts` exports `ProjectsModule` with public `query` and `commands` ports. The local composition root also uses its explicit `lifecycle` port while filesystem provisioning remains in the compatibility Catalog.
 
-The Module owns canonical `project_id`, V1 `board_id` compatibility, Project records/events, durable Project↔workspace memberships, deletion receipts, and their schema migrations. `src/projects/catalog.ts` no longer queries or writes these tables directly.
+The Module owns canonical `project_id`, V1 `board_id` compatibility, Project records/events, durable Project↔workspace memberships, deletion receipts, and their schema migrations. The old `src/projects/catalog.ts` has been removed; Local Host composes this public Module with private-work and Desktop ports.
 
 ## Dependencies
 

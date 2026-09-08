@@ -203,3 +203,24 @@ export interface FeedContractMigrationReceiptRecord {
   rollback_strategy: "sqlite_immediate_transaction";
   applied_at: string;
 }
+
+export class FeedError extends Error {
+  constructor(
+    readonly code:
+      | "feed_item_not_found"
+      | "feed_revision_conflict"
+      | "feed_invalid_transition"
+      | "feed_read_not_supported",
+    message: string,
+  ) {
+    super(message);
+    this.name = "FeedError";
+  }
+}
+
+export class FeedDomainError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message);
+    this.name = "FeedDomainError";
+  }
+}

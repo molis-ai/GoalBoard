@@ -3,22 +3,22 @@ import test from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FeedStore } from "../src/feed/store.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
+import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 
 test("Feed Goal subject checks use project-scoped facts without hiding archived/trashed Goals or leaving failed writes", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-feed-goal-query-"));
   const path = join(directory, "fixture.db");
   seedDemoBoard(path);
-  const store = new SqliteGoalBoardStore(path);
+  const store = new LocalProjectDatabase(path);
   try {
-    const c = new GoalBoardCoordinator(store);
+    const c = new GoalProjectApplication(store);
     c.initializeBoard({ board_id: "other-project", title: "other", actor_id: "user", idempotency_key: "other" });
     c.goals.lifecycle.setArchived(DEMO_BOARD_ID, { goal_id: "CORE", archived: true, reason: "历史归档目标仍可关联" },
       { actor_id: "user", idempotency_key: "archive-core" });
-    const feed = new FeedStore(store.db);
+    const feed = createLocalFeedApplication(store.db);
     const before = store.snapshot(DEMO_BOARD_ID);
     for (const subjectId of ["CORE", "AUTO-CONNECT"]) {
       const result = feed.createInboxEntry({ boardId: DEMO_BOARD_ID, subjectType: "goal_decision", subjectId, reason: "goal_decision" });

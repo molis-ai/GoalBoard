@@ -25,7 +25,7 @@ function renderGoalDocument(item: GoalsDocumentItem, context: GoalsDocumentConte
   const trashAction = `<button class="document-action document-action--danger" type="button" data-open-goal-trash data-goal-id="${escapeHtml(goal.goal_id)}" data-goal-title="${escapeHtml(goal.title)}">${icon("archive")}<span>${L("移入回收站")}</span></button>`;
   const moreActions = `<details class="goal-more"><summary aria-label="${L("更多操作")}">${icon("more")}</summary><div>${activeGoalAction}${archiveAction}${trashAction}</div></details>`;
   const quickRecordAction = !goal.archived_at && !goal.trashed_at
-    ? `<button class="document-action document-action--quick" type="button" data-open-quick-record>${icon("plus")}<span>${L("快速记录")}</span></button>`
+    ? `<button class="document-action document-action--quick" type="button" data-open-quick-record aria-label="${L("快速记录")}">${icon("plus")}<span>${L("快速记录")}</span></button>`
     : "";
   const goalModeSwitch = !goal.archived_at && !goal.trashed_at
     ? `<nav class="goal-mode-switch" role="tablist" aria-label="${L("Goal 工作模式")}"><button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="goal-document-pane" data-workbench-view="focus">${icon("target")}<span>${L("聚焦")}</span></button><button type="button" role="tab" aria-selected="false" aria-controls="goal-tui-pane" data-workbench-view="runtime">${icon("terminal")}<span>Runtime</span></button></nav>`

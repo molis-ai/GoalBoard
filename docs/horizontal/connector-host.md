@@ -8,6 +8,6 @@
 
 **调用关系：** Sources 保存用户期望；Listener/Actions 请求连接；Connector Host 调用获准 Driver 并返回 Receipt。
 
-**当前来源与 Goal：** `src/feed/connectors/` 的通用 host 部分由 FD1 迁移；provider-specific 部分由 FD3 迁入 Plugin。
+**当前实现与 Goal：** Connector Host 提供通用连接技术能力，Integration Plugin 拥有 Provider/OAuth/scope，Native Feed 组合账号与同步用例；FD1/FD3/Cutover 已退出旧连接目录。
 
 **FD1 当前实现：** `@adeptify/goalboard-service-connector-host` 提供 Driver 注册、Connection handle、health、超时和标准 Receipt。现有 GitHub/Gmail port 由兼容 caller 注入；Host 源码不导入任何 provider 实现。

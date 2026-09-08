@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createGoalBoardLocalHost, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "../src/local-host/composition.js";
+import { createGoalBoardLocalHost, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
-import { runV1Cli } from "../src/v1/cli.js";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import type { DraftDialogueView, GoalTreeProposalDecisionResult, GoalTreeProposalListResult, GoalTreeApplicationApi, LegacyProposalApplicationApi } from "@adeptify/goalboard-plugin-goals";
 
 test("CLI and MCP share Draft history, proposal decisions and legacy replay across Host restart", async () => {

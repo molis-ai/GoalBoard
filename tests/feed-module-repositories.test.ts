@@ -8,10 +8,10 @@ import { AttentionModule } from "@adeptify/goalboard-module-attention-resumption
 import { FeedModule } from "@adeptify/goalboard-module-feed";
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
-function feedModules(store: SqliteGoalBoardStore): {
+function feedModules(store: LocalProjectDatabase): {
   attention: AttentionModule;
   feed: FeedModule;
 } {
@@ -31,7 +31,7 @@ test("Feed and Attention repositories preserve Signal revisions and state across
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const firstStore = new SqliteGoalBoardStore(databasePath);
+    const firstStore = new LocalProjectDatabase(databasePath);
     let itemId = "";
     try {
       const { attention, feed } = feedModules(firstStore);
@@ -90,7 +90,7 @@ test("Feed and Attention repositories preserve Signal revisions and state across
       firstStore.close();
     }
 
-    const restartedStore = new SqliteGoalBoardStore(databasePath);
+    const restartedStore = new LocalProjectDatabase(databasePath);
     try {
       const { attention, feed } = feedModules(restartedStore);
       const restored = feed.query.get(DEMO_BOARD_ID, itemId);

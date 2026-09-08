@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCapsuleSnapshot, renderCapsuleShell } from "../src/web/capsule.js";
-import type { AvailableGoal, GoalActionKind, GoalDisplayStatus, GoalRecord } from "../src/v1/types.js";
-import type { GoalBoardWebView, WebGoalView } from "../src/web/render.js";
+import { createLocalHostCapsule } from "@adeptify/goalboard-app-local-host";
+import { renderDesktopCapsuleShell } from "@adeptify/goalboard-app-desktop";
+const { buildCapsuleSnapshot, renderCapsuleShell } = createLocalHostCapsule(renderDesktopCapsuleShell);
+import type { AvailableGoal, GoalActionKind, GoalDisplayStatus } from "@adeptify/goalboard-plugin-goals";
+import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GoalBoardWebView, WebGoalView } from "./workbench-renderer-fixture.js";
 
 const PROJECT = { project_id: "project-capsule", display_name: "胶囊测试" };
 

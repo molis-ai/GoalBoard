@@ -1,0 +1,38 @@
+[
+  {
+    "goals": 29,
+    "events": 60,
+    "coldViewMs": [
+      18,
+      14,
+      15
+    ],
+    "snapshotReadsPerBuild": 23,
+    "warmViewMs": 0.007229150000000573,
+    "payloadBytes": 239711
+  },
+  {
+    "goals": 99,
+    "events": 130,
+    "coldViewMs": [
+      83,
+      81,
+      81
+    ],
+    "snapshotReadsPerBuild": 93,
+    "warmViewMs": 0.005083350000001019,
+    "payloadBytes": 555334
+  },
+  {
+    "goals": 249,
+    "events": 280,
+    "coldViewMs": [
+      403,
+      369,
+      396
+    ],
+    "snapshotReadsPerBuild": 243,
+    "warmViewMs": 0.005047950000016499,
+    "payloadBytes": 1234385
+  }
+]

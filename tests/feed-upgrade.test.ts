@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { FeedStore } from "../src/feed/store.js";
-import { FeedSourceService, listFeedSourceCatalog } from "../src/feed/sources/service.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
+import { createLocalFeedSourceService, listFeedSourceCatalog } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 test("opening a pre-reorg project initializes Listener storage and preserves old cursors and Goal content", async () => {
@@ -14,11 +14,11 @@ test("opening a pre-reorg project initializes Listener storage and preserves old
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const legacy = new SqliteGoalBoardStore(databasePath);
+    const legacy = new LocalProjectDatabase(databasePath);
     let sourceId: string;
     let goalsBefore: Array<{ goal_id: string; title: string; outcome: string }>;
     try {
-      sourceId = new FeedSourceService(legacy.db, DEMO_BOARD_ID).register({
+      sourceId = createLocalFeedSourceService(legacy.db, DEMO_BOARD_ID).register({
         kind: "rss", definition_id: listFeedSourceCatalog()[0]!.id,
       }).source.source_id;
       goalsBefore = legacy.snapshot(DEMO_BOARD_ID).goals.map(({ goal_id, title, outcome }) => ({ goal_id, title, outcome }));
@@ -48,16 +48,16 @@ test("opening a pre-reorg project initializes Listener storage and preserves old
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
 
-    const upgraded = new SqliteGoalBoardStore(databasePath);
+    const upgraded = new LocalProjectDatabase(databasePath);
     try {
-      const feed = new FeedStore(upgraded.db);
+      const feed = createLocalFeedApplication(upgraded.db);
       const source = feed.getSource(DEMO_BOARD_ID, sourceId);
       assert.deepEqual(source.cursor, { etag: "old-source-position" });
       feed.upsertSource({ ...source, cursor: { etag: "new-listener-position" } });
     } finally { upgraded.close(); }
-    const reopened = new SqliteGoalBoardStore(databasePath);
+    const reopened = new LocalProjectDatabase(databasePath);
     try {
-      const feed = new FeedStore(reopened.db);
+      const feed = createLocalFeedApplication(reopened.db);
       assert.deepEqual(feed.getSource(DEMO_BOARD_ID, sourceId).cursor, { etag: "new-listener-position" });
       assert.equal(feed.snapshot(DEMO_BOARD_ID).sources.filter(source => source.source_id === sourceId).length, 1);
       assert.deepEqual(reopened.snapshot(DEMO_BOARD_ID).goals.map(({ goal_id, title, outcome }) => ({ goal_id, title, outcome })), goalsBefore);

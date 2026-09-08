@@ -10,18 +10,18 @@ import {
   deriveGoalTreeProposalState,
 } from "@adeptify/goalboard-module-governance-collaboration";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 function fixture(name: string): {
-  store: SqliteGoalBoardStore;
+  store: LocalProjectDatabase;
   governance: GovernanceCollaborationModule;
   dispose(): void;
 } {
   const directory = mkdtempSync(join(tmpdir(), `goalboard-governance-${name}-`));
   const databasePath = join(directory, "goalboard.sqlite");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let sequence = 0;
   const governance = new GovernanceCollaborationModule({
     db: store.db,

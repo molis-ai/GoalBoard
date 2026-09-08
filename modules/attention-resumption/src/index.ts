@@ -1,3 +1,4 @@
+import { AttentionError } from "@adeptify/goalboard-contracts/modules/attention-resumption";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -58,19 +59,7 @@ export const ATTENTION_STATUS_TRANSITIONS: Readonly<
   dismissed: ["open"],
 };
 
-export class AttentionError extends Error {
-  constructor(
-    readonly code:
-      | "attention_entry_not_found"
-      | "attention_revision_conflict"
-      | "attention_invalid_reference"
-      | "attention_invalid_transition",
-    message: string,
-  ) {
-    super(message);
-    this.name = "AttentionError";
-  }
-}
+export { AttentionError } from "@adeptify/goalboard-contracts/modules/attention-resumption";
 
 export function migrateAttention(db: AttentionSqliteDatabase): void {
   db.exec(`

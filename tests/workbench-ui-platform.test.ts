@@ -103,11 +103,9 @@ test("Workbench registers Native Plugin surfaces against stable slots", () => {
 });
 
 test("Design System and Workbench responsibilities have left legacy huge files", () => {
-  const visualFacade = readFileSync("src/web/visual-foundation.ts", "utf8");
-  const i18nRuntime = readFileSync("src/web/i18n.ts", "utf8");
-  const renderer = readFileSync("src/web/render.ts", "utf8");
+  const i18nRuntime = readFileSync("apps/workbench/src/i18n.ts", "utf8");
+  const renderer = readFileSync("apps/workbench/src/renderer.ts", "utf8");
 
-  assert.ok(visualFacade.split(/\r?\n/u).length < 30);
   assert.ok(i18nRuntime.split(/\r?\n/u).length < 200);
   assert.match(renderer, /from "@adeptify\/goalboard-design-system"/);
   assert.match(renderer, /renderWorkbenchDocument/);

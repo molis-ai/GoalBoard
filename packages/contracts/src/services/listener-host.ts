@@ -67,3 +67,17 @@ export interface ListenerHostApi {
     intent?: Record<string, unknown>;
   }): Promise<ListenerRunReceipt>;
 }
+
+export class ListenerHostError extends Error {
+  constructor(
+    readonly code:
+      | "listener_lease_busy"
+      | "listener_delivery_failed"
+      | "listener_delivery_quarantined"
+      | "listener_connector_failed",
+    message: string,
+  ) {
+    super(message);
+    this.name = "ListenerHostError";
+  }
+}

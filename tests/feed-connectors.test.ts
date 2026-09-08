@@ -4,22 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { FeedConnectorService } from "../src/feed/connectors/service.js";
-import { createGithubConnector } from "../src/feed/connectors/github.js";
-import { createGmailConnector } from "../src/feed/connectors/gmail.js";
-import type {
-  ConnectorIngestItem,
-  ConnectorPort,
-  ConnectorSyncFailure,
-  ConnectorSyncSuccess,
-} from "../src/feed/connectors/types.js";
-import { FeedDomainError } from "../src/feed/errors.js";
-import { resetSecretStoreCache } from "../src/feed/security/secret-store.js";
-import type { FeedSourceRecord } from "../src/feed/types.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { createLocalFeedConnectorService } from "@adeptify/goalboard-app-local-host";
+import { createGithubConnector } from "@adeptify/goalboard-app-local-host";
+import { createGmailConnector } from "@adeptify/goalboard-app-local-host";
+import type { IntegrationProviderItem as ConnectorIngestItem, IntegrationProviderPort as ConnectorPort, IntegrationProviderSyncResult } from "@adeptify/goalboard-contracts/platform/plugin";
+type ConnectorSyncFailure = Extract<IntegrationProviderSyncResult, { ok: false }>;
+type ConnectorSyncSuccess = Extract<IntegrationProviderSyncResult, { ok: true }>;
 
-async function withBoard<T>(run: (store: SqliteGoalBoardStore) => Promise<T>): Promise<T> {
+import { FeedDomainError } from "@adeptify/goalboard-contracts/modules/feed";
+import { createFileSecretStore, resetSecretStoreCache } from "@adeptify/goalboard-storage";
+import type { FeedSourceRecord } from "@adeptify/goalboard-plugin-feed";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+
+async function withBoard<T>(run: (store: LocalProjectDatabase) => Promise<T>): Promise<T> {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-feed-connectors-"));
   const databasePath = join(directory, "goalboard.sqlite");
   const oldHome = process.env.GOALBOARD_HOME;
@@ -31,7 +29,7 @@ async function withBoard<T>(run: (store: SqliteGoalBoardStore) => Promise<T>): P
     process.env.NODE_ENV = "test";
     resetSecretStoreCache();
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       return await run(store);
     } finally {
@@ -491,6 +489,61 @@ test("Gmail range changes force one bounded full sync instead of reusing the old
   assert.equal(listUrl.searchParams.get("q"), "in:inbox");
 });
 
+test("Host Gmail authorization creates stable account Sources, pauses the legacy Source, and disconnects scoped credentials", async () => {
+  await withBoard(async (store) => {
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID);
+    service.configureGmailClient("fixture-gmail-client");
+    const legacy = service.ensureSources().find((source) => source.sync_kind === "gmail")!;
+    const originalFetch = globalThis.fetch;
+    const credentials: string[] = [];
+    try {
+      for (const [account, attempt] of [["a", "first"], ["b", "first"], ["a", "reauthorized"]]) {
+        const access = `fixture-access-${account}-${attempt}`;
+        globalThis.fetch = async (input, init) => {
+          const url = String(input);
+          if (url === "https://oauth2.googleapis.com/token") {
+            const body = new URLSearchParams(String(init?.body));
+            assert.equal(body.get("client_id"), "fixture-gmail-client");
+            assert.equal(body.get("code"), `fixture-code-${account}`);
+            return Response.json({ access_token: access, refresh_token: `fixture-refresh-${account}`, expires_in: 3600 });
+          }
+          assert.equal(url, "https://gmail.googleapis.com/gmail/v1/users/me/profile");
+          assert.equal(new Headers(init?.headers).get("Authorization"), `Bearer ${access}`);
+          return Response.json({ emailAddress: `${account}@example.com` });
+        };
+        const started = await service.startGmailOAuth({ redirectUri: "http://127.0.0.1:3000/api/feed/connectors/gmail/oauth/callback" });
+        const result = await service.completeGmailOAuth({ code: `fixture-code-${account}`, state: started.state });
+        assert.equal(result.email, `${account}@example.com`);
+        const source = service.feed.snapshot(DEMO_BOARD_ID).sources.find((source) => source.account_label === result.email)!;
+        assert.ok(source);
+        assert.equal(source.credential_ref, result.authRef);
+        assert.equal(source.status, "active");
+        const tokenRefs = source.config.token_refs as { access: string; refresh: string; expiresAt: string };
+        assert.match(tokenRefs.access, /^connector:gmail:inst:gmail-installation-/);
+        assert.equal(createFileSecretStore().get(tokenRefs.access), access);
+        assert.equal(createFileSecretStore().get(tokenRefs.refresh), `fixture-refresh-${account}`);
+        credentials.push(...Object.values(tokenRefs));
+        const fixed = service.feed.getSource(DEMO_BOARD_ID, legacy.source_id);
+        assert.equal(fixed.status, "paused");
+        assert.equal(fixed.enabled, false);
+      }
+      const accounts = service.feed.snapshot(DEMO_BOARD_ID).sources.filter((source) => source.sync_kind === "gmail" && source.source_id !== legacy.source_id);
+      assert.equal(accounts.length, 2, "reauthorizing A updates its stable Source instead of duplicating it");
+      service.unbind("gmail");
+      for (const ref of [...credentials, "connector:gmail:token", "connector:gmail:refresh", "connector:gmail:token_expires_at"]) {
+        assert.equal(createFileSecretStore().get(ref), null);
+      }
+      for (const source of service.feed.snapshot(DEMO_BOARD_ID).sources.filter((source) => source.sync_kind === "gmail")) {
+        assert.equal(source.status, "disconnected");
+        assert.deepEqual(source.cursor, {});
+        assert.equal(source.account_label, null);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 test("Connector service persists cursor only after success and safely replays or retries", async () => {
   await withBoard(async (store) => {
     let calls = 0;
@@ -530,7 +583,7 @@ test("Connector service persists cursor only after success and safely replays or
       async health() { return { ok: true, status: "connected", message: "stub" }; },
       async sync() { calls += 1; return next; },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const source = service.feed.upsertSource({
       ...service.ensureSources().find((entry) => entry.sync_kind === "github")!,
       status: "active",
@@ -583,6 +636,44 @@ test("Connector service persists cursor only after success and safely replays or
   });
 });
 
+test("Connector failure commits Source and event together while retaining the Listener terminal receipt", async () => {
+  await withBoard(async (store) => {
+    let calls = 0;
+    const port: ConnectorPort = {
+      type: "github",
+      async health() { return { ok: true, status: "connected", message: "test" }; },
+      async sync() { calls += 1; return failure("needs_auth"); },
+    };
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const source = service.feed.upsertSource({
+      ...service.ensureSources().find((entry) => entry.sync_kind === "github")!,
+      status: "active",
+      cursor: { retained: "before-failure" },
+    });
+    store.db.exec(`CREATE TEMP TRIGGER fail_connector_event BEFORE INSERT ON events
+      WHEN NEW.type = 'feed_connector.sync_failed'
+      BEGIN SELECT RAISE(ABORT, 'injected_connector_commit_failure'); END`);
+    await assert.rejects(service.sync(source.source_id, { idempotencyKey: "connector-commit-failure-1" }), /injected_connector_commit_failure/);
+    assert.deepEqual(service.feed.getSource(DEMO_BOARD_ID, source.source_id), source, "the failed event rolls back the preceding Source update");
+    assert.equal(service.feed.listInboxEntries(DEMO_BOARD_ID).some((entry) => entry.subject_type === "source_fault" && entry.subject_id === source.source_id), false);
+    store.db.exec("DROP TRIGGER fail_connector_event");
+    const replay = await service.sync(source.source_id, { idempotencyKey: "connector-commit-failure-1" });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.run.phase, "terminal");
+    assert.equal(replay.run.outcome, "failed");
+    assert.deepEqual(replay.source, source);
+    assert.equal(calls, 1, "the Listener receipt remains durable independently of the later Source/event transaction");
+    await assert.rejects(service.sync(source.source_id, { idempotencyKey: "connector-commit-failure-2" }), (error: unknown) => error instanceof FeedDomainError && error.code === "connector_needs_auth");
+    const updated = service.feed.getSource(DEMO_BOARD_ID, source.source_id);
+    assert.equal(updated.status, "error");
+    assert.equal(updated.last_error_code, "connector_needs_auth");
+    assert.deepEqual(updated.cursor, source.cursor);
+    const events = store.db.prepare("SELECT actor_id, reason, payload_json FROM events WHERE board_id = ? AND object_id = ? AND type = 'feed_connector.sync_failed'").all(DEMO_BOARD_ID, source.source_id) as Array<{ actor_id: string; reason: string; payload_json: string }>;
+    assert.deepEqual(events, [{ actor_id: "feed-connector-service", reason: "GitHub 同步失败：Provider request failed safely", payload_json: JSON.stringify({ failure: "needs_auth", action: "Reconnect and retry" }) }]);
+    assert.equal(service.feed.listInboxEntries(DEMO_BOARD_ID).find((entry) => entry.subject_type === "source_fault" && entry.subject_id === source.source_id)?.status, "open");
+  });
+});
+
 test("Connector service preserves cursor and schedules rate-limit recovery without Inbox noise", async () => {
   await withBoard(async (store) => {
     const retryAfterAt = "2026-08-30T10:05:00.000Z";
@@ -601,7 +692,7 @@ test("Connector service preserves cursor and schedules rate-limit recovery witho
         };
       },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const source = service.feed.upsertSource({
       ...service.ensureSources().find((entry) => entry.sync_kind === "github")!,
       status: "active",
@@ -634,7 +725,7 @@ test("disconnected connector stops before any Provider pull", async () => {
         return success([], {});
       },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const disconnected = service.ensureSources().find((entry) => entry.sync_kind === "github")!;
     assert.equal(disconnected.status, "disconnected");
     await assert.rejects(
@@ -657,7 +748,7 @@ test("Connector interruption is recoverable with the same idempotency key", asyn
         return success([], { since: "cursor-after-retry" });
       },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const source = service.feed.upsertSource({
       ...service.ensureSources().find((entry) => entry.sync_kind === "github")!,
       status: "active",
@@ -693,7 +784,7 @@ test("Connector Item dedupe is scoped by Source so Gmail accounts never collide"
       async health() { return { ok: true, status: "connected", message: "stub" }; },
       async sync() { return success([item], { historyId: "2" }); },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const legacy = service.feed.upsertSource({
       ...service.ensureSources().find((entry) => entry.sync_kind === "gmail")!,
       status: "active",
@@ -756,7 +847,7 @@ test("Connector service writes Gmail identity and keeps only explicit Gmail atte
         });
       },
     };
-    const service = new FeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
+    const service = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID, () => port);
     const source = service.feed.upsertSource({
       ...service.ensureSources().find((entry) => entry.sync_kind === "gmail")!,
       status: "active",

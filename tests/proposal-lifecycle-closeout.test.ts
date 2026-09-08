@@ -3,15 +3,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("proposal close-out rolls back real Run and Claim writes and replays once after reopening", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd2-closeout-"));
   const path = join(directory, "project.db");
-  let store = new SqliteGoalBoardStore(path);
+  let store = new LocalProjectDatabase(path);
   const now = () => new Date("2026-09-06T00:10:00.000Z");
-  let coordinator = new GoalBoardCoordinator(store, now);
+  let coordinator = new GoalProjectApplication(store, now);
   try {
     coordinator.initializeBoard({ board_id: "board", title: "整理方案", actor_id: "user", idempotency_key: "init" });
     const start = coordinator.draftDialogue.startDraftDialogue({
@@ -55,8 +55,8 @@ test("proposal close-out rolls back real Run and Claim writes and replays once a
       goal_id: "draft", contract_revision: 1, action_kind: "clarify", action_target_id: "draft",
     });
     store.close();
-    store = new SqliteGoalBoardStore(path);
-    coordinator = new GoalBoardCoordinator(store, now);
+    store = new LocalProjectDatabase(path);
+    coordinator = new GoalProjectApplication(store, now);
     const replay = coordinator.goalTreeSubmission.submitGoalTreeProposal(input);
     assert.equal(replay.replayed, true);
     assert.equal(replay.proposal.proposal_id, result.proposal.proposal_id);

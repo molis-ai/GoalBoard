@@ -40,6 +40,14 @@ export class LocalSqliteJournal {
     return number(row.cursor);
   }
 
+  readEventsDescending(boardId: string) {
+    return (this.db.prepare("SELECT * FROM events WHERE board_id = ? ORDER BY seq DESC").all(boardId) as Row[]).map(row => ({
+      seq: number(row.seq), event_id: text(row.event_id), actor_id: text(row.actor_id),
+      type: text(row.type), object_type: text(row.object_type), object_id: text(row.object_id),
+      reason: text(row.reason), payload: parseJson<unknown>(row.payload_json, null), at: text(row.at),
+    }));
+  }
+
   appendEvent(input: {
     eventId: string;
     boardId: string;
@@ -145,13 +153,20 @@ export const LOCAL_JOURNAL_SCHEMA_SQL = `
 `;
 
 export class LocalSqliteStorage extends LocalSqliteJournal {
-  constructor(readonly path: string) {
-    const db = new Database(path, { timeout: 5000 });
-    db.pragma("journal_mode = WAL");
-    db.pragma("synchronous = FULL");
-    db.pragma("foreign_keys = ON");
-    db.pragma("busy_timeout = 5000");
+  constructor(readonly path: string, options: { readonly?: boolean } = {}) {
+    const db = new Database(path, { timeout: 5000, ...(options.readonly ? { readonly: true, fileMustExist: true } : {}) });
+    if (!options.readonly) {
+      db.pragma("journal_mode = WAL");
+      db.pragma("synchronous = FULL");
+      db.pragma("foreign_keys = ON");
+      db.pragma("busy_timeout = 5000");
+    }
     super(db);
+  }
+  checkpoint(): void { this.db.pragma("wal_checkpoint(TRUNCATE)"); }
+  integrityCheck(): boolean {
+    const rows = this.db.pragma("integrity_check") as Array<Record<string, unknown>>;
+    return rows.every(row => Object.values(row).every(value => value === "ok"));
   }
   close(): void {
     this.db.close();

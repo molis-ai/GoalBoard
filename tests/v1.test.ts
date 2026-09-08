@@ -16,7 +16,7 @@ import {
   type LegacyV3ImportInput,
   type TaskContext,
 } from "../src/index.js";
-import { runV1Cli } from "../src/v1/cli.js";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import { main as runPublicCli } from "../src/cli/main.js";
 import { GoalBoardServer } from "../src/mcp/server.js";
 import {
@@ -562,7 +562,7 @@ function contractFieldSources(runId: string) {
   }));
 }
 
-test("batch Goal work states match canonical single-Goal reads", () => {
+test("batch Goal work states reuse the supplied snapshot and match canonical single-Goal reads", (t) => {
   const { store, coordinator } = fixture();
   try {
     createLeaf(coordinator, "foundation");
@@ -594,9 +594,13 @@ test("batch Goal work states match canonical single-Goal reads", () => {
     );
 
     const snapshot = store.snapshot("board-1");
+    const snapshotRead = t.mock.method(store, "snapshot", () => {
+      throw new Error("Batch work states must reuse the supplied board snapshot");
+    });
     const batch = new Map(
       coordinator.executionValidation.query.getGoalWorkStates({ board_id: "board-1", snapshot }).map((state) => [state.goal_id, state]),
     );
+    snapshotRead.mock.restore();
     for (const goal of store.listGoals("board-1")) {
       assert.deepEqual(
         batch.get(goal.goal_id),

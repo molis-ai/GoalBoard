@@ -1,10 +1,11 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { reconcileLegacySessionCatalog } from "../src/sessions/compatibility.js";
+
+import { reconcileLegacySessionCatalog } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 async function fixture(): Promise<{ directory: string; home: string; workspace: string }> {
@@ -17,7 +18,7 @@ async function fixture(): Promise<{ directory: string; home: string; workspace: 
 
 test("legacy bindings and panels reconcile idempotently without deleting compatibility facts", async () => {
   const data = await fixture();
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: data.home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: data.home });
   const registry = await openWorkSessionRegistry({ homeDirectory: data.home });
   try {
     const project = await catalog.createProject({ display_name: "迁移项目", actor_id: "user" });
@@ -78,7 +79,7 @@ test("legacy bindings and panels reconcile idempotently without deleting compati
 
 test("legacy reconciliation rolls back the whole Registry batch on failure", async () => {
   const data = await fixture();
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: data.home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: data.home });
   const registry = await openWorkSessionRegistry({ homeDirectory: data.home });
   try {
     const project = await catalog.createProject({ display_name: "回滚项目", actor_id: "user" });

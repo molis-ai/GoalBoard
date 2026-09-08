@@ -14,7 +14,7 @@ import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-wor
 function definitelyRejected(message: string): Error {
   return Object.assign(new Error(message), { deliveryAccepted: false, retryable: true });
 }
-import { RUNTIME_SESSION_CAPABILITIES, type RuntimeSessionTransport } from "../src/sessions/types.js";
+import { RUNTIME_SESSION_CAPABILITIES, type RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 
 test("Codex Adapter declares every capability and routes only through verified app-server methods", async () => {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];

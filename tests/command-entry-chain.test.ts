@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference,
-  initializeBoardCapability, snapshotBoardCapability } from "../src/local-host/composition.js";
+  initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
-import { runV1Cli } from "../src/v1/cli.js";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import type { ClaimRunDecision, SubmitEvidenceResult, SubmitReviewResult } from "@adeptify/goalboard-plugin-goals";
 
 test("actual CLI and MCP command handlers finish one Goal with isolated authority and idempotent Evidence", async () => {

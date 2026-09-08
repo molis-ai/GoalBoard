@@ -3,7 +3,7 @@ import vm from "node:vm";
 import test from "node:test";
 import { createWorkbenchUiHost, renderProjectOperations, WORKBENCH_UI_SLOTS } from "@adeptify/goalboard-app-workbench";
 import { PROJECT_OPERATIONS_CLIENT_SCRIPT, WORK_UI_CONTRIBUTION_ID } from "@adeptify/goalboard-plugin-work";
-import { icon } from "../src/web/icons.js";
+import { icon } from "@adeptify/goalboard-design-system";
 
 test("Workbench mounts Work surfaces with real Session data and escapes user content", () => {
   const project = { project_id: "project-a", display_name: "Work project" };

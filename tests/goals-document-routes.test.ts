@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
-import { seedDemoBoard, DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 import { resolveGoalsReadRoute, resolveGoalsPageRoute, type GoalsReadRoute } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchGoalsFragmentRenderer, renderWorkbenchGoalsReadRoute, renderWorkbenchGoalsReadRequest, renderWorkbenchGoalsPageRequest,

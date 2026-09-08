@@ -7,7 +7,7 @@ import test from "node:test";
 import { WebSocket } from "ws";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { SessionTuiRecorder } from "@adeptify/goalboard-plugin-work";
-import { attachGoalBoardPtySocket } from "../src/web/pty-socket.js";
+import { attachGoalBoardPtySocket } from "@adeptify/goalboard-app-local-host";
 
 test("Goal TUI output survives Registry restart and remains linked to Session, project and Goal", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-tui-"));

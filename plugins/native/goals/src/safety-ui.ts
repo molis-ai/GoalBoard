@@ -1,3 +1,4 @@
+import { createRiskDecisionRenderer } from "./risk-decision-ui.js";
 import type { ImpactBindingRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { UiContribution } from "@adeptify/goalboard-contracts/platform/ui";
 import type { GoalsSafetyItem, GoalsSafetyView, GoalsSafetyRisk, GoalsSafetyUiPrimitives } from "./safety-ui-model.js";
@@ -259,11 +260,12 @@ function renderQuickImpactForm(item: GoalsSafetyItem): string {
     const activeRisks = risks.filter(risk => risk.state === "open" || risk.state === "triggered");
     return `<div class="risk-summary"><header><div><h3>${L("需要留意的风险")}</h3><p>${L("这里只显示仍可能影响推进或完成的风险。")}</p></div><strong>${activeRisks.length}</strong></header>${activeRisks.length ? `<ul>${activeRisks.map((risk) => `<li><a href="#risk-${encodeURIComponent(risk.risk_id)}"><span><strong>${escapeHtml(risk.description)}</strong><small>${escapeHtml(riskStateEffect(risk.blocking_mode, risk.state))}</small></span>${icon("chevron-right")}</a></li>`).join("")}</ul>` : `<p class="clear-row">${icon("check")}${L("当前没有需要处理的开放风险。")}</p>`}</div>`;
   }
-  return { renderRiskWorkbench, renderImpactWorkbench, renderSafety, renderQuickRiskForm, renderQuickImpactForm, renderProgressRiskSummary };
+  return { renderRiskDecision: createRiskDecisionRenderer(primitives), renderRiskWorkbench, renderImpactWorkbench, renderSafety, renderQuickRiskForm, renderQuickImpactForm, renderProgressRiskSummary };
 }
 
 export type GoalsSafetyRenderer = ReturnType<typeof createSafetyRenderer>;
 export type GoalsSafetyUiModel = { primitives: GoalsSafetyUiPrimitives } & (
+  | { kind: "risk-decision"; args: Parameters<GoalsSafetyRenderer["renderRiskDecision"]> }
   | { kind: "risk"; args: Parameters<GoalsSafetyRenderer["renderRiskWorkbench"]> }
   | { kind: "impact"; args: Parameters<GoalsSafetyRenderer["renderImpactWorkbench"]> }
   | { kind: "safety"; args: Parameters<GoalsSafetyRenderer["renderSafety"]> }
@@ -274,11 +276,12 @@ export type GoalsSafetyUiModel = { primitives: GoalsSafetyUiPrimitives } & (
 
 export const goalsSafetyUiContribution: UiContribution<GoalsSafetyUiModel> = {
   descriptor: { contribution_id: GOALS_SAFETY_UI_CONTRIBUTION_ID, plugin_id: "io.goalboard.native.goals", kind: "embedded", label: "Goal risks and impact",
-    surfaces: ["risk","impact","safety","quick-risk","quick-impact","risk-summary"].map(surface_id => ({ surface_id, target_slot_id: "workbench.main", format: "declarative-html" })), slots: [] },
+    surfaces: ["risk-decision","risk","impact","safety","quick-risk","quick-impact","risk-summary"].map(surface_id => ({ surface_id, target_slot_id: "workbench.main", format: "declarative-html" })), slots: [] },
   render({ surface, model }) {
     if (surface !== model.kind) throw new Error("Goals safety surface does not match its model");
     const renderer = createSafetyRenderer(model.primitives);
     switch (model.kind) {
+      case "risk-decision": return renderer.renderRiskDecision(...model.args);
       case "risk": return renderer.renderRiskWorkbench(...model.args);
       case "impact": return renderer.renderImpactWorkbench(...model.args);
       case "safety": return renderer.renderSafety(...model.args);

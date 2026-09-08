@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { importV3Board } from "../src/v1/migration.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { importV3Board } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("V3 imported coverage remains visible and its Goal editable after Host reopen and browser refresh", { timeout: 60_000 }, async t => {
   let path = "";
   const browser = await openGoalBrowser(t, false, databasePath => {
     path = databasePath;
-    const store = new SqliteGoalBoardStore(path);
+    const store = new LocalProjectDatabase(path);
     try {
-      importV3Board(store, new GoalBoardCoordinator(store), {
+      importV3Board(store, new GoalProjectApplication(store), {
         schema_version: "3.0", goal_id: "old", meta: { title: "历史项目" }, root_goal: { constraints: ["无损"] },
         goals: [{ id: "child", parent: null, one_liner: "历史目标", covers: ["keep"], inputs: ["历史输入"], outputs: ["历史输出"] }],
         coverage_ledger: [{ id: "keep", requirement: "迁移后保留需求覆盖", status: "now", owner_goal: "child", reason: "历史确认理由" }],
@@ -55,7 +55,7 @@ test("V3 imported coverage remains visible and its Goal editable after Host reop
   await click("[data-open-goal-edit]");
   await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
   assert.equal(await evaluate(dom(form + ' [name="title"]') + ".value"), "迁移后继续编辑");
-  const reopened = new SqliteGoalBoardStore(path);
+  const reopened = new LocalProjectDatabase(path);
   try {
     const persisted = new GoalsQueryService(new GoalsRepository(reopened.db));
     assert.equal(persisted.getGoal(DEMO_BOARD_ID, goalId)!.title, "迁移后继续编辑");

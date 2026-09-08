@@ -8,15 +8,15 @@ import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import { FeedModule } from "@adeptify/goalboard-module-feed";
 import { AttentionModule } from "@adeptify/goalboard-module-attention-resumption";
 import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("losing the Ledger does not delete Goal, Artifact or Feed content or recreate links from old columns", async () => {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-owner-isolation-"));
   const databasePath = join(directory, "fixture.db");
-  let store = new SqliteGoalBoardStore(databasePath);
+  let store = new LocalProjectDatabase(databasePath);
   const compose = () => {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     const ledger = createContextLedger(store.db, { authorize: () => true });
     let feed: FeedModule;
     const attention = new AttentionModule(store.db, { exists: (boardId, _type, id) => feed.query.exists(boardId, id) });
@@ -46,7 +46,7 @@ test("losing the Ledger does not delete Goal, Artifact or Feed content or recrea
     // Only the new isolated fixture loses its relationship records, never user data.
     store.db.exec("DELETE FROM context_edges");
     store.close();
-    store = new SqliteGoalBoardStore(databasePath);
+    store = new LocalProjectDatabase(databasePath);
     const reopened = compose();
     assert.deepEqual(reopened.coordinator.goalQueries.readGoalContract("project", "goal").goal, goal);
     assert.deepEqual(reopened.coordinator.artifacts.query.getArtifactVersion("project", { artifact_id: "report", version: 1 }), artifact);

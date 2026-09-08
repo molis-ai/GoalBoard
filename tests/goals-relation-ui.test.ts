@@ -3,8 +3,8 @@ import test from "node:test";
 import { createWorkbenchGoalsRelationRenderer, createWorkbenchUiHost } from "@adeptify/goalboard-app-workbench";
 import { GOALS_RELATION_UI_CONTRIBUTION_ID, type GoalsRelationItem } from "@adeptify/goalboard-plugin-goals";
 import type { GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import { icon } from "../src/web/icons.js";
-import { L, runWithLocale } from "../src/web/i18n.js";
+import { icon } from "@adeptify/goalboard-design-system";
+import { L, runWithLocale } from "@adeptify/goalboard-app-local-host";
 
 const escapeHtml = (value: unknown) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const renderer = createWorkbenchGoalsRelationRenderer({ translate: L, escapeHtml, icon });

@@ -5,24 +5,24 @@ import { join } from "node:path";
 import test from "node:test";
 import { createCompletedIntentResultFixtureV1 } from "@adeptify/intelligence-client/testing";
 
-import { FeedSourceService, listFeedSourceCatalog } from "../src/feed/sources/service.js";
-import { FeedConnectorService } from "../src/feed/connectors/service.js";
-import { FeedSourceScheduler } from "../src/feed/sources/scheduler.js";
-import { createFeedSourceRuntime, type FeedSourceRuntime } from "../src/feed/sources/runtime.js";
-import { readRssHttpState } from "../src/feed/sources/rss-http.js";
-import type { IntelligenceCollectRequest, IntelligenceCollectResult } from "../src/feed/sources/intelligence-adapter.js";
-import { FeedDomainError } from "../src/feed/errors.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { createLocalFeedSourceService, listFeedSourceCatalog } from "@adeptify/goalboard-app-local-host";
+import { createLocalFeedConnectorService } from "@adeptify/goalboard-app-local-host";
+import { createLocalFeedSourceScheduler } from "@adeptify/goalboard-app-local-host";
+import { createFeedSourceRuntime, type FeedSourceRuntime } from "@adeptify/goalboard-app-local-host";
+import { readRssHttpState } from "@adeptify/goalboard-integration-rss";
+import type { IntelligenceCollectRequest, IntelligenceCollectResult } from "@adeptify/goalboard-app-local-host";
+import { FeedDomainError } from "@adeptify/goalboard-contracts/modules/feed";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
-import { resetSecretStoreCache } from "../src/feed/security/secret-store.js";
+import { resetSecretStoreCache } from "@adeptify/goalboard-storage";
 
-test("public Feed sources register without network and sync exactly once per idempotency key", async () => {
+test("public Feed sources register offline, replay terminal sync, and roll back failed commits", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-feed-source-"));
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       let runtimeCreated = 0;
       let executeCount = 0;
@@ -77,7 +77,7 @@ test("public Feed sources register without network and sync exactly once per ide
           async shutdown() {},
         };
       };
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, runtimeFactory);
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, runtimeFactory);
       const definition = listFeedSourceCatalog()[0]!;
       const firstRegistration = service.register({ kind: "rss", definition_id: definition.id });
       assert.equal(firstRegistration.registered, true);
@@ -101,6 +101,33 @@ test("public Feed sources register without network and sync exactly once per ide
       assert.equal(executeCount, 1, "terminal replay must not call the provider again");
       assert.equal(service.feed.snapshot(DEMO_BOARD_ID).items.length, 1);
 
+      // Fail the final journal write after material, Source, and Run writes.
+      // A real SQLite failure must roll the entire public-result commit back.
+      const rollbackSource = service.register({ kind: "custom_rss", feed_url: "https://example.com/rollback-feed.xml" }).source;
+      store.db.exec(`CREATE TEMP TRIGGER reject_source_completion BEFORE INSERT ON events
+        WHEN NEW.type = 'feed_source.sync_completed'
+        BEGIN SELECT RAISE(ABORT, 'injected source commit failure'); END;`);
+      await assert.rejects(
+        service.sync(rollbackSource.source_id, { idempotencyKey: "source-rollback-0001" }),
+        (error: unknown) => error instanceof FeedDomainError && error.code === "feed_source_sync_interrupted",
+      );
+      const afterFailure = service.feed.getSource(DEMO_BOARD_ID, rollbackSource.source_id);
+      assert.equal(afterFailure.item_count, 0);
+      assert.equal(afterFailure.last_sync_at, null);
+      assert.equal(service.feed.snapshot(DEMO_BOARD_ID).items.length, 1, "the new material must roll back");
+      const interruptedRun = service.feed.snapshot(DEMO_BOARD_ID).runs.find((run) => run.source_id === rollbackSource.source_id);
+      assert.equal(interruptedRun?.phase, "interrupted");
+      assert.equal(interruptedRun?.outcome, null);
+      store.db.exec("DROP TRIGGER reject_source_completion");
+      const retried = await service.sync(rollbackSource.source_id, { idempotencyKey: "source-rollback-0001" });
+      assert.equal(retried.created, 1);
+      assert.equal(retried.run.phase, "terminal");
+      assert.equal(retried.run.recovery_count, 1);
+      assert.equal(retried.source.item_count, 1);
+      const retriedReplay = await service.sync(rollbackSource.source_id, { idempotencyKey: "source-rollback-0001" });
+      assert.equal(retriedReplay.replayed, true);
+      assert.equal(service.feed.snapshot(DEMO_BOARD_ID).items.length, 2);
+
       service.setEnabled(firstRegistration.source.source_id, false);
       await assert.rejects(
         service.sync(firstRegistration.source.source_id, { idempotencyKey: "source-sync-test-0002" }),
@@ -119,9 +146,9 @@ test("custom RSS registration rejects private and catalog-shadowing URLs before 
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID);
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID);
       assert.throws(
         () => service.register({ kind: "custom_rss", feed_url: "http://127.0.0.1/feed.xml" }),
         FeedDomainError,
@@ -173,11 +200,11 @@ test("RSS sync persists feed identity and validators, then treats 304 as a succe
   resetSecretStoreCache();
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       const seenHeaders: Headers[] = [];
       let fetchCount = 0;
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, (db, source) =>
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, (db, source) =>
         createFeedSourceRuntime({
           db,
           sourceCursor: source?.cursor,
@@ -252,10 +279,10 @@ test("RSS transient failures preserve history and become actionable only after t
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       let recover = false;
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, () => ({
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, () => ({
         intelligenceCollect: {
           async executeExact(request: IntelligenceCollectRequest): Promise<IntelligenceCollectResult> {
             if (!recover) throw Object.assign(new Error("temporary provider failure"), { code: "feed_unavailable" });
@@ -308,9 +335,9 @@ test("RSS parse failures immediately create a configuration recovery reference",
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, () => ({
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, () => ({
         intelligenceCollect: {
           async executeExact(request: IntelligenceCollectRequest): Promise<IntelligenceCollectResult> {
             const base = createCompletedIntentResultFixtureV1(request);
@@ -367,10 +394,10 @@ test("source scheduler persists the next run, collapses missed slots, and preven
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       let now = new Date("2026-08-30T09:00:00.000Z");
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, undefined, () => now);
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, undefined, () => now);
       const source = service.register({ kind: "rss", definition_id: listFeedSourceCatalog()[0]!.id }).source;
       const scheduled = service.configureSchedule(source.source_id, {
         mode: "interval",
@@ -388,7 +415,7 @@ test("source scheduler persists the next run, collapses missed slots, and preven
       let release!: () => void;
       const gate = new Promise<void>((resolve) => { release = resolve; });
       const keys: string[] = [];
-      const scheduler = new FeedSourceScheduler(store.db, DEMO_BOARD_ID, async (_candidate, key) => {
+      const scheduler = createLocalFeedSourceScheduler(store.db, DEMO_BOARD_ID, async (_candidate, key) => {
         dispatches += 1;
         keys.push(key);
         await gate;
@@ -425,14 +452,14 @@ test("non-retryable scheduled source failures create one actionable Inbox refere
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       let now = new Date("2026-08-30T09:00:00.000Z");
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID, undefined, () => now);
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID, undefined, () => now);
       const source = service.register({ kind: "rss", definition_id: listFeedSourceCatalog()[0]!.id }).source;
       service.configureSchedule(source.source_id, { mode: "interval", enabled: true, interval_minutes: 5 });
       now = new Date("2026-08-30T09:05:00.000Z");
-      const scheduler = new FeedSourceScheduler(store.db, DEMO_BOARD_ID, async () => {
+      const scheduler = createLocalFeedSourceScheduler(store.db, DEMO_BOARD_ID, async () => {
         throw Object.assign(new Error("需要重新授权"), { code: "connector_needs_auth" });
       }, () => now);
       const result = await scheduler.tick(now);
@@ -463,9 +490,9 @@ test("source lifecycle keeps secrets out of configuration and honors explicit hi
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
-      const service = new FeedSourceService(store.db, DEMO_BOARD_ID);
+      const service = createLocalFeedSourceService(store.db, DEMO_BOARD_ID);
       const source = service.register({ kind: "rss", definition_id: listFeedSourceCatalog()[0]!.id }).source;
       const updated = service.update(source.source_id, {
         name: "Product RSS",
@@ -514,10 +541,10 @@ test("Gmail source configuration accepts only incrementally enforceable range pr
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
-      const sourceService = new FeedSourceService(store.db, DEMO_BOARD_ID);
-      const gmail = new FeedConnectorService(store.db, DEMO_BOARD_ID)
+      const sourceService = createLocalFeedSourceService(store.db, DEMO_BOARD_ID);
+      const gmail = createLocalFeedConnectorService(store.db, DEMO_BOARD_ID)
         .ensureSources()
         .find((candidate) => candidate.sync_kind === "gmail")!;
       assert.equal(gmail.config.scope, "in:inbox is:unread");

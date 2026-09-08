@@ -128,3 +128,9 @@ export function decisionTypeCounts<T extends GoalsSafetyItem>(view: GoalsDecisio
     risks: view.snapshot.risks.filter((risk) => riskHasUserAction(risk, view)).length,
   };
 }
+
+export function countGoalDecisions<T extends GoalsSafetyItem>(view: GoalsDecisionView<T>, goalId: string): number {
+  const group = buildDecisionGroups(view).find((item) => item.item?.goal.goal_id === goalId);
+  if (!group) return 0;
+  return group.goalTreeProposals.length + group.contractProposals.length + group.candidates.length + group.rewires.length + group.risks.length + (group.humanReview ? 1 : 0);
+}

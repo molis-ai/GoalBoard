@@ -37,19 +37,8 @@ export interface ListenerSqliteDatabase {
   transaction<T>(operation: () => T): (() => T) & { immediate(): T };
 }
 
-export class ListenerHostError extends Error {
-  constructor(
-    readonly code:
-      | "listener_lease_busy"
-      | "listener_delivery_failed"
-      | "listener_delivery_quarantined"
-      | "listener_connector_failed",
-    message: string,
-  ) {
-    super(message);
-    this.name = "ListenerHostError";
-  }
-}
+export { ListenerHostError } from "@adeptify/goalboard-contracts/services/listener-host";
+import { ListenerHostError } from "@adeptify/goalboard-contracts/services/listener-host";
 
 export function migrateListenerHost(db: ListenerSqliteDatabase): void {
   db.exec(`

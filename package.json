@@ -1,7 +1,7 @@
 {
   "name": "@adeptify/goalboard",
   "version": "0.1.14",
-  "description": "GoalBoard V1：面向人和 AI Runtime 的本地 SQLite 目标真相源",
+  "description": "GoalBoard V1\uff1a\u9762\u5411\u4eba\u548c AI Runtime \u7684\u672c\u5730 SQLite \u76ee\u6807\u771f\u76f8\u6e90",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -102,20 +102,18 @@
     "@adeptify/intelligence-client": "file:vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz",
     "@adeptify/search-evidence-layer": "file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz",
     "better-sqlite3": "12.8.0",
-    "lucide": "^1.31.0",
-    "marked": "^18.0.11",
     "node-pty": "^1.1.0",
-    "sanitize-html": "^2.17.7",
     "ws": "^8.21.3",
     "@adeptify/goalboard-plugin-work": "workspace:*",
-    "@adeptify/goalboard-storage": "workspace:*"
+    "@adeptify/goalboard-storage": "workspace:*",
+    "@adeptify/goalboard-integration-rss": "workspace:*",
+    "@adeptify/goalboard-integration-youtube": "workspace:*"
   },
   "devDependencies": {
     "@adeptify/goalboard-test-kit": "workspace:*",
     "@tauri-apps/cli": "2.11.4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.13.0",
-    "@types/sanitize-html": "^2.16.1",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
     "tsx": "^4.19.0",

@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,8 +6,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
 import { mcpRuntimeSessionActivity } from "@adeptify/goalboard-app-mcp";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, snapshotBoardCapability } from "../src/local-host/composition.js";
+
+import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
 import type { ClaimRunDecision } from "@adeptify/goalboard-plugin-goals";
 
@@ -31,7 +32,7 @@ test("activity extraction preserves established priority, ignored operations and
 test("successful MCP writes update only their Session and survive a secondary Registry failure", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-mcp-activity-"));
   const homeDirectory = join(directory, "home");
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   const host = createGoalBoardLocalHost();
   let mcp: GoalBoardServer | undefined;
   try {

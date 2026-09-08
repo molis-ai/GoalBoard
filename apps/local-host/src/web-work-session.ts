@@ -1,0 +1,71 @@
+import fs from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { handleWorkSessionHttp, GoalBoardWorkspaceActionError, repairProjectWorkspace, unlinkProjectWorkspace, type ProjectWorkspaceRecord, type WorkSessionHttpContext } from "@adeptify/goalboard-plugin-work";
+import type { GoalBoardWebView, WebProjectNavigation } from "@adeptify/goalboard-app-workbench";
+import { normalizeRuntimeWorkContext } from "./project-catalog.js";
+import type { LocalWebCatalogRunner } from "./web-project-settings.js";
+import type { SessionRuntimeResources, createSessionProjectOperations } from "./web-session.js";
+import { sendLocalWebJson as sendJson, readLocalWebBody as readBody } from "./web-http.js";
+
+export function createLocalWorkSessionHttp(withGoalBoardProjectCatalog: LocalWebCatalogRunner, sessionProjectOperationsData: ReturnType<typeof createSessionProjectOperations>) {
+  return async function handleSessions(
+    request: IncomingMessage, response: ServerResponse, url: URL, homeDirectory: string | undefined,
+    options: { boardId: string; project: WebProjectNavigation | null; projects: WebProjectNavigation[] },
+    sessionResources: Promise<SessionRuntimeResources>, readWebView: () => GoalBoardWebView,
+    readGoalContract: WorkSessionHttpContext["readGoalContract"],
+  ): Promise<boolean> {
+    const readProjectWorkspaceRecord = async (workspaceId: string): Promise<ProjectWorkspaceRecord | null> => {
+      if (!options.project) return null;
+      const resources = await sessionResources;
+      const catalogWorkspaces = await withGoalBoardProjectCatalog(
+        { homeDirectory: homeDirectory },
+        (catalog) => catalog.listWorkspaceDirectory(options.project!.project_id),
+      );
+      return sessionProjectOperationsData(
+        resources,
+        options.project.project_id,
+        readWebView(),
+        options.projects,
+        catalogWorkspaces,
+      ).workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
+    };
+    return await handleWorkSessionHttp({
+      method: request.method,
+      pathname: url.pathname,
+      readBody: () => readBody(request),
+      respond: (status, value) => sendJson(response, status, value),
+      resourcesPromise: sessionResources,
+      projectOptions: options,
+      hasCurrentGoal: (goalId) => readWebView().goals.some((item) => item.goal.goal_id === goalId),
+      readGoalContract: (goalId) => readGoalContract(goalId),
+      workspace: {
+        add: (canonicalPath, projectId) => withGoalBoardProjectCatalog(
+          { homeDirectory: homeDirectory },
+          (catalog) => catalog.addWorkspaceProject({ canonical_path: canonicalPath, project_id: projectId, actor_id: "web-user", user_confirmed: true }),
+        ),
+        repair: async (current, canonicalPath, projectId) => {
+          const registry = (await sessionResources).registry;
+          const result = await withGoalBoardProjectCatalog({ homeDirectory: homeDirectory },
+            (catalog) => repairProjectWorkspace({ catalog, registry, current, canonicalPath, projectId, actorId: "web-user" }));
+          return { workspace: result.workspace, updated_session_count: result.sessions.length };
+        },
+        unlink: async (current, projectId) => {
+          const registry = (await sessionResources).registry;
+          const result = await withGoalBoardProjectCatalog({ homeDirectory: homeDirectory },
+            (catalog) => unlinkProjectWorkspace({ catalog, registry, current, projectId, actorId: "web-user" }));
+          return { changed: result.changed, updated_session_count: result.sessions.length };
+        },
+        isActionError: (error) => error instanceof GoalBoardWorkspaceActionError,
+        read: readProjectWorkspaceRecord,
+        normalize: (workspacePath) => normalizeRuntimeWorkContext({
+          runtime_id: "goalboard-web",
+          stable_work_context_id: null,
+          host_declares_stable: false,
+          workspace: { canonical_path: workspacePath, realpath_verified: false },
+        }).workspace,
+        exists: (workspacePath) => fs.existsSync(workspacePath),
+        isDirectory: (workspacePath) => fs.statSync(workspacePath).isDirectory(),
+      },
+    });
+  };
+}

@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,11 +7,11 @@ import test from "node:test";
 import { artifactWorkbench } from "@adeptify/goalboard-app-workbench";
 import { readArtifactBrowser } from "@adeptify/goalboard-plugin-artifacts";
 import type { RegisterArtifactVersionInput } from "@adeptify/goalboard-contracts/modules/artifacts";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 
 const artifactId = "report/季度 & <draft>";
@@ -31,8 +32,8 @@ async function fixture(t: test.TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-artifact-browser-"));
   const databasePath = join(directory, "fixture.db");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   const server = createGoalBoardWebServer({ databasePath, boardId: DEMO_BOARD_ID, homeDirectory: directory,
     controlToken: "artifact-browser-test-control-token-0123456789" });
   t.after(async () => {
@@ -142,12 +143,12 @@ test("Artifact empty, unavailable, archived and embedded views reflect Module st
 test("Artifact navigation and export retain the selected catalog Project", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-artifact-projects-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: directory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: directory });
   const alpha = await catalog.createProject({ display_name: "Alpha results", actor_id: "fixture-user" });
   const beta = await catalog.createProject({ display_name: "Beta results", actor_id: "fixture-user" });
   catalog.close();
-  const store = new SqliteGoalBoardStore(alpha.database_path);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(alpha.database_path);
+  const coordinator = new GoalProjectApplication(store);
   const original = coordinator.artifacts.commands.registerVersion(registration({ board_id: alpha.board_id })).artifact;
   store.close();
   const server = createGoalBoardWebServer({ homeDirectory: directory, controlToken: "artifact-project-test-control-token-0123456789" });

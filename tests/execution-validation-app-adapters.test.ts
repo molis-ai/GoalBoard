@@ -11,14 +11,14 @@ import {
   createWorkbenchExecutionValidationRenderer,
 } from "@adeptify/goalboard-app-workbench";
 
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Workbench, MCP, and CLI share one no-loss execution-validation chain", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-execution-app-adapters-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({
       board_id: "board-execution-adapters",
       title: "Execution App Adapters",
@@ -190,7 +190,11 @@ test("Workbench, MCP, and CLI share one no-loss execution-validation chain", () 
       review_obligations: snapshot.review_obligations.filter((item) => item.goal_id === "goal-cross-entry"),
       reviews: snapshot.reviews.filter((item) => item.goal_id === "goal-cross-entry"),
     };
-    assert.match(renderer.renderRunCell(view), /Run/);
+    const renderedRun = renderer.renderRunCell(view);
+    assert.ok(renderedRun.includes(reviewSelection.run!.run_id));
+    assert.ok(!renderedRun.includes(selected.run!.run_id));
+    assert.match(renderer.renderClaimCell(view), /runtime-reviewer/);
+    assert.equal(view.active_claim, null);
     assert.match(renderer.renderEvidenceCell(view, false), /test:\/\/cross-entry/);
     assert.match(renderer.renderReviewCell(view), /执行者自检/);
   } finally {

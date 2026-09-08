@@ -78,20 +78,20 @@ modules/governance-collaboration/
 tooling/plugin-cli/          Plugin CLI 边界；真实开发工具由 DV3 实现
 scripts/workspace-packages.mjs
                              48 包清单、manifest、入口、README 与 Contract 接线检查
-src/v1/                      SQLite Store、Coordinator、types、CLI 与一次性导入
-src/mcp/server.ts            V1-only MCP Server
-src/web/                     剩余产品 UI、Goal Tree、本机 PTY 与 Host adapters；Shell/视觉基础/Feed renderer 已迁出
-src/desktop/                 AP4 后只保留旧启动配方与推进提示 import 的兼容转发
+src/index.ts、sdk-*.ts        0.1.x SDK 兼容出口；实现由 owner 包提供
+src/mcp/server.ts            MCP 启动入口；协议归 apps/mcp，装配归 Local Host
+src/web/server.ts            Web 启动入口；HTTP/资源装配归 Local Host，页面归 Workbench/Native Plugin
+apps/desktop/               Desktop 平台与 Native adapter；旧 src/desktop 已删除
 apps/local-host/src/installer/
                              安装、Runtime 接入、常驻服务与安全卸载的唯一实现
 apps/local-host/tooling/     构建记录与 npm 发布包生成；调用 Local Host 公开 API
 apps/desktop/tooling/        macOS 构建、Runtime payload、安装与启动脚本
-src/cli/main.ts              产品 CLI 与 V1 管理入口
+src/cli/main.ts              CLI 启动入口；命令归 apps/cli，装配归 Local Host
 desktop/                     macOS App 的 Cargo/Tauri 发布配置；源码位于 apps/desktop/adapters/tauri
 examples/seed-demo.mts       调用产品 demo 生命周期的开发脚本
 docs/screenshots/            README 产品截图
 skills/goal-advance/         Runtime 工作协议
-tests/v1.test.ts             Coordinator、CLI、迁移与协议回归
+tests/v1.test.ts             公共应用、CLI、迁移与协议回归
 tests/goals-command-module.test.ts
                              Goals 公开 Command API、幂等与状态副作用回归
 tests/goals-app-adapters.test.ts

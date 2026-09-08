@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { cp, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,19 +7,19 @@ import test from "node:test";
 import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
 import { ArtifactsModule } from "@adeptify/goalboard-module-artifacts";
 import { createSessionContentStore } from "@adeptify/goalboard-module-private-work-context";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import {
   createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference,
   snapshotBoardCapability,
-} from "../src/local-host/composition.js";
+} from "@adeptify/goalboard-app-local-host";
 
 test("offline Home restore preserves Project, Goal history, Artifact versions and encrypted Session content", async () => {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-home-recovery-"));
   const home = join(directory, "home");
   const backup = join(directory, "backup");
   try {
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const project = await catalog.createProject({ display_name: "恢复演练项目", actor_id: "user" });
     catalog.close();
     const reference = goalBoardHostProjectReference({ databasePath: project.database_path, boardId: project.board_id });
@@ -32,7 +33,7 @@ test("offline Home restore preserves Project, Goal history, Artifact versions an
       });
     } finally { await host.close(); }
 
-    const source = new SqliteGoalBoardStore(project.database_path);
+    const source = new LocalProjectDatabase(project.database_path);
     const artifacts = new ArtifactsModule({ db: source.db, appendEvent: event => source.appendEvent(event) });
     try {
       for (const version of [1, 2]) artifacts.commands.registerVersion({
@@ -59,7 +60,7 @@ test("offline Home restore preserves Project, Goal history, Artifact versions an
     await rename(home, join(directory, "offline-original"));
     await cp(backup, home, { recursive: true, errorOnExist: true, force: false });
 
-    const restoredCatalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const restoredCatalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     try { assert.deepEqual(restoredCatalog.getProject(project.project_id), project); }
     finally { restoredCatalog.close(); }
     const restoredHost = createGoalBoardLocalHost({ instanceId: "backup-restored" });
@@ -68,7 +69,7 @@ test("offline Home restore preserves Project, Goal history, Artifact versions an
       assert.deepEqual(snapshot, before, "all Goal facts and event history survive, not only IDs");
       assert.equal(snapshot.goals.find(goal => goal.goal_id === "retained-goal")?.outcome, "恢复后继续工作");
     } finally { await restoredHost.close(); }
-    const restored = new SqliteGoalBoardStore(project.database_path);
+    const restored = new LocalProjectDatabase(project.database_path);
     try {
       const reader = new ArtifactsModule({ db: restored.db, appendEvent: event => restored.appendEvent(event) });
       assert.deepEqual(reader.query.listArtifactVersions(project.board_id, "report").map(item => item.version).sort(), [1, 2]);

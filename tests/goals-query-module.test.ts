@@ -11,14 +11,14 @@ import {
   GoalsModule,
 } from "@adeptify/goalboard-module-goals";
 
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Policy proposal versions preserve old serialized baselines and distinguish timestamp-only from fact changes", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-policy-version-"));
-  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
+  const store = new LocalProjectDatabase(join(directory, "project.db"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({ board_id: "board", title: "Version compatibility", actor_id: "user", idempotency_key: "init" });
     const goals = new GoalsModule(store.db, {
       supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
@@ -53,9 +53,9 @@ test("Policy proposal versions preserve old serialized baselines and distinguish
 
 test("Goals public Query API owns list, detail, relation, policy, risk, trash, and snapshot reads", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-query-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({
       board_id: "board-query",
       title: "Goals Query",

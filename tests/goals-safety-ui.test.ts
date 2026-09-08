@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkbenchGoalsSafetyRenderer, createWorkbenchUiHost } from "@adeptify/goalboard-app-workbench";
 import { GOALS_SAFETY_UI_CONTRIBUTION_ID, type GoalsSafetyItem, type GoalsSafetyRisk } from "@adeptify/goalboard-plugin-goals";
-import { icon } from "../src/web/icons.js";
-import { L, currentLocale, runWithLocale } from "../src/web/i18n.js";
+import { icon } from "@adeptify/goalboard-design-system";
+import { L, currentLocale, runWithLocale } from "@adeptify/goalboard-app-local-host";
 
 const escapeHtml = (value: unknown) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const renderer = createWorkbenchGoalsSafetyRenderer({ translate: L, currentLocale, icon, escapeHtml,

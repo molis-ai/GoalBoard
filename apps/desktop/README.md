@@ -12,7 +12,7 @@ This package explicitly does **not** own Business facts, Module rules, or Runtim
 
 ## Public entrypoint
 
-`src/index.ts` exposes native-shell detection/bootstrap, Runtime launch recipes, guarded advance prompts, Desktop Panel lifecycle and the Capsule presentation shell. The legacy `src/desktop/` and `src/web/desktop-shell.ts` files are compatibility re-exports only.
+`src/index.ts` exposes native-shell detection/bootstrap, Runtime launch recipes, guarded advance prompts, Desktop Panel lifecycle and the Capsule presentation shell. The legacy `src/desktop/` and `src/web/desktop-shell.ts` files have been removed; callers use this public package.
 
 ## Dependencies
 

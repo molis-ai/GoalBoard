@@ -1,0 +1,182 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { GoalBoardLocalHost } from "./project-host.js";
+import type { RuntimeIntegrationService } from "./installer/runtime-integration.js";
+import type { GoalBoardWebServiceManager } from "./installer/web-service.js";
+import type { WebServerOptions, FeedSchedulerRuntime } from "./web-types.js";
+import type { LocalWebComposition } from "./web-composition.js";
+import { sendLocalWebJson as sendJson, readLocalWebBody as readBody } from "./web-http.js";
+import { L } from "./web-locale.js";
+import fs from "node:fs";
+import { handleGoalsWebHttp } from "@adeptify/goalboard-plugin-goals";
+import { createWorkbenchGoalsAdapter, createWorkbenchExecutionValidationAdapter, type GoalBoardWebView } from "@adeptify/goalboard-app-workbench";
+import type { GoalBoardPtyHost } from "@adeptify/goalboard-service-runtime-host";
+import type { SessionRuntimeResources } from "./web-session.js";
+import { cachedGoalBoardWebView, type GoalBoardWebViewCache } from "./web-view.js";
+import { goalBoardHostProjectReference } from "./project-host.js";
+import { createLocalFeedApplication } from "./feed-application.js";
+import { createLocalFeedSourceScheduler } from "./feed-source-scheduler.js";
+import { createLocalFeedConnectorService } from "./feed-connector-service.js";
+import { handleFeedNativePluginHttp } from "./feed-native-plugin-http.js";
+import { handleLocalProjectReferenceHttp } from "./web-project-reference.js";
+import { serviceProcessId } from "./web-runtime-settings.js";
+import { resolveWebRequest } from "./web-routing.js";
+import { handleLocalCatalogWebRequest } from "./web-catalog.js";
+
+export async function handleGoalBoardWebRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  serverOptions: WebServerOptions,
+  runtimeIntegrations: RuntimeIntegrationService,
+  webService: GoalBoardWebServiceManager,
+  controlToken: string,
+  webViewCache: GoalBoardWebViewCache,
+  feedSchedulers: Map<string, FeedSchedulerRuntime>,
+  ptyHost: GoalBoardPtyHost,
+  webUrl: string,
+  sessionResources: Promise<SessionRuntimeResources>,
+  localHost: GoalBoardLocalHost,
+  composition: LocalWebComposition,
+): Promise<void> {
+  const { PAGE_CSP, handleSessions, handleDesktopPanelApi, goalsReadHttp, planningHttp, desktopRuntimeAvailability, servePtyClient, workbenchRenderer, buildCapsuleSnapshot, handleArtifactNativePluginHttp, isDesktopShellRequest } = composition;
+  const resolved = await resolveWebRequest(serverOptions, url.pathname, composition.withCatalog);
+  if (resolved.kind === "catalog_index") {
+    await handleLocalCatalogWebRequest(request, response, url, serverOptions, runtimeIntegrations, webService, controlToken, feedSchedulers, localHost, resolved.projects, composition);
+    return;
+  }
+      if (resolved.kind === "project_not_found") {
+        sendJson(response, 404, { error: L("找不到这个 GoalBoard 项目") });
+        return;
+      }
+      const options = resolved.options;
+      url.pathname = resolved.pathname;
+      if (!fs.existsSync(options.databasePath)) {
+        if (url.pathname.startsWith("/api/")) {
+          sendJson(response, 404, { error: "GoalBoard 数据库不存在，请先初始化" });
+        } else {
+          response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+          response.end("GoalBoard 数据库不存在，请先运行 goalboard v1 init。\n");
+        }
+        return;
+      }
+      const hostReference = goalBoardHostProjectReference({
+        databasePath: options.databasePath,
+        boardId: options.boardId,
+        projectId: options.project?.project_id,
+      });
+      await localHost.withProject(hostReference, async ({ store, coordinator }) => {
+        if (!feedSchedulers.has(options.databasePath)) {
+        const feed = createLocalFeedApplication(store.db);
+        feed.recoverInterruptedSourceRuns(options.boardId);
+        createLocalFeedConnectorService(store.db, options.boardId).ensureSources();
+        const scheduler = createLocalFeedSourceScheduler(store.db, options.boardId);
+        feedSchedulers.set(options.databasePath, { scheduler });
+        void scheduler.tick().then((result) => {
+          if (result.completed || result.failed) webViewCache.delete(options.databasePath);
+        }).catch(() => undefined);
+      }
+      const goalsAdapter = createWorkbenchGoalsAdapter(coordinator.goals);
+      const executionAdapter = createWorkbenchExecutionValidationAdapter(coordinator.executionValidation);
+      const readWebView = (): GoalBoardWebView =>
+        cachedGoalBoardWebView(webViewCache, store, coordinator, options);
+      {
+        const projectSessionWorkspaceMatch = url.pathname.match(/^\/(sessions|workspaces)$/);
+        if (request.method === "GET" && projectSessionWorkspaceMatch) {
+          const desktopQuery = isDesktopShellRequest(request, url) ? "?desktop=1" : "";
+          response.writeHead(302, {
+            location: `${options.routePrefix}/${desktopQuery}#sessions`,
+            "cache-control": "no-store",
+          });
+          response.end();
+          return;
+        }
+        if (await handleSessions(request, response, url, serverOptions.homeDirectory, options, sessionResources, readWebView,
+          (goalId) => coordinator.goalQueries.readGoalContract(options.boardId, goalId))) return;
+        if (goalsReadHttp.settings(request, response, url, options.boardId, readWebView, coordinator, controlToken)) return;
+        if (await planningHttp.project(request, response, url, serverOptions.homeDirectory, options.boardId, controlToken, readWebView, goalsAdapter.planning)) return;
+        if (request.method === "GET" && url.pathname === "/health") {
+          sendJson(response, 200, {
+            status: "ok",
+            process_id: process.pid,
+            service_process_id: serviceProcessId(),
+            board_id: options.boardId,
+            desktop_tui: true,
+          });
+          return;
+        }
+        if (request.method === "GET" && url.pathname === "/api/runtime-availability") {
+          sendJson(response, 200, desktopRuntimeAvailability());
+          return;
+        }
+        if (request.method === "GET" && url.pathname === "/desktop/pty-client.js") {
+          servePtyClient(request, response);
+          return;
+        }
+        if (request.method === "GET" && url.pathname === "/api/board/cursor") {
+          sendJson(response, 200, { observed_event_cursor: store.eventCursor(options.boardId) });
+          return;
+        }
+        if (goalsReadHttp.fragments(request, response, url, options.boardId, store, coordinator, readWebView)) return;
+        if (request.method === "GET" && url.pathname === "/api/board") {
+          sendJson(response, 200, readWebView());
+          return;
+        }
+        if (await handleFeedNativePluginHttp(request, response, url, {
+          renderer: workbenchRenderer,
+          boardId: options.boardId,
+          routePrefix: options.routePrefix,
+          databasePath: options.databasePath,
+          store,
+          coordinator,
+          readWebView,
+          invalidateWebView: () => webViewCache.delete(options.databasePath),
+        })) return;
+        if (request.method === "GET" && url.pathname === "/api/capsule") {
+          if (!options.project) {
+            sendJson(response, 400, { error: L("请先选择一个 GoalBoard 项目") });
+            return;
+          }
+          const available = coordinator.queryAvailable({
+            board_id: options.boardId,
+            actor_id: "capsule-viewer",
+          }).available;
+          sendJson(response, 200, buildCapsuleSnapshot(readWebView(), available));
+          return;
+        }
+        if (options.project?.project_id) {
+          const handled = await handleDesktopPanelApi(
+            request,
+            response,
+            url,
+            serverOptions,
+            options.project.project_id,
+            coordinator,
+            options.boardId,
+            ptyHost,
+            webUrl,
+          );
+          if (handled) return;
+        }
+        if (handleLocalProjectReferenceHttp(request, response, url, options, coordinator.evidenceVerification.query)) return;
+        if (await handleGoalsWebHttp({
+          method: request.method, pathname: url.pathname,
+          readBody: () => readBody(request), respond: (status, body) => sendJson(response, status, body),
+          options, idempotencyHeader: request.headers["x-goalboard-idempotency-key"],
+          snapshot: () => store.snapshot(options.boardId), changed: () => { webViewCache.delete(options.databasePath); },
+          commands: goalsAdapter.commands, impacts: goalsAdapter.impacts, lifecycle: goalsAdapter.lifecycle,
+          query: coordinator.goalQueries, executionCommands: executionAdapter.commands,
+          setActiveGoal: (...args) => coordinator.setActiveGoal(...args),
+          goalTreeWebInput: coordinator.goalTreeWebInput, goalTreeDecision: coordinator.goalTreeDecision,
+          legacyContractDecision: coordinator.legacyContractDecision,
+          legacyCandidateDecision: coordinator.legacyCandidateDecision, legacyRewireDecision: coordinator.legacyRewireDecision,
+        })) return;
+        if (handleArtifactNativePluginHttp(request, response, url.pathname, {
+          boardId: options.boardId, routePrefix: options.routePrefix ?? "",
+          projectTitle: options.project?.display_name ?? "GoalBoard",
+          query: coordinator.artifacts.query, desktopShell: isDesktopShellRequest(request, url), pageCsp: PAGE_CSP,
+        })) return;
+        if (await goalsReadHttp.page(request, response, url, options, serverOptions.homeDirectory, readWebView, sessionResources, controlToken)) return;
+        sendJson(response, 404, { error: L("页面或接口不存在") });
+      }
+      });
+}

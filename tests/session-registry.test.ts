@@ -3,9 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { findSessionForHostSignals, type RuntimeSessionHostSignals } from "../src/sessions/compatibility.js";
+import { findSessionForHostSignals } from "@adeptify/goalboard-module-private-work-context";
+import type { RuntimeSessionHostSignals } from "@adeptify/goalboard-contracts/modules/private-work-context";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import { GoalBoardSessionError } from "../src/sessions/types.js";
+import { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
 
 async function withRegistry(
   run: (registry: GoalBoardSessionRegistry, home: string) => Promise<void> | void,

@@ -25,7 +25,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@adeptify/goalboard-contracts": "workspace:*"
+    "@adeptify/goalboard-contracts": "workspace:*",
+    "lucide": "^1.31.0"
   },
   "goalboard": {
     "path": "packages/design-system",

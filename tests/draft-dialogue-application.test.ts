@@ -8,13 +8,14 @@ import test from "node:test";
 import { GoalsQueryService, GoalsRepository } from "@adeptify/goalboard-module-goals";
 import { GovernanceClarificationStore, migrateClarificationDialogue } from "@adeptify/goalboard-module-governance-collaboration";
 import { DraftDialogueApplication, type DraftDialogueView } from "@adeptify/goalboard-plugin-goals";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { GoalBoardCoordinator, GoalBoardV1Error } from "../src/v1/coordinator.js";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 
 test("Governance migration 8 rolls back schema and marker together, then persists a usable dialogue after retry", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dialogue-schema-"));
   const databasePath = join(directory, "project.db");
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let sessionId: string;
   try {
     store.db.exec(`
@@ -29,13 +30,13 @@ test("Governance migration 8 rolls back schema and marker together, then persist
     assert.deepEqual(store.db.prepare("SELECT name FROM sqlite_master WHERE name IN ('clarification_sessions', 'clarification_turns')").all(), []);
     store.db.exec("DROP TRIGGER fail_dialogue_migration");
     migrateClarificationDialogue(store.db);
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({ board_id: "board", title: "Recovered dialogue", actor_id: "user", idempotency_key: "init" });
     const saved = coordinator.draftDialogue.startDraftDialogue({ board_id: "board", actor_id: "runtime",
       rough_idea: "迁移后保留的真实澄清正文", idempotency_key: "start" });
     sessionId = saved.dialogue.session_id;
   } finally { store.close(); }
-  const reopened = new SqliteGoalBoardStore(databasePath);
+  const reopened = new LocalProjectDatabase(databasePath);
   try {
     const snapshot = reopened.snapshot("board");
     assert.equal(snapshot.clarification_sessions.find(session => session.session_id === sessionId)?.rough_idea, "迁移后保留的真实澄清正文");
@@ -46,9 +47,9 @@ test("Governance migration 8 rolls back schema and marker together, then persist
 
 test("dialogue owner transaction rolls back Goal, Claim, Run and answer writes together, then permits the same retry", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd1-atomic-"));
-  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
+  const store = new LocalProjectDatabase(join(directory, "project.db"));
   const now = () => new Date("2026-09-06T00:00:00.000Z");
-  const coordinator = new GoalBoardCoordinator(store, now);
+  const coordinator = new GoalProjectApplication(store, now);
   coordinator.initializeBoard({ board_id: "board", title: "Dialogue", actor_id: "user", idempotency_key: "init" });
   let fail = true;
   class InterruptedRecords extends GovernanceClarificationStore {
@@ -96,9 +97,9 @@ test("dialogue owner transaction rolls back Goal, Claim, Run and answer writes t
 
 test("expired dialogue rejects stale and foreign writes, then resumes the same saved discussion", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd1-lease-"));
-  const store = new SqliteGoalBoardStore(join(directory, "project.db"));
+  const store = new LocalProjectDatabase(join(directory, "project.db"));
   let at = "2026-09-06T00:00:00.000Z";
-  const coordinator = new GoalBoardCoordinator(store, () => new Date(at));
+  const coordinator = new GoalProjectApplication(store, () => new Date(at));
   coordinator.initializeBoard({ board_id: "board", title: "Dialogue", actor_id: "user", idempotency_key: "init" });
   const application = coordinator.draftDialogue;
   try {
@@ -140,8 +141,8 @@ test("expired dialogue rejects stale and foreign writes, then resumes the same s
 test("independent Runtime processes contend on the same start/answer and recover persisted history after restart", { timeout: 30_000 }, async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-dd1-process-"));
   const databasePath = join(directory, "project.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  new GoalBoardCoordinator(store).initializeBoard({ board_id: "board", title: "Processes", actor_id: "user", idempotency_key: "init" });
+  const store = new LocalProjectDatabase(databasePath);
+  new GoalProjectApplication(store).initializeBoard({ board_id: "board", title: "Processes", actor_id: "user", idempotency_key: "init" });
   store.close();
   const children: ReturnType<typeof fork>[] = [];
   async function runtime() {
@@ -193,7 +194,7 @@ test("independent Runtime processes contend on the same start/answer and recover
     assert.deepEqual(latest.turns.map(x => x.user_message), [answer.user_message]);
     const first = await reopened.call<DraftDialogueView>("draft_dialogue_resume", { ...resume, history_before_turn_index: latest.history.next_before_turn_index });
     assert.deepEqual(first.turns.map(x => x.user_message), [input.rough_idea]);
-    const read = new SqliteGoalBoardStore(databasePath);
+    const read = new LocalProjectDatabase(databasePath);
     try {
       const snapshot = read.snapshot("board");
       assert.equal(snapshot.goals.length, 1);

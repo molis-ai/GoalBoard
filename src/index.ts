@@ -1,8 +1,5 @@
-export { SqliteGoalBoardStore } from "./v1/store.js";
-export { GoalBoardCoordinator, GoalBoardV1Error } from "./v1/coordinator.js";
-export {
-  importV3Board,
-  type LegacyV3ImportInput,
-  type V3ImportReport,
-} from "./v1/migration.js";
-export type * from "./v1/types.js";
+export { SqliteGoalBoardStore } from "./sdk-store.js";
+export { GoalProjectApplication as GoalBoardCoordinator, importV3Board } from "@adeptify/goalboard-app-local-host";
+export { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
+export type { LegacyV3ImportInput, V3ImportReport } from "@adeptify/goalboard-plugin-goals";
+export type * from "./sdk-types.js";

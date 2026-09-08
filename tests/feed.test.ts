@@ -5,10 +5,10 @@ import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 
-import { importRelayData } from "../src/feed/relay-import.js";
-import { FeedStore } from "../src/feed/store.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { importRelayData } from "@adeptify/goalboard-app-local-host";
+import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 function relayFixture(databasePath: string): Database.Database {
   const db = new Database(databasePath);
@@ -57,7 +57,7 @@ test("migration 29 creates separated Feed and Inbox contracts with persisted rea
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       const tables = new Set((store.db.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table'",
@@ -93,9 +93,9 @@ test("opening a Feed item persists read state without invalidating its action re
   const relay = relayFixture(relayPath);
   try {
     seedDemoBoard(goalboardPath);
-    const store = new SqliteGoalBoardStore(goalboardPath);
+    const store = new LocalProjectDatabase(goalboardPath);
     try {
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
       importRelayData(feed, DEMO_BOARD_ID, relayPath);
       const item = feed.getItem(DEMO_BOARD_ID, "relay-item-1");
       assert.equal(item.read_at, null);
@@ -126,7 +126,7 @@ test("Inbox compatibility view is derived from InboxEntry instead of stored mess
   const goalboardPath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(goalboardPath);
-    const store = new SqliteGoalBoardStore(goalboardPath);
+    const store = new LocalProjectDatabase(goalboardPath);
     try {
       const now = "2026-08-30T02:00:00.000Z";
       store.db.prepare(`
@@ -139,7 +139,7 @@ test("Inbox compatibility view is derived from InboxEntry instead of stored mess
           'github', 'GitHub', 'issue-1', 'https://example.com/issues/1', 'open', 'high',
           '[]', 'octocat', 'inbox', NULL, NULL, 1, ?, ?, ?, ?)
       `).run(DEMO_BOARD_ID, "需要处理的 Issue", "这是一条待判断消息", now, now, now, now);
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
       feed.ensureInboxEntryForFeedItem(DEMO_BOARD_ID, "inbox-message-1", "source_rule", { source_id: "github" });
       assert.equal(feed.getFeedItem(DEMO_BOARD_ID, "inbox-message-1").item_type, "feed");
       assert.equal(feed.getItem(DEMO_BOARD_ID, "inbox-message-1").item_type, "inbox_message");
@@ -172,9 +172,16 @@ test("Relay import is idempotent and preserves GoalBoard disposition", () => {
   const relay = relayFixture(relayPath);
   try {
     seedDemoBoard(goalboardPath);
-    const store = new SqliteGoalBoardStore(goalboardPath);
+    const store = new LocalProjectDatabase(goalboardPath);
     try {
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
+      const beforeImport = feed.snapshot(DEMO_BOARD_ID);
+      store.db.exec(`CREATE TEMP TRIGGER fail_relay_import_event BEFORE INSERT ON events
+        WHEN NEW.type = 'feed.relay_ownership_migrated'
+        BEGIN SELECT RAISE(ABORT, 'injected_relay_import_failure'); END`);
+      assert.throws(() => importRelayData(feed, DEMO_BOARD_ID, relayPath), /injected_relay_import_failure/);
+      assert.deepEqual(feed.snapshot(DEMO_BOARD_ID), beforeImport, "failed import event rolls back Sources, Items, Materials and the import receipt together");
+      store.db.exec("DROP TRIGGER fail_relay_import_event");
       const first = importRelayData(feed, DEMO_BOARD_ID, relayPath);
       assert.deepEqual(first.sources, { created: 1, updated: 0 });
       assert.deepEqual(first.items, { created: 1, updated: 0 });
@@ -243,9 +250,9 @@ test("Relay schema drift fails before it can overwrite imported Feed facts", () 
   const relay = relayFixture(relayPath);
   try {
     seedDemoBoard(goalboardPath);
-    const store = new SqliteGoalBoardStore(goalboardPath);
+    const store = new LocalProjectDatabase(goalboardPath);
     try {
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
       importRelayData(feed, DEMO_BOARD_ID, relayPath);
       relay.prepare("UPDATE items SET title = ? WHERE id = ?").run("不应被导入", "relay-item-1");
       relay.exec("ALTER TABLE items DROP COLUMN body");
@@ -270,9 +277,9 @@ test("Feed disposition updates reject stale revisions and archived shortcuts", (
   const relay = relayFixture(relayPath);
   try {
     seedDemoBoard(goalboardPath);
-    const store = new SqliteGoalBoardStore(goalboardPath);
+    const store = new LocalProjectDatabase(goalboardPath);
     try {
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
       importRelayData(feed, DEMO_BOARD_ID, relayPath);
       const item = feed.getItem(DEMO_BOARD_ID, "relay-item-1");
       const archived = feed.setDisposition(DEMO_BOARD_ID, item.item_id, "archived", item.revision);

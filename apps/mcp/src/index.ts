@@ -67,3 +67,5 @@ export function createMcpExecutionValidationAdapter<TSnapshot>(
 }
 export { validateGoalBoardMcpLauncher } from "./launcher-validation.js";
 export type { McpLauncherValidationContext } from "./launcher-validation.js";
+export { dispatchMcpProjectTool } from "./tool-dispatch.js";
+export type { McpToolDispatchPorts } from "./tool-dispatch.js";

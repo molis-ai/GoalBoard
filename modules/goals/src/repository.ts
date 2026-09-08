@@ -78,7 +78,7 @@ export class GoalsRepository {
       .run(boardId, title, at, at);
   }
 
-  setActiveGoal(boardId: string, goalId: string, at: string): void {
+  setActiveGoal(boardId: string, goalId: string | null, at: string): void {
     this.db.prepare("UPDATE boards SET active_goal_id = ?, updated_at = ? WHERE board_id = ?")
       .run(goalId, at, boardId);
   }

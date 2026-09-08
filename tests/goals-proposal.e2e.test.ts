@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Proposal UI preserves user input on failed confirmation, retries atomically, and rejects without creating Goals", { timeout: 60_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, origin, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;
-  const coordinator = new GoalBoardCoordinator(store);
+  const coordinator = new GoalProjectApplication(store);
   function propose(id: string) {
     const dialogue = coordinator.draftDialogue.startDraftDialogue({
       board_id: DEMO_BOARD_ID, actor_id: "browser-planner", goal_id: id + "-root",
@@ -88,7 +88,7 @@ test("Historical risk repair preserves its plan on network failure and creates a
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, origin, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;
-  const coordinator = new GoalBoardCoordinator(store);
+  const coordinator = new GoalProjectApplication(store);
   const dialogue = coordinator.draftDialogue.startDraftDialogue({
     board_id: DEMO_BOARD_ID, actor_id: "repair-planner", goal_id: "browser-repair-root",
     rough_idea: "升级前由用户选择风险处理方式", idempotency_key: "repair-start",

@@ -30,7 +30,10 @@
     "@adeptify/goalboard-plugin-feed": "workspace:*",
     "@adeptify/goalboard-plugin-artifacts": "workspace:*",
     "@adeptify/goalboard-ui-host": "workspace:*",
-    "@adeptify/goalboard-plugin-work": "workspace:*"
+    "@adeptify/goalboard-plugin-work": "workspace:*",
+    "@adeptify/goalboard-design-system": "workspace:*",
+    "@adeptify/goalboard-integration-rss": "workspace:*",
+    "@adeptify/goalboard-integration-gmail": "workspace:*"
   },
   "goalboard": {
     "path": "apps/workbench",
@@ -53,7 +56,19 @@
       "workbench.feed-composition.v1",
       "workbench.goals-command-adapter.v1",
       "workbench.execution-validation-adapter.v1",
-      "workbench.work-composition.v1", "workbench.goals-policy-composition.v1", "workbench.goals-safety-composition.v1", "workbench.goals-relation-composition.v1", "workbench.goals-tree-composition.v1", "workbench.goals-momentum-composition.v1", "workbench.goals-document-composition.v1", "workbench.goals-context-composition.v1", "workbench.goals-planning-composition.v1", "workbench.goals-status-composition.v1", "workbench.goals-factors-composition.v1", "workbench.goals-dialogs-composition.v1", "workbench.goals-document-routes.v1"
+      "workbench.work-composition.v1",
+      "workbench.goals-policy-composition.v1",
+      "workbench.goals-safety-composition.v1",
+      "workbench.goals-relation-composition.v1",
+      "workbench.goals-tree-composition.v1",
+      "workbench.goals-momentum-composition.v1",
+      "workbench.goals-document-composition.v1",
+      "workbench.goals-context-composition.v1",
+      "workbench.goals-planning-composition.v1",
+      "workbench.goals-status-composition.v1",
+      "workbench.goals-factors-composition.v1",
+      "workbench.goals-dialogs-composition.v1",
+      "workbench.goals-document-routes.v1"
     ]
   }
 }

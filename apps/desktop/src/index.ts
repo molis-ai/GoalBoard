@@ -17,3 +17,8 @@ export * from "./capsule-shell.js";
 export * from "./launch.js";
 export * from "./panels.js";
 export * from "./shell.js";
+
+export { openGoalBoardProjectCatalog, withGoalBoardProjectCatalog } from "./project-catalog.js";
+export { createDesktopWebHost } from "./web-host.js";
+export { createDesktopUninstallService } from "./uninstall.js";
+export { GoalBoardServer } from "./mcp-host.js";

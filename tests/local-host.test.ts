@@ -13,10 +13,10 @@ import {
   createGoalCapability,
   goalBoardHostProjectReference,
   snapshotBoardCapability,
-} from "../src/local-host/composition.js";
+} from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
-import { runV1Cli } from "../src/v1/cli.js";
-import type { CreateGoalInput } from "../src/v1/types.js";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
+import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
 
 test("Local Host discovers one runtime and serializes typed capabilities", async () => {
   const increment = {
@@ -164,12 +164,15 @@ test("CLI, MCP, and Workbench-style client share one writer and recover after re
 
 test("legacy entrypoints no longer construct independent business stores", async () => {
   const { readFile } = await import("node:fs/promises");
-  for (const relativePath of ["../src/web/server.ts", "../src/mcp/server.ts", "../src/v1/cli.ts"]) {
+  for (const relativePath of ["../apps/local-host/src/web-request.ts", "../apps/local-host/src/mcp-server.ts", "../apps/local-host/src/cli-project.ts"]) {
     const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
     assert.doesNotMatch(source, /new\s+(?:SqliteGoalBoardStore|LocalProjectDatabase|GoalBoardCoordinator|GoalProjectApplication)\s*\(/u, relativePath);
     assert.match(source, /GoalBoardLocalHost|localHost/u, relativePath);
   }
-  const composition = await readFile(new URL("../src/local-host/composition.ts", import.meta.url), "utf8");
+  const mcpEntrypoint = await readFile(new URL("../src/mcp/server.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(mcpEntrypoint, /new\s+(?:LocalProjectDatabase|GoalProjectApplication)|prepareLocalProjectStorage|callV1Tool|assertToolAllowed/u);
+  assert.match(mcpEntrypoint, /GoalBoardServer.*from "@adeptify\/goalboard-app-desktop"/u);
+  const composition = await readFile(new URL("../apps/local-host/src/project-host.ts", import.meta.url), "utf8");
   assert.match(composition, /new LocalProjectDatabase\(/u);
   assert.match(composition, /new GoalProjectApplication\(/u);
 });

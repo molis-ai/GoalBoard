@@ -26,7 +26,7 @@ DV4 migration review passed on 2026-09-06. Current npm consumer, macOS App/DMG, 
 
 `LocalHost` discovers one runtime per Project storage key, exposes a typed `LocalHostProjectClient`, serializes Capability calls, and owns runtime close/reopen. Concurrent clients for the same Project reuse the same runtime rather than opening competing writers.
 
-The temporary root adapter `src/local-host/composition.ts` is the only place that constructs the remaining legacy Store and Coordinator. Web, CLI, and MCP consume that Host; Desktop consumes it through Web. As owner migrations continue, the adapter registers public Module/Service capabilities instead of growing into another business coordinator.
+`src/project-host.ts` opens the single project database and application, while `src/project-capabilities.ts` binds public capabilities to their owners. Web, CLI, and MCP consume the public Host; Desktop consumes it through Web. The old root composition adapter has been removed.
 
 The AP2 transport is embedded/in-process and supports explicit Host injection. A standalone daemon or cross-process transport is not claimed here; the Client Contract is kept independent from those future deployment choices.
 

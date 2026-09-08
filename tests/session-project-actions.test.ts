@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import { GoalBoardSessionError } from "../src/sessions/types.js";
+import { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
 
 test("Session project actions are confirmed, atomic, isolated and keep Goal history", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-actions-"));

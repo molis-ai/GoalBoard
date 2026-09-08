@@ -44,7 +44,21 @@
     "@adeptify/goalboard-module-signals": "workspace:*",
     "@adeptify/goalboard-module-attention-resumption": "workspace:*",
     "@adeptify/goalboard-service-listener-host": "workspace:*",
-    "@adeptify/goalboard-plugin-goals": "workspace:*"
+    "@adeptify/goalboard-plugin-goals": "workspace:*",
+    "@adeptify/goalboard-app-workbench": "workspace:*",
+    "@adeptify/goalboard-module-projects": "workspace:*",
+    "@adeptify/goalboard-plugin-feed": "workspace:*",
+    "@adeptify/goalboard-integration-rss": "workspace:*",
+    "@adeptify/goalboard-integration-youtube": "workspace:*",
+    "@adeptify/search-evidence-layer": "file:../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz",
+    "@adeptify/intelligence-client": "file:../../vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz",
+    "@adeptify/goalboard-integration-gmail": "workspace:*",
+    "@adeptify/goalboard-integration-github": "workspace:*",
+    "@adeptify/goalboard-service-connector-host": "workspace:*",
+    "@adeptify/goalboard-service-runtime-host": "workspace:*",
+    "ws": "^8.21.3",
+    "@adeptify/goalboard-plugin-work": "workspace:*",
+    "@adeptify/goalboard-app-cli": "workspace:*"
   },
   "goalboard": {
     "path": "apps/local-host",
@@ -60,5 +74,8 @@
       "local-host.client.v1",
       "local-host.single-writer.v1"
     ]
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

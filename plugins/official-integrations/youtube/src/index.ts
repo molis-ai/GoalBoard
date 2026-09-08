@@ -51,3 +51,5 @@ export function createYoutubeIntegrationPlugin(input: {
 }
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+
+export * from "./channel.js";

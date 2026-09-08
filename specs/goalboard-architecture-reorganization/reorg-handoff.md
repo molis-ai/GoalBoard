@@ -4,6 +4,43 @@
 
 ## 最新可信进度
 
+2026-09-08 最终 Cutover：现有代码迁移、统一用户 E2E、四个实测缺陷修复、最终包安装与 Native App 验证、测试 Home 清理和初始架构审计已完成。结果见 [最终架构审计](final-architecture-audit.md) 与 [统一验证记录](cutover-validation.md)。
+
+最终生产代码上完整 755 项运行为 754 pass/1 旧断言 fail；修正断言后定向 1 pass；类型、包边界及 23 项反例测试通过。旧混合目录退出，根仅 6 个启动/SDK 文件，0 兼容豁免。新包未升级现用 Home，原 4173 服务已恢复；测试 4197 已停，临时 Home 和其中通知副本/测试凭据已删除。无 commit/push。Outbox、Team/Server 与公开发布继续按既有边界后置。
+
+正式验收已完成：Cutover valid/satisfied/completed，Review review-fbec8d02-b66f-4903-af65-892e8eb135fe；根 Goal valid/satisfied/verified，但仍有历史 coverage_revision_stale 提示，UI continue，未强行消除。均无 active Claim/Run。
+
+## 历史执行记录（以下阶段待办与租约已过时）
+
+- **最后入口与SDK迁移完成，进入全量自动回归（2026-09-08）**：卸载6/0/0、MCP44/0/0+真实stdio、CLI11/0/0、SDK/V1/迁移/边界139/0/0全部通过。Root只剩SDK index/store/types和CLI/MCP/Web入口，旧v1/Desktop目录删除；内部caller使用公开owner，根SDK保留本版本旧读方法/名称和唯一owner类型alias。MCP App tool-dispatch、Host身份/资源、Desktop Catalog注入；CLI App command-dispatch和顶层dispatch、Host存储/本机服务装配。边界719源码2784imports101边0errors、0compatibility豁免。当前 `NODE_NO_WARNINGS=1 pnpm test` 全量构建已完成、测试运行中（log `/private/tmp/goalboard-cutover-full-regression.log`）；不修改生产源码或build输入直到该轮结束。初步只读全仓体积扫描发现ClaimCommands835、WorkState727、Verification667等需要在清理/总审判断职责，不能把旧Huge计数0当全仓无Huge。下一步完整回归问题处理→统一真实UI/后端E2E→清理复验→初始架构总审；仍未关Cutover。Claim原到10:29:49.887UTC，按实际Contract续租。
+
+
+- **Web完整退出与Host主装配迁移（2026-09-08）**：root Web仅57行命令/资源路径，Desktop web-host提供平台，Host按routing/catalog/request/server/composition/types分开，Native Goals拥有8组写请求。完整Web/desktop-tui/Session/Workspace98/0/0通过，Host/Desktop/root build、707源码2701imports100边0errors，旧Huge清单0（尚非最终全仓审查）。V3导入Native映射+Module末事件/指针、Host装配，8迁移回归；唯一Host composition改公开包、30入口回归；规划5+1、读页面8+4、引导3、Plugin完整CLI样例1通过。现无运行中测试。下一步旧CLI/MCP装配与uninstall/SDK最后残留退出，再执行原定完整E2E→清理→复验→初始架构总审。Claim到10:29:49.887UTC cursor1330。
+
+- **Session与Runtime/Project设置HTTP退出（2026-09-08）**：Host web-session拥有Registry/Runtime/Work资源装配与项目操作视图注入，session-migration拥有旧Panel/Binding投影；旧root session compatibility/types删除，Web/MCP/测试改公开owner。Host依赖既有Work包，离线0下载。11会话/迁移/重启回归通过；Runtime HTTP设置3项及项目设置/Demo/旧库迁移4项回归通过，重启finish顺序不变。各次Host/root编译、边界/diff通过，676源码2478imports99边0errors；root Web2252行。没有运行中测试。下一步已读到root composition仍依赖V3 JSON migration145行SQL/业务，须先迁V3再退出Host composition；未写V3 spec/代码。Claim续到10:01:02.073UTC、cursor1329。最终E2E/清理/总审未开始。
+
+- **主Web视图与HTTP通用收发退出（2026-09-08）**：Native Goals document-index111/projection142/collection54/ports14拥有Goal只读视图，Storage journal持有原倒序事件读取，Host web-view组合Feed/Project及原cache；7事实/迁移+10状态/事件/缓存/语言回归通过。Host web-http/web-assets持有原鉴权/body/response与资源ETag收发，PTY入口路径callback保持root，3真实鉴权/资产/健康检查回归通过。定向build/root编译、diff和边界通过，671源码2444imports98边0errors；root server现在2633行。没有运行中的build/test。下一步继续SessionRuntimeResources/Panel装配、settings/onboarding/project路由与Goal写路由；本轮未写这些后续spec或代码。Claim仍到09:35:29.309UTC，最后剩余928秒，无需提前续。最终E2E/清理/总审未开始。
+
+- **Artifact / Onboarding / Capsule / PTY旧Web入口退出（2026-09-08）**：Artifact Host收发+Workbench主题页面，Desktop bootstrap注入；8回归通过。Onboarding本机状态迁Host，3真实引导回归通过。Capsule Workbench types/items/snapshot投影、Host locale工厂、Desktop原Shell注入，11状态+2多项目/语言HTTP回归通过。PTY Socket迁Host消费Runtime Host，6持久化/UI+9实际PTY回归通过；同批零caller Desktop/PTY/Visual兼容文件删除。各slice定向build/root编译、diff通过，664源码2393imports98边6兼容1旧Huge、边界0errors。Host新增Runtime Host与原ws依赖，离线118已解析/82缓存/0下载；沙箱pnpm要求清空modules，未执行清空，改原缓存环境获准离线安装成功。所有build/test已终止；root Web只剩server.ts 3175行，下阶段先读其view projection/路由/资源装配，不能整文件搬Host。Claim续到09:35:29.309UTC、cursor1328。最终完整E2E→清理→再E2E→总架构审查仍待全量开发完成。
+
+- **Feed HTTP也已退出**：Native Feed三个请求handler组合负责校验与产品操作，Host107行保留Node transport/公开工厂/Workbench渲染绑定；root `feed-native-plugin-http.ts`删除。Native+Host build/root编译、28回归+5实际HTTP/重启回归均0fail/0skip，657源码2357imports97边0errors。当前没有运行中的构建或测试；下一步读Artifact HTTP与Web剩余composition依赖，再迁Artifact/Capsule/Onboarding/PTY及大Web入口，不能直接整文件搬Host造成Desktop循环。
+
+- **Relay与Feed旧目录退出（2026-09-08）**：`src/feed`已无源文件；Host Relay reader/安全装配、Storage旧格式读取、Native批量导入已真实落地，prepare快照→复制credential→commit原事务顺序保持。build+41回归、Relay final event ABORT回滚/重试、4项实际Feed contract回归通过；只测无用重复状态机的元数据测试已退出，生产fixtures迁tests/fixtures。Feed Item升格Goal也已迁Native+Host有限端口，5回归含实际绑定失败回滚/复用/旧revision/丢弃Draft替换/归档拒绝通过。当前650源码2317imports97边0errors；Claim到09:08:36.981UTC。下一步Feed请求处理/Node传输与剩余Web3171行、Capsule/PTY/Onboarding、CLI/MCP/SDK公开出口；总Goal未完成，最终完整E2E/清理/总审未开始。
+
+- **账号/同步/调度退出（2026-09-08）**：root Connector service/types/providers/registry/OAuth/installations/scope与Source scheduler均已删除，真实caller改Host factories；Native Feed拥有账号管理、来源登记、Connector同步与Scheduler，Integration解释Provider协议/账号权限，Host提供同库Listener/Signals/PluginRuntime与Secret装配。Provider Host26、同步30、账号+调度34回归均0fail/0skip；新增Source/event失败回滚与Listener终态独立持久化、真实Host OAuth到账号Source再解绑测试。641源码2271imports97边6兼容1旧Huge、0errors，构建已完成（accounts首轮根类型import修复后续建通过）。当前Claim续到08:41:22.999UTC，cursor1326。下一主线：Relay旧库读取/解密/映射与Feed剩余测试式contract入口，再继续Web/CLI/MCP/Host总装配；整项开发/E2E仍未完成。
+
+- **Connector授权最新切片**：Host credential adapter/GitHub Device Flow与Gmail OAuth均已迁出旧root入口。Provider协议由Integration工厂拥有，Host只注入本机Secret/env能力。GitHub build+33回归、Gmail build+36回归全部0fail/0skip；Gmail新增state/TTL/identity/redirect门禁、并发回调按账号隔离、刷新失败与成功测试。625源码2184imports96边0errors；下一步Gmail installation/scope旧入口退出后继续Connector业务与Scheduler，不是整体开发完成。
+
+- **2026-09-08 最新状态**：从`2260155`继续的变更未commit；没有修改现用安装、服务或用户项目。Cutover仍在执行，总Goal未完成，Outbox继续按用户决定后置。当前Run `run-c68ee77f-0153-4a43-9745-fe3ee9c9890d`、Claim `claim-20475297-ba3d-4f45-ba25-d8d1b4aeddc9`、actor `codex-runtime-01a07630-be49-7791-bb05-de4db2d1377b`，租约以实时Contract为准。
+- **真实退出的旧入口**：`src/web/render.ts`、`src/projects/catalog.ts`、`catalog-session.ts`、`desktop-panel-adapter.ts`、`src/v1/demo.ts`与root Feed security/content等已删除，caller改公开owner。Workbench工厂组合注册UI，Host绑定唯一请求语言作用域，Desktop提供shell端口。风险决定归Goals Safety Contribution。默认GoalPolicy文本唯一归Goals；旧SDK仍兼容导出。
+- **Catalog与本地内容**：Runtime选择/建议/确认绑定/解绑/创建请求幂等归Private Work Context；Host按创建迁移/删除恢复/Demo重建分担文件生命周期。Host Catalog唯一装配，Desktop通过平台入口注入独立SQLite adapter，Host无反向Desktop依赖。Storage负责readonly/integrity/checkpoint/catalog metadata，以及原SecretStore技术adapter；Feed Module负责保留正文引用/内容，Host负责呈现时hydrate。原schema1–10、事务、错误identity与恢复路径保持。
+- **Feed应用与来源Runtime**：旧Store已删除，Native FeedApplication消费Module契约和有界事务/Listener/回执/事件端口，Host同连接装配。Relay目标DB直写已收回，批量导入/回执/事件仍同事务。Module错误identity归其Contracts并原入口重导出。RSS目录/Custom URL/正文分类归RSS，YouTube标识归YouTube，opaque搜索缓存/CAS/AEAD/Secret适配归Storage。Host持可信身份与SDK生命周期，Native Feed执行exact来源约束（Host注入definition端口），RSS ./host持网络实现；Plugin间无实现引用。root sources/runtime、intelligence-adapter、catalog、custom-rss、youtube、feed-body、search-storage和feed/errors已删除。
+- **Source业务最新切片**：旧SourceService删除，Native来源管理227/同步280/请求142行，通过有限provider/运行时/事务/事件端口消费Host装配。Sources契约拥有原sourceDeletedAt与RSS receipt公共类型；RSS/Gmail/YouTube实现仍在Integration。Host复用原event ID/actor、同连接immediate事务、错误与shutdown顺序。源码已通过完整build；35项Source/Upgrade/Feed/Connector/HTTP回归0fail/0skip，新提交失败回滚/同键恢复测试通过且去掉事务能稳定失败，构建已恢复。日志 `goalboard-cutover-source-service-{build,regression}` / `source-rollback{,-mutation}`。
+- **证据**：切片详见cutover-work-plan；最新616源码2159imports95边、7兼容白名单、1旧Huge，边界0errors，类型/diff通过。页面五组严格输出比对原证据保持。原118依赖离线0download。当前没有未结束构建或测试。
+- **仍需处理**：root Web HTTP3176行、SourceScheduler、Connector/OAuth/Relay读取导入、Capsule/PTY/Onboarding与残留SDK/CLI/MCP装配。下一步读ConnectorService/Provider Registry/OAuth调用链，先写切片spec，再迁真实业务与Host生命周期；SourceScheduler复用Host source工厂但仍耦合Connector构造，随此切片退出。首次样式回归仍有一条旧测试期待搜索框display:none、生产display:flex，最终清理时处理，不改产品凑绿。
+- **审批事实**：Runtime首次混合大脚本被自动审批拒绝且未执行；准备具体14文件diff、核对§24授权与git apply --check后，单独重审应用补丁和离线安装均获批并完成。已解除，不再当阻塞或重放转换脚本。
+- **最终顺序不变**：全部开发→真实前后端用户E2E（含Desktop/CLI/MCP/安装升级卸载/恢复）→代码清理→受影响E2E复验→初始架构逐条总审。当前不是只剩测试，不得因局部全绿标完成或重复索取授权。以下为历史进度，不能覆盖本段。
+
 - **11:55UTC续接**：Storage连接/公共Journal已真实实现；Feed导入及迁移回执归Feed；迁移1–31/Feed相关Module启动顺序归Local Host；旧Store.snapshot改调Goals Plugin公开查询组合，四Module提供只读组装工厂。对应回归126、11+10、132、123均0fail/0skip，日志和修改边界见cutover-work-plan。两次真实pnpm内部依赖同步通过，外部依赖仍为原118项。旧Store约160行，Coordinator607行，尚非全量cutover完成。当前Claim续至12:19:04UTC，同一Run/actor继续；完整pnpm build已通过（48包、root清理后重建及PTY bundle）；Web/Host/Runtime/迁移跨入口回归见 `/private/tmp/goalboard-cutover-shared-entry-regression.log`，结束状态以实际进程为准。下一步读该回归结果，再继续Host/旧Catalog/Web/renderer等真实caller退出。旧Store历史读取wrapper仍在，不能说Repository已全部退出。
 
 - **Cutover本轮后续切片（11:36UTC）**：工作阶段/完成门禁、资格评价、Ready/Available/Explain、Risk action授权、Review义务、Contract读模型均已归Goals Plugin；Board创建/current Goal写入及生命周期清理归Goals。Coordinator当前607行，SQL与Repository旁路已删除，尚有装配及有限转发，未宣称Host已退出。工作阶段135/0/0；资格151+查询7/0/0；Risk/Review/读模型124/0/0；Board121+直接Module3/0/0（含初始化事件失败回滚、重试幂等、无Host hook完成后指针清除及重开），详见cutover-work-plan与/tmp日志。新包构建/root tsc/48包边界0errors。当前Claim已续到11:53:57UTC，后续以实时Contract为准；同一Run继续。

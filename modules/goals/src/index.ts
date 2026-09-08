@@ -161,6 +161,7 @@ export class GoalsModule<TTransition> {
     const boards = new GoalBoardCommands(context);
     this.commands = {
       initializeBoard: input => boards.initializeBoard(input),
+      completeLegacyBoardImport: input => boards.completeLegacyBoardImport(input),
       setActiveGoal: (...args) => boards.setActiveGoal(...args),
       importLegacyCoverage: (boardId, rows) => new LegacyGoalCoverage(context).import(boardId, rows),
       applyAcceptedRewireRelations: input => acceptedRewireRelations.apply(input),
@@ -207,6 +208,7 @@ export class GoalsModule<TTransition> {
     };
     this.lifecycle = lifecycle;
     this.query = {
+      listBoardIds: () => query.listBoardIds(),
       listActivePolicyBindings: (...args) => query.listActivePolicyBindings(...args),
       listLegacyCoverage: boardId => query.listLegacyCoverage(boardId),
       listPolicyHistory: boardId => query.listPolicyHistory(boardId),
@@ -346,3 +348,5 @@ export function createGoalReadServices(db: GoalsSqliteDatabase): {
   const repository = new GoalsRepository(db);
   return { query: new GoalsQueryService(repository), impacts: new GoalImpactCommands(new GoalsCommandContext(repository)) };
 }
+
+export { DEFAULT_GOAL_POLICY } from "./query.js";

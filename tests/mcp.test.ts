@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -7,7 +8,7 @@ import { describe, it } from "node:test";
 import Database from "better-sqlite3";
 import { GoalBoardCoordinator, SqliteGoalBoardStore } from "../src/index.js";
 import { GoalBoardServer, runtimeContextHostFromEnvironment } from "../src/mcp/server.js";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -404,7 +405,7 @@ describe("mcp server", () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-reader-too-old-"));
     const home = path.join(directory, "home", ".goalboard");
     try {
-      const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+      const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
       await catalog.createProject({ display_name: "保留项目", actor_id: "user" });
       catalog.close();
       const databasePath = path.join(home, "projects", "catalog.db");
@@ -2390,7 +2391,7 @@ describe("mcp server", () => {
   it("resolves the current host work entry only when the Skill calls it, then resumes the same host Session", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-context-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const call = async (server: GoalBoardServer, name: string, args: Record<string, unknown>) =>
       server.handleMessage({
         jsonrpc: "2.0",
@@ -2718,7 +2719,7 @@ describe("mcp server", () => {
     const home = path.join(directory, "home", ".goalboard");
     const workspace = path.join(directory, "ordinary-workspace");
     fs.mkdirSync(workspace, { recursive: true });
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const host = runtimeContextHostFromEnvironment({
       GOALBOARD_RUNTIME_ID: "codex",
       GOALBOARD_HOME: home,
@@ -2808,7 +2809,7 @@ describe("mcp server", () => {
   it("isolates project connections for generic Runtime sessions in one MCP process", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-session-isolation-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const host = {
       homeDirectory: home,
       runtimeContext: {
@@ -2873,7 +2874,7 @@ describe("mcp server", () => {
   it("classifies a bound Session identity gap as resolve-and-retry without requesting another bind", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-context-refresh-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const host = {
       homeDirectory: home,
       runtimeContext: {
@@ -2959,7 +2960,7 @@ describe("mcp server", () => {
   it("returns host-ranked project suggestions for a fresh Session without auto-binding or repeating a rejection", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-suggestion-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const call = async (server: GoalBoardServer, name: string, args: Record<string, unknown>) =>
       server.handleMessage({
         jsonrpc: "2.0",
@@ -3102,7 +3103,7 @@ describe("mcp server", () => {
   it("lets the current Runtime list, unbind, and separately confirm project deletion", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-project-lifecycle-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const call = async (server: GoalBoardServer, name: string, args: Record<string, unknown>) =>
       server.handleMessage({
         jsonrpc: "2.0",
@@ -3663,12 +3664,12 @@ describe("mcp server", () => {
         relations: Array<{ relation_id: string; state: string }>;
       };
       assert.equal(finalSnapshot.relations.find((item) => item.relation_id === relationId)?.state, "active");
-      const mcpSource = fs.readFileSync(path.join(ROOT, "src/mcp/server.ts"), "utf8");
+      const mcpSource = fs.readFileSync(path.join(ROOT, "apps/mcp/src/tool-dispatch.ts"), "utf8");
       assert.match(mcpSource, /createMcpGoalTrashHandlers\(availability,/);
       assert.match(mcpSource, /trashTools\[name\]\(arguments_\)/);
       const trashSource = fs.readFileSync(path.join(ROOT, "apps/mcp/src/goal-trash-commands.ts"), "utf8");
       assert.match(trashSource, /await application\.setTrashedWithWorkState\(/);
-      const hostSource = fs.readFileSync(path.join(ROOT, "src/local-host/composition.ts"), "utf8");
+      const hostSource = fs.readFileSync(path.join(ROOT, "apps/local-host/src/project-capabilities.ts"), "utf8");
       assert.match(hostSource, /register\(goalEntryCompositionCapabilities\.setTrashedWithWorkState/);
       assert.match(hostSource, /goals\.lifecycle\.setTrashed\(\.\.\.input\)/);
       assert.doesNotMatch(trashSource, /coordinator|\.store\.|\.db\./);
@@ -3747,7 +3748,7 @@ describe("mcp server", () => {
   it("links a desktop panel host threadId onto the same project binding", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "goalboard-mcp-panel-"));
     const home = path.join(directory, "home", ".goalboard");
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     const call = async (
       server: GoalBoardServer,
       name: string,
@@ -3791,7 +3792,7 @@ describe("mcp server", () => {
       assert.equal(payload.connection?.project_id, project.project_id);
       assert.ok(payload.session_registry.session);
       catalog.close();
-      const reopened = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+      const reopened = await openGoalBoardProjectCatalog({ homeDirectory: home });
       try {
         assert.equal(
           reopened.findDesktopPanelByWorkContext("codex", "live-codex-thread")?.panel_id,

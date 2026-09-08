@@ -1,14 +1,15 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
 import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import type { RuntimeSessionTransport } from "../src/sessions/types.js";
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 const TOKEN = "goalboard-session-directory-token-0123456789";
@@ -116,7 +117,7 @@ test("Session directory discovers metadata without content or silent association
 test("project Session directory APIs discover, link, create, transfer, archive and restore real records", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-directory-web-"));
   const home = path.join(directory, ".goalboard");
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const first = await catalog.createProject({ display_name: "Project A", actor_id: "user" });
   const second = await catalog.createProject({ display_name: "Project B", actor_id: "user" });
   catalog.close();

@@ -1,3 +1,4 @@
+import { SourcesError, sourceDeletedAt } from "@adeptify/goalboard-contracts/modules/sources";
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -34,15 +35,7 @@ export interface SourcesSqliteDatabase {
   transaction<T>(operation: () => T): (() => T) & { immediate(): T };
 }
 
-export class SourcesError extends Error {
-  constructor(
-    readonly code: "source_not_found" | "source_invalid_schedule" | "source_invalid_transition",
-    message: string,
-  ) {
-    super(message);
-    this.name = "SourcesError";
-  }
-}
+export { SourcesError } from "@adeptify/goalboard-contracts/modules/sources";
 
 /**
  * Owns Source desired state in the existing `feed_sources` table while FD1
@@ -296,12 +289,7 @@ export class SourcesModule implements SourcesApi {
   }
 }
 
-export function sourceDeletedAt(source: Pick<SourceRecord, "config">): string | null {
-  const lifecycle = source.config._goalboard_lifecycle;
-  if (!lifecycle || typeof lifecycle !== "object" || Array.isArray(lifecycle)) return null;
-  const value = (lifecycle as Record<string, unknown>).deleted_at;
-  return typeof value === "string" && value ? value : null;
-}
+export { sourceDeletedAt } from "@adeptify/goalboard-contracts/modules/sources";
 
 function mapSource(row: Row): SourceRecord {
   const schedule = parseJson<SourceSchedule>(row.schedule_json, { mode: "manual" });

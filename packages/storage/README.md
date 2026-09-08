@@ -15,7 +15,7 @@ pnpm --filter @adeptify/goalboard-storage typecheck
 pnpm --filter @adeptify/goalboard-storage build
 ```
 
-Migration source: `src/v1/store.ts`. Host assembly and remaining Feed storage consumers are tracked in the [Cutover work plan](../../specs/goalboard-architecture-reorganization/cutover-work-plan.md).
+Migration source: `src/v1/store.ts`. The legacy source has been removed. Host assembly and migrated Feed storage consumers are documented in the [Cutover work plan](../../specs/goalboard-architecture-reorganization/cutover-work-plan.md).
 
 Migration Goals: `goal-reorg-f2`, `goal-reorg-ap2` and the accepted final Cutover.
 

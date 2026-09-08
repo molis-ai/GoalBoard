@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -8,9 +9,9 @@ import test from "node:test";
 import { installGoalBoardHome } from "@adeptify/goalboard-app-local-host";
 import { RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardUninstallError } from "@adeptify/goalboard-app-local-host";
-import { createLocalUninstallService } from "../src/local-host/uninstall.js";
+import { createDesktopUninstallService as createLocalUninstallService } from "@adeptify/goalboard-app-desktop";
 import { GoalBoardWebServiceManager } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -19,7 +20,7 @@ async function fixture() {
   const userHome = join(directory, "user");
   const home = join(userHome, ".goalboard");
   await installGoalBoardHome({ homeDirectory: home, sourceDirectory: ROOT, version: "0.1.0-uninstall-test" });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const userProject = await catalog.createProject({ display_name: "用户项目", actor_id: "user" });
   const demo = await catalog.ensureDemoProject({ actor_id: "user", user_confirmed: true });
   catalog.close();
@@ -62,7 +63,7 @@ test("safe uninstall preview is read-only and confirmation preserves every user 
       sourceDirectory: ROOT,
       version: "0.1.0-uninstall-test-reinstalled",
     });
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: item.home });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: item.home });
     try {
       assert.deepEqual(catalog.listProjects().map((project) => [project.display_name, project.data_class]), [
         ["用户项目", "user"],

@@ -4,8 +4,9 @@ import test from "node:test";
 import { checkDraftDialogueOwnership, checkDraftProposalOwnerSql, checkGoalTreeApplicationOwnership, checkProposalUiOwnership } from "../scripts/check-package-boundaries.mjs";
 
 test("DD2 UI guard rejects restored root implementations, bypassed mounts and legacy client handlers", () => {
-  const sources = ["src/web/render.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
-    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+  const sources = ["apps/workbench/src/renderer.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
+    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      + (file === "apps/workbench/src/index.ts" ? readFileSync(new URL("../apps/workbench/src/ui-composition.ts", import.meta.url), "utf8") : ""));
   assert.deepEqual(checkProposalUiOwnership(...sources), []);
   for (const name of ["renderGoalTreeProposalDecision", "renderContractProposal", "recentDecisionResults"]) {
     const changed = [...sources]; changed[0] += `\nfunction ${name}(view) { return oldRenderer(view); }`;
@@ -20,8 +21,9 @@ test("DD2 UI guard rejects restored root implementations, bypassed mounts and le
 });
 
 test("DD2 submission guard rejects the legacy caller, facade and application persistence", () => {
-  const sources = ["src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-submission.ts"]
-    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+  const sources = ["apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", "plugins/native/goals/src/goal-tree-submission.ts"]
+    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      + (file === "apps/workbench/src/index.ts" ? readFileSync(new URL("../apps/workbench/src/ui-composition.ts", import.meta.url), "utf8") : ""));
   assert.deepEqual(checkGoalTreeApplicationOwnership(...sources), []);
   assert.match(checkGoalTreeApplicationOwnership(`${sources[0]}\n  submitGoalTreeProposal(input) { return legacy(input); }`, sources[1], sources[2]).join("\n"), /legacy/);
   assert.match(checkGoalTreeApplicationOwnership(sources[0], sources[1].replace("coordinator.goalTreeSubmission.submitGoalTreeProposal(", "coordinator.submitGoalTreeProposal("), sources[2]).join("\n"), /public goalTreeSubmission/);
@@ -39,8 +41,9 @@ test("Draft owner guard rejects restoring the removed cross-module proposal SQL"
 });
 
 test("DD2 preflight guard rejects a restored legacy check or SQL callback", () => {
-  const sources = ["src/v1/coordinator.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-check.ts"]
-    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+  const sources = ["apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", "plugins/native/goals/src/goal-tree-check.ts"]
+    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      + (file === "apps/workbench/src/index.ts" ? readFileSync(new URL("../apps/workbench/src/ui-composition.ts", import.meta.url), "utf8") : ""));
   const check = (...args) => checkGoalTreeApplicationOwnership(...args, "checkGoalTreeProposal", "goalTreeCheck");
   assert.deepEqual(check(...sources), []);
   assert.match(check(`${sources[0]}\n  checkGoalTreeProposal(input) { return legacy(input); }`, sources[1], sources[2]).join("\n"), /legacy/);
@@ -57,8 +60,9 @@ for (const [method, port, file] of [
   ["submitCandidate", "legacyProposalSubmission", "legacy-proposal-submission"],
   ["submitDependencyProposal", "legacyProposalSubmission", "legacy-proposal-submission"],
 ]) test(`DD2 ${method} cannot return to Coordinator or call its persistence`, () => {
-  const sources = ["src/v1/coordinator.ts", "src/local-host/composition.ts", `plugins/native/goals/src/${file}.ts`]
-    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+  const sources = ["apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", `plugins/native/goals/src/${file}.ts`]
+    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      + (file === "apps/workbench/src/index.ts" ? readFileSync(new URL("../apps/workbench/src/ui-composition.ts", import.meta.url), "utf8") : ""));
   const check = (...args) => checkGoalTreeApplicationOwnership(...args, method, port);
   assert.deepEqual(check(...sources), []);
   assert.match(check(`${sources[0]}\n  ${method}(input) { return legacy(input); }`, sources[1], sources[2]).join("\n"), /legacy/);
@@ -67,9 +71,10 @@ for (const [method, port, file] of [
 });
 
 test("DD1 guard accepts the real owners and rejects restored legacy callers, facades and cross-owner SQL", () => {
-  const sources = ["src/v1/coordinator.ts", "src/local-host/composition.ts",
+  const sources = ["apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts",
     "plugins/native/goals/src/draft-dialogue-application.ts"]
-    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+    .map(file => readFileSync(new URL(`../${file}`, import.meta.url), "utf8")
+      + (file === "apps/workbench/src/index.ts" ? readFileSync(new URL("../apps/workbench/src/ui-composition.ts", import.meta.url), "utf8") : ""));
   assert.deepEqual(checkDraftDialogueOwnership(...sources), []);
   for (const method of ["startDraftDialogue", "recordDraftDialogueTurn", "resumeDraftDialogue"]) {
     assert.match(checkDraftDialogueOwnership(`${sources[0]}\n  ${method}(input) { return legacy(input); }`, sources[1], sources[2]).join("\n"), /legacy/);

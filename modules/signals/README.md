@@ -14,11 +14,11 @@ It does not connect to Providers, store Listener cursor/lease, decide Feed/Atten
 
 ## FD1 implementation
 
-The GitHub/Gmail compatibility caller now passes Raw Events through Listener Host and this Module before creating the current Feed projection. `signals` and `signal_revisions` are the formal external-event facts; `feed_items` remain the current Feed facts until `goal-reorg-fd2`.
+The GitHub/Gmail compatibility caller now passes Raw Events through Listener Host and this Module before creating the current Feed projection. `signals` and `signal_revisions` are the formal external-event facts; `feed_items` are owned by the Feed Module.
 
-## Remaining legacy callers
+## Current callers
 
-Public RSS/Web Query/YouTube collection still normalizes directly in `src/feed/sources/service.ts`; provider adapters move in `goal-reorg-fd3`. The Feed projection switches fully in `goal-reorg-fd2` and UI callers in `goal-reorg-fd4`.
+Integration Plugins normalize Provider data, Listener Host manages durable receipt/delivery state, and Native Feed composes the Source/Signal/Feed path. Public RSS/YouTube provider code and source use cases have left the old `src/feed` tree. Workbench consumes Native Feed UI contributions.
 
 ## Commands
 

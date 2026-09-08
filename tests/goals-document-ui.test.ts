@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkbenchGoalsDocumentRenderer, createWorkbenchUiHost } from "@adeptify/goalboard-app-workbench";
 import { GOALS_DOCUMENT_UI_CONTRIBUTION_ID, type GoalsDocumentItem, type GoalsDocumentContext } from "@adeptify/goalboard-plugin-goals";
-import { icon } from "../src/web/icons.js";
-import { L, runWithLocale } from "../src/web/i18n.js";
+import { icon } from "@adeptify/goalboard-design-system";
+import { L, runWithLocale } from "@adeptify/goalboard-app-local-host";
 
 const escapeHtml = (value: unknown) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const renderer = createWorkbenchGoalsDocumentRenderer({ translate: L, escapeHtml, icon,

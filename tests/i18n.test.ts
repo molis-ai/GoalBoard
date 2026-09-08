@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import {
-  EN,
-  L,
-  htmlLang,
-  localeSetCookie,
-  resolveWebLocale,
-  runWithLocale,
-  safeNextPath,
-} from "../src/web/i18n.js";
+import { EN, L, htmlLang, localeSetCookie, resolveWebLocale, runWithLocale, safeNextPath } from "@adeptify/goalboard-app-local-host";
 import { explainGoalDecision } from "@adeptify/goalboard-plugin-goals";
 import { createGoalStateExplainer, type GoalPresentationState } from "@adeptify/goalboard-plugin-goals";
 const { explainWorkState } = createGoalStateExplainer(L);
@@ -51,7 +43,12 @@ test("L translates chrome in an English request and keeps Chinese as source", ()
 
 test("every static renderer label has an English translation", () => {
   // Keep checking the labels after the page and Goals directory move to their owners.
-  const source = ["../src/web/render.ts", "../apps/workbench/src/goals-page-renderer.ts",
+  const source = ["../apps/workbench/src/renderer.ts", "../apps/workbench/src/goals-page-renderer.ts",
+    "../apps/workbench/src/onboarding-renderer.ts", "../apps/workbench/src/project-directory-renderer.ts",
+    "../apps/workbench/src/settings-navigation.ts", "../apps/workbench/src/settings-renderer.ts",
+    "../apps/workbench/src/human-review-renderer.ts", "../apps/workbench/src/goal-records-renderer.ts",
+    "../apps/workbench/src/goal-document-panels.ts", "../apps/workbench/src/focus-sections.ts", "../apps/workbench/src/project-settings-pages.ts",
+    "../plugins/native/goals/src/risk-decision-ui.ts", "../plugins/native/goals/src/decision-common-ui.ts",
     "../plugins/native/goals/src/tree-ui.ts", "../plugins/native/goals/src/policy-ui.ts",
     "../plugins/native/goals/src/project-policy-client.ts"]
     .map(path => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
@@ -103,4 +100,36 @@ test("all five decision types start with the user's question and explain missing
       assert.match(en.insufficientEvidence, /not enough evidence/i);
     });
   }
+});
+
+
+test("Host request locales stay isolated across interleaved async rendering and rejected work", async () => {
+  let enteredChinese!: () => void;
+  let checkedEnglish!: () => void;
+  const chineseReady = new Promise<void>((resolve) => { enteredChinese = resolve; });
+  const englishChecked = new Promise<void>((resolve) => { checkedEnglish = resolve; });
+  const english = runWithLocale("en", async () => {
+    try {
+      assert.equal(L("设置"), "Settings");
+      await chineseReady;
+      assert.equal(L("设置"), "Settings");
+      assert.equal(htmlLang(), "en");
+      await assert.rejects(runWithLocale("zh", async () => {
+        await Promise.resolve();
+        assert.equal(L("设置"), "设置");
+        throw new Error("render rejected");
+      }), /render rejected/);
+      assert.equal(L("设置"), "Settings");
+    } finally {
+      checkedEnglish();
+    }
+  });
+  const chinese = runWithLocale("zh", async () => {
+    enteredChinese();
+    await englishChecked;
+    assert.equal(L("设置"), "设置");
+    assert.equal(htmlLang(), "zh-CN");
+  });
+  await Promise.all([english, chinese]);
+  assert.equal(L("设置"), "设置");
 });

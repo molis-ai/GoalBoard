@@ -300,7 +300,7 @@ export class GoalWorkStateQueries {
       return { ...base, work_state: "satisfied", next_action: null, reasons: [] };
     }
 
-    const reworkRequested = this.hasPostExecutionNeedsChanges(boardId, goal.goal_id);
+    const reworkRequested = this.hasPostExecutionNeedsChanges(boardId, goal.goal_id, snapshot);
     const pendingRuntimeReviewObligations = pendingReviewObligations.filter(
       (obligation) => obligation.role !== "human_approver",
     );
@@ -696,14 +696,14 @@ export class GoalWorkStateQueries {
     return reasons;
   }
 
-  hasPostExecutionNeedsChanges(boardId: string, goalId: string): boolean {
+  hasPostExecutionNeedsChanges(boardId: string, goalId: string, snapshot?: BoardSnapshot): boolean {
     const latestWorkCompletedSeq = this.ports.execution.latestCompletedWorkRunEventSeq(
       boardId,
       goalId,
     );
     const latestNeedsChangesSeq = this.ports.governance
       .latestNeedsChangesReviewEventSeq(boardId, goalId);
-    const latestReworkSeq = this.ports.snapshot(boardId).lifecycle_events
+    const latestReworkSeq = (snapshot ?? this.ports.snapshot(boardId)).lifecycle_events
       .filter((event) => event.type === "goal.rework_requested" && event.object_id === goalId)
       .reduce((latest, event) => Math.max(latest, event.seq), 0);
     return Math.max(

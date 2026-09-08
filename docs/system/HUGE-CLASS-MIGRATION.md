@@ -1,5 +1,22 @@
 # Huge Class 职责迁移图
 
+2026-09-08 全仓复审：原 Coordinator、Store、renderer、server 混合实现均已退出，不能仅用旧 Huge 清单为零证明成功。按事实 owner 与调用链检查当前大文件如下。
+
+| 当前较大单元 | 职责与判定 |
+| --- | --- |
+| Native Goals ClaimCommands（858 行） | 领取/续租/释放/撤销与原子启动的应用用例；调用 Execution/Goals/Governance 公开端口，不保存业务 SQL，不新增跨 Module Store。用例内聚，保留 |
+| Native Goals VerificationCommands（685 行） | Evidence/Review 输入授权、提交及跨 owner reconciliation；事实写入归 Module，保留 |
+| Native Goals WorkStateQueries（754 行）/action-projection（892 行） | 从正式事实派生工作状态和下一步动作，不写事实；与 action factory/index 分离，保留 |
+| Host GoalProjectApplication（543 行） | 具名 Port 注入和应用装配，Query/Command 转发到 owner；无业务 SQL/状态机。不是原 Coordinator 规则换名，保留 |
+| Feed Module index（976 行）、Listener Host index（745 行） | 前者只管理 Feed 自有事实与事务入口，后者只管监听 lease/cursor/接收技术状态；Repository/接收/投递已分责，保留 |
+| Gmail Provider（961 行） | Provider 协议与标准化；OAuth、安装、scope、cursor、错误已分到同 Integration，保留 |
+| MCP goal-tools（964 行）/Contracts | 公共工具/类型声明，不是跨领域运行类；保留 |
+| >1000 行静态文件 | i18n/en（2802）、calm-desktop（1540）、personal-workbench-v3（1511）、momentum styles（1222）：分别是文案表或现有视觉样式，未混入业务。按表/视觉层组织，不为行数机械拆散 |
+
+实际闭环：Entry → Local Host → Native Plugin 用例 → Module public API → Module Repository；Host 只装配同连接事务与技术 Adapter。边界门禁、真实跨入口/重启/权限测试与 [Cutover 验证](../../specs/goalboard-architecture-reorganization/cutover-validation.md) 共同支撑判断。这里不宣称不存在长文件，也不把 CSS 行数当 Huge Class 缺陷。
+
+## 历史迁移阶段（下列数字和待办不表示当前状态）
+
 GW6（2026-09-06）：root Store 当前 777 行；剩余 Goals DDL、15/25/26/30 的 Goals 实现已退出。新文件按职责为 schema 220 行、Risk/Guidance 升级 99 行、revision 回填 124 行、旧覆盖账读写 36 行；没有新增包或巨大类。旧 Store 仍负责跨 owner 启动装配及尚未退出的共享职责，不能标为 retired。具体 caller/行为证据见 [GW6](../../specs/goalboard-architecture-reorganization/gw6-validation.md)，以下数字为历史阶段。
 
 DD2 工程状态（2026-09-06）：原生/历史提案应用与决定 UI/copy/client 已按 owner 迁移，209 项串行回归和 12 项边界反证通过。当前 Coordinator / root renderer / server 为 2,771 / 2,240 / 3,243 行；它们仍未整体退出。真实 caller 与验收见 `specs/goalboard-architecture-reorganization/dd2-caller-audit.md`、`dd2-validation.md`。下文旧阶段记录只保留当时边界；canonical 完成状态以 GoalBoard 为准。

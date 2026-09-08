@@ -660,6 +660,7 @@ export interface GoalLegacyCoverageRecord {
 }
 
 export interface GoalsQueryApi {
+  listBoardIds(): string[];
   listActivePolicyBindings(boardId: string, goalId?: string): GoalPolicyBindingRecord[];
   listLegacyCoverage(boardId: string): Array<Omit<GoalLegacyCoverageRecord, "board_id">>;
   listPolicyHistory(boardId: string): GoalPolicyHistoryRecord[];
@@ -778,6 +779,11 @@ export interface ConfirmedRelationBatch {
 export interface GoalsCommandApi<TTransition = unknown> {
   /** Internal import port; caller retains the complete V3 import transaction and audit event. */
   importLegacyCoverage(boardId: string, rows: ReadonlyArray<Omit<GoalLegacyCoverageRecord, "board_id">>): void;
+  /** Finish an existing V3 import transaction; does not accept the imported Draft as live work. */
+  completeLegacyBoardImport(input: {
+    board_id: string; active_goal_id: string | null; actor_id: string; at: string;
+    legacy_goal_id: string; legacy_schema_version: string;
+  }): number;
   validateGoalInput(input: CreateGoalInput): void;
   applyAcceptedRewireRelations(input: {
     board_id: string; rewire_id: string; formal_goal_id: string; actor_id: string; at: string;

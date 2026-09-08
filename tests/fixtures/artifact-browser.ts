@@ -2,17 +2,17 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
-import { seedDemoBoard, DEMO_BOARD_ID } from "../../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../../src/v1/store.js";
-import { GoalBoardCoordinator } from "../../src/v1/coordinator.js";
+import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../../src/web/server.js";
 
 const directory = mkdtempSync(join(tmpdir(), "goalboard-ar3-browser-"));
 const databasePath = join(directory, "fixture.db");
 writeFileSync(join(directory, "result.txt"), "AR3 browser fixture: 原始结果内容，打开不会改变 Goal 或 Evidence。\n");
 seedDemoBoard(databasePath);
-const store = new SqliteGoalBoardStore(databasePath);
-const coordinator = new GoalBoardCoordinator(store);
+const store = new LocalProjectDatabase(databasePath);
+const coordinator = new GoalProjectApplication(store);
 coordinator.goals.commands.createGoal(DEMO_BOARD_ID, {
   goal_id: "AR3-REFERENCE", title: "结果引用迁移验收（测试数据）", outcome: "点击结果文件，读取原始内容",
   why: "确认重组没有改变已有操作", business_logic: "打开文件不改变 Goal 与 Evidence 状态",

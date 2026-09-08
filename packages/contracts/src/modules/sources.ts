@@ -83,3 +83,30 @@ export interface SourcesApi {
   readonly commands: SourceCommands;
   readonly events: SourceEvents;
 }
+
+export class SourcesError extends Error {
+  constructor(
+    readonly code: "source_not_found" | "source_invalid_schedule" | "source_invalid_transition",
+    message: string,
+  ) {
+    super(message);
+    this.name = "SourcesError";
+  }
+}
+
+export function sourceDeletedAt(source: Pick<SourceRecord, "config">): string | null {
+  const lifecycle = source.config._goalboard_lifecycle;
+  if (!lifecycle || typeof lifecycle !== "object" || Array.isArray(lifecycle)) return null;
+  const value = (lifecycle as Record<string, unknown>).deleted_at;
+  return typeof value === "string" && value ? value : null;
+}
+
+export interface RssFetchReceipt {
+  readonly status: number;
+  readonly not_modified: boolean;
+  readonly etag?: string;
+  readonly last_modified?: string;
+  readonly final_url: string;
+  readonly feed_title?: string;
+  readonly home_url?: string;
+}

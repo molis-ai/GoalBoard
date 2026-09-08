@@ -1,9 +1,10 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { PROJECT_OPERATIONS_STYLES } from "@adeptify/goalboard-plugin-work";
 import {
@@ -25,7 +26,7 @@ test("workspace repair and unlink restore Catalog membership when Session Regist
   const next = path.join(directory, "next");
   await mkdir(previous, { recursive: true });
   await mkdir(next, { recursive: true });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   try {
     const project = await catalog.createProject({ display_name: "补偿事务项目", actor_id: "user" });
     const workspace = catalog.addWorkspaceProject({
@@ -84,7 +85,7 @@ test("workspace directory canonicalizes symlinks, keeps monorepo paths distinct,
   const missing = path.join(directory, "moved-repository");
   await mkdir(packageDirectory, { recursive: true });
   await symlink(repository, alias);
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   try {
     const project = await catalog.createProject({ display_name: "工作目录项目", actor_id: "user" });
     assert.throws(() => catalog.addWorkspaceProject({

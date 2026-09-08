@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 #!/usr/bin/env node
 /**
  * 创建或重建 GoalBoard 自带的可再生演示项目。
@@ -8,7 +9,7 @@
  */
 import os from "node:os";
 import path from "node:path";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 
 const force = process.argv.includes("--force");
 const homeIndex = process.argv.indexOf("--home");
@@ -18,7 +19,7 @@ const homeDirectory = path.resolve(
     : process.env.GOALBOARD_HOME ?? path.join(os.homedir(), ".goalboard"),
 );
 
-const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
 try {
   const existing = catalog.listProjects().find((project) => project.data_class === "regenerable_demo");
   const result = force && existing

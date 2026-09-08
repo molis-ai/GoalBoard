@@ -66,6 +66,8 @@ export {
 
 function executionQueries(repository: ExecutionRepository): ExecutionQueryApi {
   return {
+      activeClaimCount: (boardId, at) => repository.activeClaimCount(boardId, at),
+      nonterminalRunCount: boardId => repository.nonterminalRunCount(boardId),
       activeRunIdsForGoal: (...args) => repository.activeRunIdsForGoal(...args),
       latestCompletedWorkRunEventSeq: (...args) => repository.latestCompletedWorkRunEventSeq(...args),
       listClaimsForGoal: (...args) => repository.listClaimsForGoal(...args),

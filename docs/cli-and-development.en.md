@@ -78,15 +78,15 @@ modules/governance-collaboration/
 tooling/plugin-cli/          Plugin CLI boundary; DV3 implements the real developer tool
 scripts/workspace-packages.mjs
                              Inventory, manifest, entrypoint, README, and Contract wiring check
-src/v1/                      SQLite Store, Coordinator, types, CLI, and one-time import
-src/mcp/server.ts            V1-only MCP Server
-src/web/                     Remaining product UI, Goal Tree, PTY, and Host adapters; Shell, visual foundation, and Feed renderers have moved
-src/desktop/                 AP4 compatibility forwards for old launch/prompt imports
+src/index.ts, sdk-*.ts        0.1.x SDK compatibility exports backed by owner packages
+src/mcp/server.ts            MCP launcher; protocol in apps/mcp, composition in Local Host
+src/web/server.ts            Web launcher; Host owns HTTP/resources, Workbench/Native Plugins own pages
+apps/desktop/               Desktop platform and native adapters; old src/desktop removed
 apps/local-host/src/installer/
                              Sole implementation of installation, Runtime integration, service and uninstall
 apps/local-host/tooling/     Build manifest and npm packaging through public Local Host APIs
 apps/desktop/tooling/        macOS build, Runtime payload, install and launch tooling
-src/cli/main.ts              Product CLI and V1 management entry
+src/cli/main.ts              CLI launcher; commands in apps/cli, composition in Local Host
 desktop/                     macOS Cargo/Tauri distribution config; source lives under apps/desktop/adapters/tauri
 examples/seed-demo.mts       Dev script calling the product demo lifecycle
 docs/screenshots/            README product screenshots

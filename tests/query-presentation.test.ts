@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { draftDialogueHistoryOptions, draftDialogueResponse, type McpPresentationErrorFactory } from "@adeptify/goalboard-app-mcp";
-import { GoalBoardV1Error } from "../src/v1/coordinator.js";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 
 const createError: McpPresentationErrorFactory = (code, message, details) => new GoalBoardV1Error(code, message, details);
 

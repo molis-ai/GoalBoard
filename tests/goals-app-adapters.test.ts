@@ -8,14 +8,14 @@ import { createCliGoalsAdapter } from "@adeptify/goalboard-app-cli";
 import { createMcpGoalsAdapter } from "@adeptify/goalboard-app-mcp";
 import { createWorkbenchGoalsAdapter } from "@adeptify/goalboard-app-workbench";
 
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Workbench, MCP, and CLI bind the same public Goals application Contract", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-goals-app-adapters-"));
-  const store = new SqliteGoalBoardStore(join(directory, "goalboard.sqlite"));
+  const store = new LocalProjectDatabase(join(directory, "goalboard.sqlite"));
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({
       board_id: "board-app-adapters",
       title: "Goals App Adapters",

@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import { RegistryFallbackSessionAdapter } from "@adeptify/goalboard-plugin-work";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -6,22 +7,23 @@ import path from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
 import { SessionContentService } from "@adeptify/goalboard-plugin-work";
 import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
 import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import { GoalBoardSessionError, type RuntimeSessionTransport } from "../src/sessions/types.js";
+import { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 const WEB_TOKEN = "goalboard-session-handoff-token-0123456789abcdef";
 
 function createContract(databasePath: string, boardId: string, goalId: string) {
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: boardId,
     title: "Handoff 项目",
@@ -263,13 +265,13 @@ test("a source Session without a current Goal cannot prepare a Handoff", async (
 test("project Handoff web API keeps the editable draft, requires confirmation, and exposes the target Session", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-handoff-web-"));
   const home = path.join(directory, ".goalboard");
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const project = await catalog.createProject({ display_name: "Handoff Web Project", actor_id: "user" });
   catalog.close();
 
   const goalId = "goal-handoff-web";
-  const store = new SqliteGoalBoardStore(project.database_path);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(project.database_path);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     project.board_id,
     {

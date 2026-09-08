@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GOALS_DOCUMENT_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Goal document tabs retry lazy loading, restore selection, and open the draft editor from the primary action", { timeout: 60_000 }, async (t) => {

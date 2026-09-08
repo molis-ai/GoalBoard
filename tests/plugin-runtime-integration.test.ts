@@ -22,15 +22,15 @@ import {
   PluginRuntimeError,
 } from "@adeptify/goalboard-plugin-runtime";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { OfficialIntegrationRegistry } from "../src/feed/connectors/official-integrations.js";
-import type { FeedSourceRecord } from "../src/feed/types.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { OfficialIntegrationRegistry } from "@adeptify/goalboard-app-local-host";
+import type { FeedSourceRecord } from "@adeptify/goalboard-plugin-feed";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 const SOURCE_ID = "source-fd3-github";
 const CONNECTION_ID = "connection-fd3-github";
 
-function saveSource(store: SqliteGoalBoardStore): void {
+function saveSource(store: LocalProjectDatabase): void {
   new SourcesModule(store.db).commands.save({
     project_id: DEMO_BOARD_ID,
     source_id: SOURCE_ID,
@@ -66,7 +66,7 @@ test("official GitHub Plugin installs, grants, produces Signal, recovers, and un
   try {
     const databasePath = join(directory, "goalboard.sqlite");
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       saveSource(store);
       let polls = 0;

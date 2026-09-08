@@ -105,3 +105,17 @@ export interface AttentionApi {
   readonly events: AttentionEvents;
   readonly migrations: AttentionMigrationApi;
 }
+
+export class AttentionError extends Error {
+  constructor(
+    readonly code:
+      | "attention_entry_not_found"
+      | "attention_revision_conflict"
+      | "attention_invalid_reference"
+      | "attention_invalid_transition",
+    message: string,
+  ) {
+    super(message);
+    this.name = "AttentionError";
+  }
+}

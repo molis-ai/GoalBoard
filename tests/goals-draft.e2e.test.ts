@@ -1,15 +1,16 @@
+import { buildGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { buildGoalBoardWebView } from "../src/web/server.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Draft editor adds/removes criteria, preserves failed input and saves one still-unaccepted Goal through real UI", { timeout: 60_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;
-  const coordinator = new GoalBoardCoordinator(store);
+  const coordinator = new GoalProjectApplication(store);
   const updates = () => buildGoalBoardWebView(store, coordinator, { boardId: DEMO_BOARD_ID }).goals
     .find(item => item.goal.goal_id === "RELEASE")!.events.filter(event => event.type === "goal.draft_updated");
   const beforeUpdates = updates();

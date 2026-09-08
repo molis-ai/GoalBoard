@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkbenchGoalsPlanningRenderer, matchGoalsPlanningRoute, renderWorkbenchPlanningRequest } from "@adeptify/goalboard-app-workbench";
 import type { PlanningMethodPack, PlanningMethodComposition } from "@adeptify/goalboard-contracts/modules/goals";
-import { L, listJoin, runWithLocale } from "../src/web/i18n.js";
-import { icon } from "../src/web/icons.js";
+import { L, listJoin, runWithLocale } from "@adeptify/goalboard-app-local-host";
+import { icon } from "@adeptify/goalboard-design-system";
 import { withDesktopQuery } from "@adeptify/goalboard-app-desktop";
 
 const escapeHtml = (v: string) => v.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

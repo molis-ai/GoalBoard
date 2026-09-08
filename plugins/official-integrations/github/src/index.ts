@@ -58,3 +58,7 @@ export function createGithubIntegrationPlugin(input: {
 }
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+
+export * from "./oauth.js";
+
+export { githubAccountPresentation } from "./account-presentation.js";

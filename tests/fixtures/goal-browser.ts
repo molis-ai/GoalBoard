@@ -1,3 +1,4 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -7,10 +8,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { WebSocket } from "ws";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../../src/web/server.js";
-import { GoalBoardProjectCatalog } from "../../src/projects/catalog.js";
+
 
 /** One isolated project and Chrome profile; no user services or Runtime bindings. */
 export async function openGoalBrowser(t: TestContext, catalogMode = false, seed = seedDemoBoard) {
@@ -22,14 +23,14 @@ export async function openGoalBrowser(t: TestContext, catalogMode = false, seed 
   let databasePath = join(directory, "fixture.db");
   let projectId: string | null = null;
   if (catalogMode) {
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: directory });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: directory });
     try {
       const { project } = await catalog.ensureDemoProject({ actor_id: "browser-test", user_confirmed: true });
       databasePath = project.database_path;
       projectId = project.project_id;
     } finally { catalog.close(); }
   } else seed(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let child: ChildProcess | undefined;
   let socket: WebSocket | undefined;
   let server: ReturnType<typeof createGoalBoardWebServer> | undefined;

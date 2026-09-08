@@ -35,6 +35,12 @@ importers:
       '@adeptify/goalboard-integration-gmail':
         specifier: workspace:*
         version: link:plugins/official-integrations/gmail
+      '@adeptify/goalboard-integration-rss':
+        specifier: workspace:*
+        version: link:plugins/official-integrations/rss
+      '@adeptify/goalboard-integration-youtube':
+        specifier: workspace:*
+        version: link:plugins/official-integrations/youtube
       '@adeptify/goalboard-kernel':
         specifier: workspace:*
         version: link:packages/kernel
@@ -116,18 +122,9 @@ importers:
       better-sqlite3:
         specifier: 12.8.0
         version: 12.8.0
-      lucide:
-        specifier: ^1.31.0
-        version: 1.31.0
-      marked:
-        specifier: ^18.0.11
-        version: 18.0.11
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
-      sanitize-html:
-        specifier: ^2.17.7
-        version: 2.17.7
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -144,9 +141,6 @@ importers:
       '@types/node':
         specifier: ^22.13.0
         version: 22.20.1
-      '@types/sanitize-html':
-        specifier: ^2.16.1
-        version: 2.16.1
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
@@ -180,15 +174,39 @@ importers:
       '@adeptify/goalboard-plugin-feed':
         specifier: workspace:*
         version: link:../../plugins/native/feed
+      '@adeptify/goalboard-service-runtime-host':
+        specifier: workspace:*
+        version: link:../../horizontal/runtime-host
+      '@adeptify/goalboard-storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
 
   apps/local-host:
     dependencies:
+      '@adeptify/goalboard-app-cli':
+        specifier: workspace:*
+        version: link:../cli
       '@adeptify/goalboard-app-mcp':
         specifier: workspace:*
         version: link:../mcp
+      '@adeptify/goalboard-app-workbench':
+        specifier: workspace:*
+        version: link:../workbench
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@adeptify/goalboard-integration-github':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/github
+      '@adeptify/goalboard-integration-gmail':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/gmail
+      '@adeptify/goalboard-integration-rss':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/rss
+      '@adeptify/goalboard-integration-youtube':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/youtube
       '@adeptify/goalboard-kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -219,6 +237,9 @@ importers:
       '@adeptify/goalboard-module-private-work-context':
         specifier: workspace:*
         version: link:../../modules/private-work-context
+      '@adeptify/goalboard-module-projects':
+        specifier: workspace:*
+        version: link:../../modules/projects
       '@adeptify/goalboard-module-signals':
         specifier: workspace:*
         version: link:../../modules/signals
@@ -228,21 +249,46 @@ importers:
       '@adeptify/goalboard-plugin-artifacts':
         specifier: workspace:*
         version: link:../../plugins/native/artifacts
+      '@adeptify/goalboard-plugin-feed':
+        specifier: workspace:*
+        version: link:../../plugins/native/feed
       '@adeptify/goalboard-plugin-goals':
         specifier: workspace:*
         version: link:../../plugins/native/goals
       '@adeptify/goalboard-plugin-runtime':
         specifier: workspace:*
         version: link:../../packages/plugin-runtime
+      '@adeptify/goalboard-plugin-work':
+        specifier: workspace:*
+        version: link:../../plugins/native/work
+      '@adeptify/goalboard-service-connector-host':
+        specifier: workspace:*
+        version: link:../../horizontal/connector-host
       '@adeptify/goalboard-service-listener-host':
         specifier: workspace:*
         version: link:../../horizontal/listener-host
+      '@adeptify/goalboard-service-runtime-host':
+        specifier: workspace:*
+        version: link:../../horizontal/runtime-host
       '@adeptify/goalboard-storage':
         specifier: workspace:*
         version: link:../../packages/storage
       '@adeptify/goalboard-ui-host':
         specifier: workspace:*
         version: link:../../packages/ui-host
+      '@adeptify/intelligence-client':
+        specifier: file:../../vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz
+        version: file:vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz(@adeptify/search-evidence-layer@file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz)
+      '@adeptify/search-evidence-layer':
+        specifier: file:../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+        version: file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   apps/mcp:
     dependencies:
@@ -264,6 +310,15 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@adeptify/goalboard-design-system':
+        specifier: workspace:*
+        version: link:../../packages/design-system
+      '@adeptify/goalboard-integration-gmail':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/gmail
+      '@adeptify/goalboard-integration-rss':
+        specifier: workspace:*
+        version: link:../../plugins/official-integrations/rss
       '@adeptify/goalboard-plugin-artifacts':
         specifier: workspace:*
         version: link:../../plugins/native/artifacts
@@ -354,6 +409,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@adeptify/goalboard-storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
 
   modules/goals:
     dependencies:
@@ -420,6 +478,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../contracts
+      lucide:
+        specifier: ^1.31.0
+        version: 1.31.0
 
   packages/exchange:
     dependencies:
@@ -456,6 +517,9 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@adeptify/search-evidence-layer':
+        specifier: file:../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+        version: file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
       better-sqlite3:
         specifier: 12.8.0
         version: 12.8.0
@@ -495,6 +559,22 @@ importers:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
         version: link:../../../packages/contracts
+      '@adeptify/intelligence-client':
+        specifier: file:../../../vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz
+        version: file:vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz(@adeptify/search-evidence-layer@file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz)
+      '@adeptify/search-evidence-layer':
+        specifier: file:../../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+        version: file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+      marked:
+        specifier: ^18.0.11
+        version: 18.0.11
+      sanitize-html:
+        specifier: ^2.17.7
+        version: 2.17.7
+    devDependencies:
+      '@types/sanitize-html':
+        specifier: ^2.16.1
+        version: 2.16.1
 
   plugins/native/goals:
     dependencies:
@@ -549,6 +629,9 @@ importers:
       '@adeptify/goalboard-plugin-sdk':
         specifier: workspace:*
         version: link:../../../packages/plugin-sdk
+      '@adeptify/search-evidence-layer':
+        specifier: file:../../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
+        version: file:vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz
 
   plugins/official-integrations/web-query:
     dependencies:

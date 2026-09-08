@@ -35,7 +35,7 @@
 - `context-binding-references.ts`：当前工作入口到 Project 的 Ledger 适配与旧表迁移；通过注入的 Projects Query 校验 Project，不跨 owner 查询表。
 - `session-schema.ts`：Session 数据库版本和共同校验。
 
-WK3 已将所有 Registry caller 切到公开 owner 包，并删除 `src/sessions/registry.ts` 和 `content-store.ts`。`src/sessions/types.ts` 仍供旧 MCP/Project host 读取类型别名；Project Catalog 仍编排“选择哪个 Project”，但不再直接保存 Runtime Session binding SQL。Work 依赖公开 `WorkSessionQueryApi` / `WorkSessionApi`（包括已有的 eventCount 查询和 Handoff 状态操作），不依赖 Registry 私有实现或数据库。
+WK3 已将所有 Registry caller 切到公开 owner 包，并删除 `src/sessions/registry.ts` 和 `content-store.ts`。旧 `src/sessions/` 已全部退出；Host MCP/Project 通过公开 Contracts 与 Work/Private Work Context 接入。Project Catalog 编排选择 Project，不直接保存 Runtime Session binding SQL。Work 依赖公开 `WorkSessionQueryApi` / `WorkSessionApi`（包括已有的 eventCount 查询和 Handoff 状态操作），不依赖 Registry 私有实现或数据库。
 
 ## 兼容与数据位置
 

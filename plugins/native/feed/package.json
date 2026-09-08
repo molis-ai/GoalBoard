@@ -25,7 +25,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@adeptify/goalboard-contracts": "workspace:*"
+    "@adeptify/goalboard-contracts": "workspace:*",
+    "marked": "^18.0.11",
+    "sanitize-html": "^2.17.7",
+    "@adeptify/search-evidence-layer": "file:../../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz",
+    "@adeptify/intelligence-client": "file:../../../vendor/intelligence-client/adeptify-intelligence-client-0.2.2.tgz"
   },
   "goalboard": {
     "path": "plugins/native/feed",
@@ -42,5 +46,8 @@
       "feed.ui-contribution.v1",
       "feed.http-routes.v1"
     ]
+  },
+  "devDependencies": {
+    "@types/sanitize-html": "^2.16.1"
   }
 }

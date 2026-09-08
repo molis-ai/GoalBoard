@@ -6,10 +6,10 @@ import test from "node:test";
 import { mcpGoalContractResponse, runtimeGoalTreeDecisionInput } from "@adeptify/goalboard-app-mcp";
 import { runtimeGoalTreeDecisionAuthority } from "@adeptify/goalboard-app-local-host";
 import { readGoalContractCapability, type GoalContractView } from "@adeptify/goalboard-plugin-goals";
-import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "../src/local-host/composition.js";
-import { GoalBoardV1Error } from "../src/v1/coordinator.js";
+import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 import { GoalBoardServer } from "../src/mcp/server.js";
-import { runV1Cli } from "../src/v1/cli.js";
+import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 
 const createError = (code: string, message: string) => new GoalBoardV1Error(code, message);
 

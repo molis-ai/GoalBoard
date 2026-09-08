@@ -1,16 +1,17 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog, type RuntimeWorkContext } from "../src/projects/catalog.js";
+import { type RuntimeWorkContext } from "@adeptify/goalboard-app-local-host";
 
 test("one exact workspace Project reconnects a fresh Runtime Session without writing a binding", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-workspace-suggestion-"));
   const home = path.join(directory, ".goalboard");
   const workspacePath = path.join(directory, "repository");
   await mkdir(workspacePath, { recursive: true });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   try {
     const project = await catalog.createProject({ display_name: "候选项目", actor_id: "user" });
     catalog.addWorkspaceProject({

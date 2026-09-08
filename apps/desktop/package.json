@@ -27,7 +27,9 @@
   "dependencies": {
     "@adeptify/goalboard-app-local-host": "workspace:*",
     "@adeptify/goalboard-contracts": "workspace:*",
-    "@adeptify/goalboard-plugin-feed": "workspace:*"
+    "@adeptify/goalboard-plugin-feed": "workspace:*",
+    "@adeptify/goalboard-storage": "workspace:*",
+    "@adeptify/goalboard-service-runtime-host": "workspace:*"
   },
   "goalboard": {
     "path": "apps/desktop",

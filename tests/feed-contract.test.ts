@@ -5,27 +5,12 @@ import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 
-import {
-  INFOFLOW_CONTRACT_VERSION,
-  INFOFLOW_MODULE_OWNERSHIP,
-  INFOFLOW_PROVIDER_ACCESS,
-  INFOFLOW_SCHEMA_MIGRATION_ID,
-  assertInboxEntryTransition,
-  assertSourceStatusTransition,
-  assertSourceHistoryDecision,
-  assertSyncRunPhaseTransition,
-  toFeedPublicError,
-} from "../src/feed/contract.js";
-import { PROVIDER_CONTRACT_FIXTURES } from "../src/feed/contract-fixtures.js";
-import { GMAIL_OAUTH_DEFAULT_SCOPES } from "../src/feed/connectors/gmail-oauth.js";
-import { GITHUB_DEVICE_DEFAULT_SCOPE } from "../src/feed/connectors/github-oauth.js";
-import {
-  FeedStore,
-  migrateInfoflowContractV2,
-} from "../src/feed/store.js";
-import type { FeedSourceRecord } from "../src/feed/types.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { toFeedPublicError } from "@adeptify/goalboard-plugin-feed";
+import { PROVIDER_CONTRACT_FIXTURES } from "./fixtures/provider-contract.js";
+import { createLocalFeedApplication, migrateInfoflowContractV2 } from "@adeptify/goalboard-app-local-host";
+import type { FeedSourceRecord } from "@adeptify/goalboard-plugin-feed";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 function createLegacyInfoflowDb(databasePath: string): Database.Database {
   const db = new Database(databasePath);
@@ -112,28 +97,6 @@ function createLegacyInfoflowDb(databasePath: string): Database.Database {
   `);
   return db;
 }
-
-test("versioned infoflow contract has one owner per state and explicit minimum access", () => {
-  assert.equal(INFOFLOW_CONTRACT_VERSION, 1);
-  assert.equal(INFOFLOW_SCHEMA_MIGRATION_ID, 29);
-  assert.deepEqual(Object.keys(INFOFLOW_MODULE_OWNERSHIP), ["Source", "SyncRun", "FeedItem", "InboxEntry"]);
-  assert.deepEqual(INFOFLOW_MODULE_OWNERSHIP.InboxEntry.does_not_write, [
-    "title", "summary", "body", "provider_cursor", "credential",
-  ]);
-  assert.deepEqual(INFOFLOW_PROVIDER_ACCESS.gmail.minimum_scopes, GMAIL_OAUTH_DEFAULT_SCOPES);
-  assert.equal(INFOFLOW_PROVIDER_ACCESS.gmail.minimum_scopes.includes("https://www.googleapis.com/auth/gmail.compose" as never), false);
-  assert.equal(GITHUB_DEVICE_DEFAULT_SCOPE, "notifications read:user");
-  assert.equal(GITHUB_DEVICE_DEFAULT_SCOPE.includes("notifications"), true);
-  assert.equal(GITHUB_DEVICE_DEFAULT_SCOPE.includes("repo"), false);
-  assert.throws(() => assertSourceHistoryDecision(undefined), /source_history_decision_required/);
-  assert.doesNotThrow(() => assertSourceHistoryDecision("retain_history"));
-  assert.doesNotThrow(() => assertInboxEntryTransition("open", "done"));
-  assert.throws(() => assertInboxEntryTransition("done", "dismissed"), /invalid_inbox_transition/);
-  assert.doesNotThrow(() => assertSourceStatusTransition("disconnected", "active"));
-  assert.throws(() => assertSourceStatusTransition("active", "imported"), /invalid_source_transition/);
-  assert.doesNotThrow(() => assertSyncRunPhaseTransition("running", "terminal"));
-  assert.throws(() => assertSyncRunPhaseTransition("terminal", "running"), /invalid_sync_run_transition/);
-});
 
 test("migration 29 reconciles legacy Inbox rows into Feed facts plus Inbox references", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-infoflow-migration-"));
@@ -226,9 +189,9 @@ test("GitHub, Gmail and RSS fixtures all write FeedItem first and attention sepa
   const databasePath = join(directory, "goalboard.sqlite");
   try {
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
-      const feed = new FeedStore(store.db);
+      const feed = createLocalFeedApplication(store.db);
       const now = "2026-08-30T00:00:00.000Z";
       const ingested = PROVIDER_CONTRACT_FIXTURES.map((fixture) => {
         const source: FeedSourceRecord = feed.upsertSource({

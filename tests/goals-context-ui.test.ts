@@ -3,9 +3,9 @@ import test from "node:test";
 import { createWorkbenchGoalsContextRenderer, createWorkbenchUiHost } from "@adeptify/goalboard-app-workbench";
 import { GOALS_CONTEXT_UI_CONTRIBUTION_ID, type GoalsContextItem, type GoalsContextView } from "@adeptify/goalboard-plugin-goals";
 import type { GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import { L, currentLocale, listJoin, runWithLocale } from "../src/web/i18n.js";
+import { L, currentLocale, listJoin, runWithLocale } from "@adeptify/goalboard-app-local-host";
 import { createGoalStateExplainer } from "@adeptify/goalboard-plugin-goals";
-import { icon } from "../src/web/icons.js";
+import { icon } from "@adeptify/goalboard-design-system";
 const { explainWorkState, explainParentCompletion } = createGoalStateExplainer(L);
 
 const escapeHtml = (v: unknown) => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

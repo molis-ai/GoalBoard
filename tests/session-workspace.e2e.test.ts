@@ -1,22 +1,23 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import type { RuntimeSessionTransport } from "../src/sessions/types.js";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
 const TOKEN = "goalboard-session-workspace-e2e-token-0123456789";
 
 function addAcceptedGoal(databasePath: string, boardId: string, goalId: string, title: string): void {
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
-    new GoalBoardCoordinator(store).goals.commands.createGoal(
+    new GoalProjectApplication(store).goals.commands.createGoal(
       boardId,
       {
         goal_id: goalId,
@@ -75,7 +76,7 @@ test("Codex native journey stays project-scoped from discovery through Handoff a
   const home = path.join(directory, ".goalboard");
   const workspace = path.join(directory, "native-workspace");
   await mkdir(workspace, { recursive: true });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const project = await catalog.createProject({ display_name: "Native Session Project", actor_id: "e2e-user" });
   const otherProject = await catalog.createProject({ display_name: "Other Project", actor_id: "e2e-user" });
   const workspaceRecord = catalog.addWorkspaceProject({
@@ -270,7 +271,7 @@ test("fallback journey preserves TUI content, honest capability limits, workspac
   const repairedPath = path.join(directory, "workspace-after");
   await mkdir(firstPath, { recursive: true });
   await mkdir(repairedPath, { recursive: true });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const project = await catalog.createProject({ display_name: "Fallback Session Project", actor_id: "e2e-user" });
   const otherProject = await catalog.createProject({ display_name: "Fallback Other Project", actor_id: "e2e-user" });
   const workspace = catalog.addWorkspaceProject({

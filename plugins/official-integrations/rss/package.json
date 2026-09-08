@@ -13,6 +13,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
     }
   },
   "files": [
@@ -27,7 +31,8 @@
   },
   "dependencies": {
     "@adeptify/goalboard-contracts": "workspace:*",
-    "@adeptify/goalboard-plugin-sdk": "workspace:*"
+    "@adeptify/goalboard-plugin-sdk": "workspace:*",
+    "@adeptify/search-evidence-layer": "file:../../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz"
   },
   "goalboard": {
     "path": "plugins/official-integrations/rss",

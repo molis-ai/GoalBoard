@@ -11,15 +11,15 @@ import { PluginRuntime, PluginRuntimeError, SqlitePluginPrivateStorage } from "@
 import { UiHost } from "@adeptify/goalboard-ui-host";
 import { ArtifactsModule } from "@adeptify/goalboard-module-artifacts";
 import type { PluginDefinition } from "@adeptify/goalboard-contracts/platform/plugin";
-import { seedDemoBoard, DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("clean developer project uses packed public SDK from CLI scaffold through installation and a real private Artifact/UI result", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-plugin-sample-"));
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const project = join(directory, "sample");
   const cli = join(root, "tooling/plugin-cli/bin/goalboard-plugin.mjs");
-  let store: SqliteGoalBoardStore | undefined;
+  let store: LocalProjectDatabase | undefined;
   let privateDb: Database.Database | undefined;
   try {
     const invalid = spawnSync(process.execPath, [cli, "create", project, "invalid", "developer", "local-binding"], { encoding: "utf8" });
@@ -101,7 +101,7 @@ test("clean developer project uses packed public SDK from CLI scaffold through i
 
     const boardPath = join(directory, "board.db");
     seedDemoBoard(boardPath);
-    store = new SqliteGoalBoardStore(boardPath);
+    store = new LocalProjectDatabase(boardPath);
     privateDb = new Database(join(directory, "private.db"));
     const privateOwner = new SqlitePluginPrivateStorage(privateDb);
     const artifacts = new ArtifactsModule({ db: store.db, appendEvent: event => store!.appendEvent(event) });

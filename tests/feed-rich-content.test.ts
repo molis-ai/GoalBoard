@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { FeedItemRecord } from "../src/feed/types.js";
-import { feedPlainText, renderFeedRichText } from "../src/web/feed-rich-content.js";
-import { renderPersistedFeedItemDetail } from "../src/web/render.js";
+import type { FeedItemRecord } from "@adeptify/goalboard-plugin-feed";
+import { feedPlainText, renderFeedRichText } from "@adeptify/goalboard-plugin-feed";
+import { renderPersistedFeedItemDetail } from "./workbench-renderer-fixture.js";
 
 const MIXED_BODY = `Bumps [eslint](https://github.com/eslint/eslint) from 9.39.5 to 10.8.1.
 

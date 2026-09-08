@@ -51,3 +51,9 @@ export function createRssIntegrationPlugin(input: {
 }
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+
+export * from "./http-state.js";
+
+export * from "./catalog.js";
+export * from "./custom-rss.js";
+export * from "./feed-body.js";

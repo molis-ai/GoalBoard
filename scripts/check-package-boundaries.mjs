@@ -187,10 +187,29 @@ function checkCompatibilityAllowlist(repositoryRoot) {
 
 function checkMigratedFeedOwnership(repositoryRoot) {
   const errors = [];
+  if (fs.existsSync(path.join(repositoryRoot, "src/feed/relay-import.ts"))) {
+    errors.push("src/feed/relay-import.ts: migrated Relay compatibility implementation must stay deleted");
+  }
+  for (const relativePath of ["plugins/native/feed/src/relay-import.ts", "plugins/native/feed/src/relay-import-sources.ts"]) {
+    const source = fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
+    if (/\b(?:FROM|INTO|UPDATE)\s+(?:inbox_sources|items|evidence_refs|connectors|connector_cursors)\b/iu.test(source)) {
+      errors.push(`${relativePath}: legacy database access belongs to the isolated Relay reader adapter`);
+    }
+  }
   const legacyCallers = [
-    "src/feed/store.ts",
-    "src/feed/relay-import.ts",
-    "src/web/server.ts",
+    "apps/local-host/src/feed-application.ts",
+    "apps/local-host/src/feed-source-service.ts",
+    "plugins/native/feed/src/application.ts",
+    "plugins/native/feed/src/source-service.ts",
+    "plugins/native/feed/src/source-sync.ts",
+    "plugins/native/feed/src/connector-service.ts",
+    "plugins/native/feed/src/connector-source-registration.ts",
+    "plugins/native/feed/src/connector-sync.ts",
+    "plugins/native/feed/src/source-scheduler.ts",
+    "apps/local-host/src/relay-import.ts",
+    "plugins/native/feed/src/relay-import.ts",
+    "plugins/native/feed/src/relay-import-sources.ts",
+    "apps/local-host/src/web-request.ts",
   ];
   const directFactSql = /\b(?:CREATE TABLE IF NOT EXISTS|FROM|INTO|UPDATE|DELETE FROM)\s+(feed_items|feed_materials|inbox_entries)\b/giu;
   for (const relativePath of legacyCallers) {
@@ -204,7 +223,7 @@ function checkMigratedFeedOwnership(repositoryRoot) {
 
 function checkMigratedIntegrationOwnership(repositoryRoot) {
   const errors = [];
-  const servicePath = "src/feed/connectors/service.ts";
+  const servicePath = "plugins/native/feed/src/connector-sync.ts";
   const service = fs.readFileSync(path.join(repositoryRoot, servicePath), "utf8");
   for (const forbidden of [
     "legacy-adapter:",
@@ -217,8 +236,10 @@ function checkMigratedIntegrationOwnership(repositoryRoot) {
       errors.push(`${servicePath}: ${forbidden} belongs to the official Plugin composition boundary`);
     }
   }
-  if (!service.includes("OfficialIntegrationRegistry")) {
-    errors.push(`${servicePath}: caller must consume official Integration Plugin contributions`);
+  const hostPath = "apps/local-host/src/feed-connector-sync.ts";
+  const host = fs.readFileSync(path.join(repositoryRoot, hostPath), "utf8");
+  if (!service.includes("this.ports.createListener") || !host.includes("OfficialIntegrationRegistry")) {
+    errors.push(`${servicePath}: Feed must consume a Host-composed Listener backed by official Integration contributions`);
   }
 
   const listenerPath = "horizontal/listener-host/src/index.ts";
@@ -258,13 +279,18 @@ function checkMigratedIntegrationOwnership(repositoryRoot) {
     }
   }
 
-  for (const compatibility of [
-    { path: "src/feed/connectors/github.ts", packageName: "@adeptify/goalboard-integration-github", forbidden: "api.github.com" },
-    { path: "src/feed/connectors/gmail.ts", packageName: "@adeptify/goalboard-integration-gmail", forbidden: "gmail.googleapis.com" },
+  for (const composition of [
+    { provider: "github", packageName: "@adeptify/goalboard-integration-github", forbidden: "api.github.com" },
+    { provider: "gmail", packageName: "@adeptify/goalboard-integration-gmail", forbidden: "gmail.googleapis.com" },
   ]) {
-    const source = fs.readFileSync(path.join(repositoryRoot, compatibility.path), "utf8");
-    if (!source.includes(compatibility.packageName) || source.includes(compatibility.forbidden)) {
-      errors.push(`${compatibility.path}: must remain a thin public-entrypoint compatibility shell`);
+    const legacyPath = `src/feed/connectors/${composition.provider}.ts`;
+    if (fs.existsSync(path.join(repositoryRoot, legacyPath))) {
+      errors.push(`${legacyPath}: migrated Provider compatibility entrypoint must stay deleted`);
+    }
+    const hostPath = `apps/local-host/src/${composition.provider}-connector.ts`;
+    const source = fs.readFileSync(path.join(repositoryRoot, hostPath), "utf8");
+    if (!source.includes(composition.packageName) || source.includes(composition.forbidden)) {
+      errors.push(`${hostPath}: Host must compose the public Integration without owning Provider protocol`);
     }
   }
   return { errors };
@@ -273,13 +299,19 @@ function checkMigratedIntegrationOwnership(repositoryRoot) {
 function checkMigratedFeedUiOwnership(repositoryRoot) {
   const errors = [];
   const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), "utf8");
-  const renderer = read("src/web/render.ts");
-  const server = read("src/web/server.ts");
-  const uiAdapter = read("src/web/feed-native-plugin-ui.ts");
-  const httpAdapter = read("src/web/feed-native-plugin-http.ts");
+  const renderer = read("apps/workbench/src/renderer.ts");
+  const server = read("apps/local-host/src/web-request.ts");
+  const uiAdapter = read("apps/workbench/src/feed-projection-ui.ts");
+  const httpAdapter = read("apps/local-host/src/feed-native-plugin-http.ts");
+  if (fs.existsSync(path.join(repositoryRoot, "src/web/feed-native-plugin-http.ts"))) {
+    errors.push("src/web/feed-native-plugin-http.ts: migrated Feed HTTP entry must stay deleted");
+  }
+  if (!httpAdapter.includes("createFeedRouteHandlers")) {
+    errors.push("Feed HTTP adapter must bind the Native Feed request handlers");
+  }
   const pluginUi = read("plugins/native/feed/src/ui.ts");
   const pluginRoutes = read("plugins/native/feed/src/routes.ts");
-  const workbench = read("apps/workbench/src/index.ts");
+  const workbench = read("apps/workbench/src/index.ts") + read("apps/workbench/src/ui-composition.ts");
   const uiHost = read("packages/ui-host/src/index.ts");
 
   for (const forbidden of [
@@ -289,19 +321,19 @@ function checkMigratedFeedUiOwnership(repositoryRoot) {
     "function renderPersistedFeedDetail(",
   ]) {
     if (renderer.includes(forbidden)) {
-      errors.push(`src/web/render.ts: ${forbidden} must be owned by the Feed UI Contribution`);
+      errors.push(`apps/workbench/src/renderer.ts: ${forbidden} must be owned by the Feed UI Contribution`);
     }
   }
   if (!renderer.includes("renderFeedNativePluginSurface")) {
-    errors.push("src/web/render.ts: Feed caller must render through the Native Plugin adapter");
+    errors.push("apps/workbench/src/renderer.ts: Feed caller must render through the Native Plugin adapter");
   }
   for (const forbidden of ["/api/feed", "/api/inbox/", "promoteFeedItemToGoal(", "sendFeedError("]) {
     if (server.includes(forbidden)) {
-      errors.push(`src/web/server.ts: ${forbidden} must be owned by the Feed Plugin HTTP adapter`);
+      errors.push(`apps/local-host/src/web-request.ts: ${forbidden} must be owned by the Feed Plugin HTTP adapter`);
     }
   }
   if (!server.includes("handleFeedNativePluginHttp") || !httpAdapter.includes("new FeedPluginRouteTable") || !httpAdapter.includes("routes.handle")) {
-    errors.push("src/web/server.ts: Feed HTTP caller must delegate through the public Plugin route table");
+    errors.push("apps/local-host/src/web-request.ts: Feed HTTP caller must delegate through the public Plugin route table");
   }
   if (!uiAdapter.includes("renderFeedContribution") || !pluginUi.includes("feedUiContribution")) {
     errors.push("Feed UI must cross the Workbench public contribution entrypoint");
@@ -463,7 +495,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     errors.push(`${reconciliationPath}: lifecycle reconciliation must compose public owner APIs without legacy callbacks or persistence`);
   }
 
-  const storePath = "src/v1/store.ts";
+  const storePath = "src/sdk-store.ts";
   const store = read(storePath);
   for (const method of [
     "migrateGoalArchive",
@@ -570,11 +602,11 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   ) {
     errors.push(`${goalReadApplicationPath}: compatibility composition must not own Goal persistence or bypass Goals Query`);
   }
-  for (const relativePath of ["src/v1/store.ts", "src/v1/migration.ts"]) {
+  for (const relativePath of ["src/sdk-store.ts", "plugins/native/goals/src/board-v3-import.ts"]) {
     errors.push(...checkGoalStorageOwnership(read(relativePath)).map(error => `${relativePath}: ${error}`));
   }
-  errors.push(...checkGoalReadOwnerSql(read("src/feed/store.ts")).map(error => `src/feed/store.ts: ${error}`));
-  for (const relativePath of ["src/web/server.ts", "src/mcp/server.ts", "src/v1/cli.ts"]) {
+  errors.push(...checkGoalReadOwnerSql(read("apps/local-host/src/feed-application.ts")).map(error => `apps/local-host/src/feed-application.ts: ${error}`));
+  for (const relativePath of ["apps/local-host/src/web-request.ts", "apps/mcp/src/tool-dispatch.ts", "apps/cli/src/command-dispatch.ts"]) {
     const source = read(relativePath);
     errors.push(...checkGoalReadOwnerSql(source).map(error => `${relativePath}: ${error}`));
     if (
@@ -582,13 +614,13 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     ) {
       errors.push(`${relativePath}: Goal read callers must use the public Goal query application boundary`);
     }
-    if (relativePath === "src/web/server.ts") {
+    if (relativePath === "apps/local-host/src/web-request.ts") {
       if (!source.includes(".goalQueries.")) errors.push(`${relativePath}: migrated Goal read caller is missing goalQueries public usage`);
     } else {
-      const hostSource = read("src/local-host/composition.ts");
+      const hostSource = read("apps/local-host/src/project-capabilities.ts");
       if (!source.includes("client.invoke(readGoalContractCapability,")
         || !source.includes('from "@adeptify/goalboard-plugin-goals"')
-        || !hostSource.includes("this.host.register(readGoalContractCapability,")
+        || !hostSource.includes("host.register(readGoalContractCapability,")
         || !hostSource.includes("runtime.coordinator.goalQueries.readGoalContract(input.board_id, input.goal_id)")) {
         errors.push(`${relativePath}: Goal Contract reads must invoke the public capability registered against the existing query owner`);
       }
@@ -600,13 +632,13 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   const appAdapters = [
     {
       appPath: "apps/workbench/src/index.ts",
-      callerPath: "src/web/server.ts",
+      callerPath: "apps/local-host/src/web-request.ts",
       factory: "createWorkbenchGoalsAdapter",
       capability: "workbench.goals-command-adapter.v1",
     },
     {
       appPath: "apps/mcp/src/index.ts",
-      callerPath: "src/mcp/server.ts",
+      callerPath: "apps/mcp/src/tool-dispatch.ts",
       factory: "createMcpGoalsAdapter",
       capability: "mcp.goals-command-adapter.v1",
       commandHandlerPath: "apps/mcp/src/goal-commands.ts",
@@ -615,7 +647,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     },
     {
       appPath: "apps/cli/src/index.ts",
-      callerPath: "src/v1/cli.ts",
+      callerPath: "apps/cli/src/command-dispatch.ts",
       factory: "createCliGoalsAdapter",
       capability: "cli.goals-command-adapter.v1",
       commandHandlerPath: "apps/cli/src/goal-commands.ts",
@@ -624,7 +656,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     },
   ];
   for (const { appPath, callerPath, factory, capability, commandHandlerPath, commandHandlerFactory, commandDispatch } of appAdapters) {
-    const app = read(appPath);
+    const app = read(appPath) + (appPath === "apps/workbench/src/index.ts" ? read("apps/workbench/src/ui-composition.ts") : "");
     const caller = read(callerPath);
     if (
       !app.includes("GoalsApplicationApi")
@@ -648,9 +680,14 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
         && commandHandler.includes(`function ${commandHandlerFactory}`)
         && commandHandler.includes("GoalsEntryApi")
         && commandHandler.includes("goals.commands.")
-      : caller.includes("goalsAdapter.commands.");
+      : caller.includes("handleGoalsWebHttp({")
+        && caller.includes("commands: goalsAdapter.commands")
+        && read("plugins/native/goals/src/http/index.ts").includes("handleGoalCreateHttp(context)")
+        && read("plugins/native/goals/src/http/create.ts").includes("context.commands.createGoal(");
     if (
-      !caller.includes(`from "@adeptify/goalboard-app-${appPath.split("/")[1]}"`)
+      !(["apps/mcp/src/tool-dispatch.ts", "apps/cli/src/command-dispatch.ts"].includes(callerPath)
+        ? caller.includes('from "./goal-commands.js"')
+        : caller.includes(`from "@adeptify/goalboard-app-${appPath.split("/")[1]}"`))
       || !(commandHandler !== null
         ? caller.includes("createGoalsEntryClient(client)")
           && caller.includes("client.withScope(")
@@ -669,6 +706,14 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
       errors.push(`${commandHandlerPath}: command handlers must not own Module implementations, Store, or copied business rules`);
     }
   }
+  for (const file of ["create", "draft", "relations", "risk-impact", "policy-guidance", "verification", "lifecycle", "decisions"]) {
+    const nativePath = `plugins/native/goals/src/http/${file}.ts`;
+    const source = read(nativePath);
+    errors.push(...checkGoalStorageOwnership(source).map(error => `${nativePath}: ${error}`));
+    if (/goalboard-app-|goalboard-module-|node:http|\b(?:LocalProjectDatabase|GoalProjectApplication|SqliteGoalBoardStore|GoalsRepository)\b/u.test(source)) {
+      errors.push(`${nativePath}: Native Goal requests must consume public operation ports without Host or Module implementations`);
+    }
+  }
   const appAdapterTestPath = "tests/goals-app-adapters.test.ts";
   const appAdapterTest = read(appAdapterTestPath);
   for (const { factory } of appAdapters) {
@@ -685,12 +730,13 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   }
   const removedFacadeCall = /\bcoordinator(?:ForResume)?\.(?:addProjectGuidance|updateProjectGuidance|createGoal|updateDraftGoal|addRelation|deactivateRelation|setPolicy|addRisk|updateRisk|setRiskState|setGoalArchived|setGoalTrashed|revalidateGoal|evaluateLeafCompletion|effectivePlanningMethods|projectPlanningComposition|saveProjectPlanningMethod|analyzePlanningChange|validatePlanningGraph)\b/u;
   for (const relativePath of [
-    "src/web/server.ts",
-    "src/mcp/server.ts",
-    "src/v1/cli.ts",
-    "src/v1/demo.ts",
-    "src/v1/migration.ts",
-    "src/web/feed-native-plugin-http.ts",
+    "apps/local-host/src/web-request.ts",
+    "apps/mcp/src/tool-dispatch.ts",
+    "apps/cli/src/command-dispatch.ts",
+    "apps/local-host/src/demo-seed.ts",
+    "plugins/native/goals/src/board-v3-import.ts",
+    "apps/local-host/src/feed-native-plugin-http.ts",
+    "plugins/native/feed/src/goal-promotion.ts",
   ]) {
     if (removedFacadeCall.test(read(relativePath))) {
       errors.push(`${relativePath}: GW4 caller still uses a removed GoalBoardCoordinator Goal facade`);
@@ -783,14 +829,14 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
     `\\b(?:CREATE TABLE IF NOT EXISTS|FROM|INTO|UPDATE|DELETE FROM)\\s+(?:${governanceTables})\\b`,
     "giu",
   );
-  for (const relativePath of [coordinatorPath, "src/v1/store.ts"]) {
+  for (const relativePath of [coordinatorPath, "src/sdk-store.ts"]) {
     const source = read(relativePath);
     for (const match of source.matchAll(directGovernanceSql)) {
       errors.push(`${relativePath}: direct Governance SQL must use the owning Module public entrypoint (${match[0]})`);
     }
   }
 
-  const legacyTypes = read("src/v1/types.ts");
+  const legacyTypes = read("src/sdk-types.ts");
   for (const typeName of [
     "ReviewObligationRecord",
     "ReviewRecord",
@@ -804,7 +850,7 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
       "u",
     );
     if (!typeAlias.test(legacyTypes)) {
-      errors.push(`src/v1/types.ts: ${typeName} must remain a public Governance Contract alias`);
+      errors.push(`src/sdk-types.ts: ${typeName} must remain a public Governance Contract alias`);
     }
   }
 
@@ -903,25 +949,25 @@ function checkExecutionValidationOwnership(repositoryRoot) {
   const appAdapters = [
     {
       appPath: "apps/workbench/src/index.ts",
-      callerPath: "src/web/server.ts",
+      callerPath: "apps/local-host/src/web-request.ts",
       factory: "createWorkbenchExecutionValidationAdapter",
       capability: "workbench.execution-validation-adapter.v1",
     },
     {
       appPath: "apps/mcp/src/index.ts",
-      callerPath: "src/mcp/server.ts",
+      callerPath: "apps/mcp/src/tool-dispatch.ts",
       factory: "createMcpExecutionValidationAdapter",
       capability: "mcp.execution-validation-adapter.v1",
     },
     {
       appPath: "apps/cli/src/index.ts",
-      callerPath: "src/v1/cli.ts",
+      callerPath: "apps/cli/src/command-dispatch.ts",
       factory: "createCliExecutionValidationAdapter",
       capability: "cli.execution-validation-adapter.v1",
     },
   ];
   for (const { appPath, callerPath, factory, capability } of appAdapters) {
-    const app = read(appPath);
+    const app = read(appPath) + (appPath === "apps/workbench/src/index.ts" ? read("apps/workbench/src/ui-composition.ts") : "");
     const caller = read(callerPath);
     if (
       !app.includes("ExecutionValidationApplicationApi")
@@ -939,7 +985,7 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     ) {
       errors.push(`${appPath}: execution adapter must not import Module implementations, Store, or copied rules`);
     }
-    const usesClient = callerPath !== "src/web/server.ts";
+    const usesClient = callerPath !== "apps/local-host/src/web-request.ts";
     const hostClientPath = caller.includes("createExecutionEntryClient(client)")
       && caller.includes("client.withScope(")
       && !caller.includes(".withProject(")
@@ -954,7 +1000,7 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     }
   }
 
-  const renderer = read("src/web/render.ts");
+  const renderer = read("apps/workbench/src/renderer.ts");
   const workbenchUi = read("apps/workbench/src/execution-validation-ui.ts");
   for (const functionName of [
     "renderClaimCell",
@@ -966,7 +1012,7 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     "renderReviewCell",
   ]) {
     if (renderer.includes(`function ${functionName}(`)) {
-      errors.push(`src/web/render.ts: ${functionName} must stay owned by the Workbench execution contribution`);
+      errors.push(`apps/workbench/src/renderer.ts: ${functionName} must stay owned by the Workbench execution contribution`);
     }
     if (!workbenchUi.includes(functionName)) {
       errors.push(`apps/workbench/src/execution-validation-ui.ts: missing ${functionName}`);
@@ -1073,6 +1119,20 @@ function checkArtifactsOwnership(repositoryRoot) {
     errors.push("modules/artifacts: Artifact owner must not import producer or consumer Plugin implementations");
   }
 
+  if (fs.existsSync(path.join(repositoryRoot, "src/web/artifact-native-plugin-http.ts"))) {
+    errors.push("src/web/artifact-native-plugin-http.ts: migrated Artifact HTTP entry must stay deleted");
+  }
+  if (fs.existsSync(path.join(repositoryRoot, "src/web/onboarding.ts"))) {
+    errors.push("src/web/onboarding.ts: local onboarding state must remain owned by Local Host");
+  }
+  if (/export function (?:buildGoalBoardWebView|cachedGoalBoardWebView)/u.test(read("apps/local-host/src/web-request.ts"))) {
+    errors.push("apps/local-host/src/web-request.ts: Goal read projection and cache must remain outside HTTP routing");
+  }
+  const artifactHttp = read("apps/local-host/src/artifact-native-plugin-http.ts");
+  if (!artifactHttp.includes("createLocalArtifactHttp") || artifactHttp.includes("@adeptify/goalboard-app-desktop")) {
+    errors.push("Artifact HTTP composition must receive Desktop bootstrap through its Host factory");
+  }
+
   const pluginPath = "plugins/native/artifacts/src/index.ts";
   const nativePlugin = read(pluginPath);
   for (const required of [
@@ -1088,17 +1148,17 @@ function checkArtifactsOwnership(repositoryRoot) {
     errors.push(`${pluginPath}: Native Plugin entrypoint must not own Artifact facts or construct its Repository`);
   }
 
-  const store = read("src/v1/store.ts");
+  const store = read("src/sdk-store.ts");
   const coordinator = read("apps/local-host/src/goal-project-application.ts");
   const projectMigrations = read("apps/local-host/src/project-migrations.ts");
   if (!read("apps/local-host/src/project-database.ts").includes("migrateLocalProjectDatabase") || !projectMigrations.includes("ARTIFACTS_SCHEMA_SQL") || !projectMigrations.includes("migrateArtifactsSchema")) {
-    errors.push("src/v1/store.ts: root storage must compose the Artifact owner schema and migration");
+    errors.push("src/sdk-store.ts: root storage must compose the Artifact owner schema and migration");
   }
   if (!coordinator.includes("ArtifactsModule") || !coordinator.includes("readonly artifacts: ArtifactsApplicationApi")) {
-    errors.push("src/v1/coordinator.ts: compatibility composition must expose the public Artifacts API");
+    errors.push("apps/local-host/src/goal-project-application.ts: compatibility composition must expose the public Artifacts API");
   }
   const directArtifactSql = /\b(?:CREATE TABLE(?: IF NOT EXISTS)?|FROM|INTO|UPDATE|DELETE FROM)\s+(artifacts|artifact_versions)\b/giu;
-  for (const relativePath of ["apps/local-host/src/goal-project-application.ts", "src/v1/store.ts", "src/v1/types.ts"]) {
+  for (const relativePath of ["apps/local-host/src/goal-project-application.ts", "src/sdk-store.ts", "src/sdk-types.ts"]) {
     const source = read(relativePath);
     for (const match of source.matchAll(directArtifactSql)) {
       errors.push(`${relativePath}: direct ${match[1]} SQL must stay inside modules/artifacts`);
@@ -1188,25 +1248,17 @@ function checkPrivateWorkContextOwnership(repositoryRoot) {
       errors.push(`${retired}: retired after WK3 caller cutover; use the public owner entrypoint`);
     }
   }
-  const legacyTypes = read("src/sessions/types.ts");
-  for (const forbidden of [
-    "interface GoalBoardSessionRecord",
-    "interface GoalBoardSessionGoalLink",
-    "interface GoalBoardSessionEventRecord",
-    "class GoalBoardSessionError",
-  ]) {
-    if (legacyTypes.includes(forbidden)) {
-      errors.push(`src/sessions/types.ts: ${forbidden} duplicates the Private Work Context Contract`);
-    }
+  for (const retired of ["src/sessions/types.ts", "src/sessions/compatibility.ts"]) {
+    if (fs.existsSync(path.join(repositoryRoot, retired))) errors.push(`${retired}: retired; use the public Session owner`);
   }
 
-  const catalog = read("src/projects/catalog.ts");
+  const catalog = read("apps/local-host/src/project-catalog.ts");
   if (!catalog.includes("RuntimeContextBindingRepository")) {
-    errors.push("src/projects/catalog.ts: Runtime binding composition must use the Private Work Context public entrypoint");
+    errors.push("apps/local-host/src/project-catalog.ts: Runtime binding composition must use the Private Work Context public entrypoint");
   }
   const directContextSql = /\b(?:CREATE TABLE(?: IF NOT EXISTS)?|FROM|INTO|UPDATE|DELETE FROM)\s+(runtime_context_bindings|runtime_context_binding_events|runtime_context_setup_requests|runtime_context_suggestion_rejections)\b/giu;
   for (const match of catalog.matchAll(directContextSql)) {
-    errors.push(`src/projects/catalog.ts: direct ${match[1]} SQL must stay inside modules/private-work-context`);
+    errors.push(`apps/local-host/src/project-catalog.ts: direct ${match[1]} SQL must stay inside modules/private-work-context`);
   }
 
   for (const relativePath of requiredOwnerFiles.filter((file) => file.endsWith(".ts"))) {
@@ -1279,25 +1331,16 @@ function checkRuntimeHostOwnership(repositoryRoot) {
     }
   }
 
-  for (const compatibility of [
-    { path: "src/web/pty-host.ts", required: "@adeptify/goalboard-service-runtime-host", forbidden: "node-pty" },
-  ]) {
-    const source = read(compatibility.path);
-    if (!source.includes(compatibility.required) || source.includes(compatibility.forbidden)) {
-      errors.push(`${compatibility.path}: must remain a thin Runtime Host public-entrypoint shell`);
-    }
-  }
-
-  for (const retired of ["src/sessions/adapters.ts","src/sessions/codex-transport.ts"]) {
+  for (const retired of ["src/sessions/adapters.ts", "src/sessions/codex-transport.ts", "src/web/pty-host.ts", "src/web/desktop-shell.ts", "src/web/visual-foundation.ts", "src/web/pty-socket.ts", "src/web/capsule.ts"]) {
     if (fs.existsSync(path.join(repositoryRoot, retired))) {
       errors.push(`${retired}: retired after WK3 caller cutover; use the public owner entrypoint`);
     }
   }
-  if (!read("src/web/server.ts").includes('from "@adeptify/goalboard-service-runtime-host"')) {
-    errors.push("src/web/server.ts: Runtime composition must consume the public Runtime Host entrypoint");
+  if (!read("apps/local-host/src/web-request.ts").includes('from "@adeptify/goalboard-service-runtime-host"')) {
+    errors.push("apps/local-host/src/web-request.ts: Runtime composition must consume the public Runtime Host entrypoint");
   }
-  if (!read("src/web/pty-socket.ts").includes('from "@adeptify/goalboard-service-runtime-host"')) {
-    errors.push("src/web/pty-socket.ts: PTY socket must consume the public Runtime Host entrypoint");
+  if (!read("apps/local-host/src/pty-socket.ts").includes('from "@adeptify/goalboard-service-runtime-host"')) {
+    errors.push("apps/local-host/src/pty-socket.ts: PTY socket must consume the public Runtime Host entrypoint");
   }
   if (read("horizontal/runtime-host/src/runtime-router.ts").includes("RegistryFallbackSessionAdapter")) {
     errors.push("horizontal/runtime-host: Session registry fallback must remain with Private Work Context composition");
@@ -1335,10 +1378,10 @@ export function checkDraftDialogueOwnership(coordinator, host, application) {
   const errors = [];
   for (const method of ["startDraftDialogue", "recordDraftDialogueTurn", "resumeDraftDialogue"]) {
     if (new RegExp(`^  ${method}\\(`, "m").test(coordinator)) {
-      errors.push(`src/v1/coordinator.ts: DD1 forbids legacy ${method} implementation or facade`);
+      errors.push(`apps/local-host/src/goal-project-application.ts: DD1 forbids legacy ${method} implementation or facade`);
     }
     if (host.includes(`coordinator.${method}(`)) {
-      errors.push(`src/local-host/composition.ts: ${method} must use the public draftDialogue application`);
+      errors.push(`apps/local-host/src/project-capabilities.ts: ${method} must use the public draftDialogue application`);
     }
   }
   if (/\b(?:SELECT|INSERT INTO|UPDATE|DELETE FROM)\s+(?:clarification_sessions|clarification_turns|goals|claims|runs)\b/iu.test(application)) {
@@ -1350,11 +1393,11 @@ export function checkDraftDialogueOwnership(coordinator, host, application) {
 export function checkGoalTreeApplicationOwnership(coordinator, host, application, method = "submitGoalTreeProposal", port = "goalTreeSubmission") {
   const errors = [];
   if (new RegExp(`^  ${method}\\(`, "mu").test(coordinator)) {
-    errors.push(`src/v1/coordinator.ts: DD2 forbids legacy ${method} implementation or facade`);
+    errors.push(`apps/local-host/src/goal-project-application.ts: DD2 forbids legacy ${method} implementation or facade`);
   }
   if (host.includes(`coordinator.${method}(`)
       || !host.includes(`coordinator.${port}.${method}(`)) {
-    errors.push(`src/local-host/composition.ts: ${method} must use the public ${port} application`);
+    errors.push(`apps/local-host/src/project-capabilities.ts: ${method} must use the public ${port} application`);
   }
   if (/\b(?:store|repository|coordinator)\s*[.:]|\b(?:SELECT|INSERT INTO|UPDATE|DELETE FROM)\b/u.test(application)) {
     errors.push(`plugins/native/goals: ${method} must compose Module owners without SQL or legacy callbacks`);
@@ -1365,7 +1408,7 @@ export function checkGoalTreeApplicationOwnership(coordinator, host, application
 export function checkProposalUiOwnership(renderer, workbench, proposalMount, legacyMount, clientDispatch) {
   const errors = [];
   for (const name of ["proposedGoalName", "goalTreeProposalItemCopy", "goalTreeDecompositionIssueCopy", "renderGoalTreeProposalDecision", "renderRewireDecision", "renderContractProposal", "renderCandidateDecision", "buildDecisionGroups", "recentDecisionResults"]) {
-    if (new RegExp(`function\\s+${name}\\s*\\(`, "u").test(renderer)) errors.push(`src/web/render.ts: DD2 ${name} belongs to the Goals contribution`);
+    if (new RegExp(`function\\s+${name}\\s*\\(`, "u").test(renderer)) errors.push(`apps/workbench/src/renderer.ts: DD2 ${name} belongs to the Goals contribution`);
   }
   for (const name of ["goalsProposalUiContribution", "goalsLegacyProposalUiContribution", "goalsDecisionResultsUiContribution"]) {
     if (!workbench.includes(`host.register(${name})`)) errors.push(`apps/workbench: DD2 ${name} must be registered with UiHost`);
@@ -1392,17 +1435,17 @@ export function checkPackageBoundaries(repositoryRoot) {
   const privateWorkContextOwnership = checkPrivateWorkContextOwnership(repositoryRoot);
   const runtimeHostOwnership = checkRuntimeHostOwnership(repositoryRoot);
   const dialogueOwnership = checkDraftDialogueOwnership(...[
-    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/draft-dialogue-application.ts",
+    "apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", "plugins/native/goals/src/draft-dialogue-application.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
   const submissionOwnership = checkGoalTreeApplicationOwnership(...[
-    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-submission.ts",
+    "apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", "plugins/native/goals/src/goal-tree-submission.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")));
   const proposalCheckOwnership = checkGoalTreeApplicationOwnership(...[
-    "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", "plugins/native/goals/src/goal-tree-check.ts",
+    "apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", "plugins/native/goals/src/goal-tree-check.ts",
   ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), "checkGoalTreeProposal", "goalTreeCheck");
   const errors = [
-    ...checkProposalUiOwnership(...["src/web/render.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
-      .map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8"))).map(message => `[proposal-ui-owner] ${message}`),
+    ...checkProposalUiOwnership(...["apps/workbench/src/renderer.ts", "apps/workbench/src/index.ts", "apps/workbench/src/goals-proposal-ui.ts", "apps/workbench/src/goals-legacy-proposal-ui.ts", "apps/workbench/src/scripts/client/events-accessibility.ts"]
+      .map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8") + (file === "apps/workbench/src/index.ts" ? fs.readFileSync(path.join(repositoryRoot, "apps/workbench/src/ui-composition.ts"), "utf8") : ""))).map(message => `[proposal-ui-owner] ${message}`),
     ...proposalCheckOwnership.map(message => `[proposal-check-owner] ${message}`),
     ...[
       ["decideGoalTreeProposal", "goalTreeDecision", "goal-tree-decision"],
@@ -1413,7 +1456,7 @@ export function checkPackageBoundaries(repositoryRoot) {
       ["submitCandidate", "legacyProposalSubmission", "legacy-proposal-submission"],
       ["submitDependencyProposal", "legacyProposalSubmission", "legacy-proposal-submission"],
     ].flatMap(([method, port, file]) => checkGoalTreeApplicationOwnership(...[
-      "apps/local-host/src/goal-project-application.ts", "src/local-host/composition.ts", `plugins/native/goals/src/${file}.ts`,
+      "apps/local-host/src/goal-project-application.ts", "apps/local-host/src/project-capabilities.ts", `plugins/native/goals/src/${file}.ts`,
     ].map(file => fs.readFileSync(path.join(repositoryRoot, file), "utf8")), method, port)
       .map(message => `[proposal-decision-owner] ${message}`)),
     ...submissionOwnership.map(message => `[proposal-submission-owner] ${message}`),

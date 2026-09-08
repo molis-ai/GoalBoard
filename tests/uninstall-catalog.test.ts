@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { GoalBoardWebServiceManager, RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
-import { createLocalUninstallService } from "../src/local-host/uninstall.js";
+import { createDesktopUninstallService as createLocalUninstallService } from "@adeptify/goalboard-app-desktop";
 
 for (const owned of [true, false]) {
   test(`uninstall preview ${owned ? "classifies legacy user data without migrating it" : "refuses a catalog owned by another application"}`, async () => {

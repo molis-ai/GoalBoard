@@ -1,3 +1,5 @@
+import { buildGoalBoardWebView, cachedGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -7,10 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Script } from "node:vm";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { GoalBoardProjectCatalog, normalizeRuntimeWorkContext } from "../src/projects/catalog.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { type GoalBoardProjectCatalog, normalizeRuntimeWorkContext } from "@adeptify/goalboard-app-local-host";
 import { RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardWebServiceManager } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../src/mcp/server.js";
@@ -38,12 +40,8 @@ import {
   unsatisfiedOutgoingDependencies,
   WEB_GOAL_STATUSES,
   WEB_GOAL_EVENT_PAGE_SIZE,
-} from "../src/web/render.js";
-import {
-  buildGoalBoardWebView,
-  cachedGoalBoardWebView,
-  createGoalBoardWebServer as createBaseGoalBoardWebServer,
-} from "../src/web/server.js";
+} from "./workbench-renderer-fixture.js";
+import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../src/web/server.js";
 
 const WEB_TEST_CONTROL_TOKEN = "goalboard-web-test-control-token-0123456789abcdef";
 const WORKBENCH_CLIENT_SCRIPT = renderGoalBoardWorkbenchClientScript();
@@ -589,8 +587,8 @@ test("Goal Tree disambiguates Goals that share the same compact Runtime referenc
 test("Web keeps a released Run blocker as history instead of a current blocker", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-historical-run-blocker-"));
   const databasePath = join(directory, "board.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "historical-run-blocker-board",
     title: "Historical Run blocker",
@@ -652,8 +650,8 @@ test("Web keeps a released Run blocker as history instead of a current blocker",
 test("an open completion Risk stays visible without replacing an executable Goal's next action", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-completion-risk-action-"));
   const databasePath = join(directory, "board.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "completion-risk-action-board",
     title: "Completion Risk action",
@@ -723,8 +721,8 @@ test("an open completion Risk stays visible without replacing an executable Goal
 test("Web keeps a replaced Goal as readable history while directing work to its replacement", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-replaced-goal-"));
   const databasePath = join(directory, "board.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   const boardId = "replaced-goal-board";
   coordinator.initializeBoard({
     board_id: boardId,
@@ -802,8 +800,8 @@ test("completed Goal presentation closes criteria without inventing Evidence", (
 test("Web distinguishes local Contract satisfaction from recorded parent Contract coverage", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-contract-coverage-"));
   const databasePath = join(directory, "coverage.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "coverage-board",
     title: "Contract Coverage",
@@ -907,7 +905,7 @@ test("Web distinguishes local Contract satisfaction from recorded parent Contrac
   assert.match(parentHtml, /父子 Contract 覆盖/);
   assert.match(parentHtml, /三类代表性样本/);
 
-  const partialReview = structuredClone(store.getGoal("coverage-parent")!.decomposition_review!);
+  const partialReview = structuredClone(store.goalsQuery.getGoal("coverage-board", "coverage-parent")!.decomposition_review!);
   partialReview.contract_coverage!.promised_outputs[0]!.status = "partial";
   partialReview.contract_coverage!.promised_outputs[0]!.reason = "样本只覆盖演示链路，尚未覆盖完整父级能力。";
   partialReview.contract_coverage!.acceptance_criteria[0]!.status = "integration_required";
@@ -927,7 +925,7 @@ test("Web distinguishes local Contract satisfaction from recorded parent Contrac
   const historicalView = buildGoalBoardWebView(store, coordinator, { boardId: "coverage-board" });
   const historicalParentHtml = renderGoalPanelFragment(historicalView, "coverage-parent", "completion") ?? "";
   assert.match(historicalParentHtml, /未记录父子 Contract 覆盖（历史数据）/);
-  assert.equal(store.getGoal("coverage-parent")?.fulfillment_state, "satisfied");
+  assert.equal(store.goalsQuery.getGoal("coverage-board", "coverage-parent")?.fulfillment_state, "satisfied");
   const historicalChildHtml = renderGoalPanelFragment(historicalView, "coverage-child", "completion") ?? "";
   assert.match(historicalChildHtml, /这条历史父 Goal 未记录父子 Contract 覆盖/);
   store.close();
@@ -1074,18 +1072,18 @@ test("Web View cache follows canonical Board events instead of SQLite file lifec
   const cache = new Map() as Parameters<typeof cachedGoalBoardWebView>[0];
   const options = { databasePath, boardId: DEMO_BOARD_ID, demo: true };
 
-  const firstStore = new SqliteGoalBoardStore(databasePath);
+  const firstStore = new LocalProjectDatabase(databasePath);
   const first = cachedGoalBoardWebView(
     cache,
     firstStore,
-    new GoalBoardCoordinator(firstStore),
+    new GoalProjectApplication(firstStore),
     options,
   );
   firstStore.close();
 
-  const reopenedStore = new SqliteGoalBoardStore(databasePath);
+  const reopenedStore = new LocalProjectDatabase(databasePath);
   try {
-    const coordinator = new GoalBoardCoordinator(reopenedStore);
+    const coordinator = new GoalProjectApplication(reopenedStore);
     const unchanged = cachedGoalBoardWebView(cache, reopenedStore, coordinator, options);
     assert.strictEqual(unchanged, first, "opening the SQLite WAL must not invalidate an unchanged Board");
 
@@ -1124,7 +1122,7 @@ async function webProjectCatalogFixture() {
     stable_work_context_id: "web-project-beta-session",
     host_declares_stable: true,
   };
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     const alphaResolution = await catalog.createProjectAndBindRuntimeContext({
       context: alphaContext,
@@ -1199,9 +1197,9 @@ function addProjectGoal(
   goalId: string,
   title: string,
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   try {
-    new GoalBoardCoordinator(store).goals.commands.createGoal(
+    new GoalProjectApplication(store).goals.commands.createGoal(
       project.board_id,
       {
         goal_id: goalId,
@@ -1225,9 +1223,9 @@ function startProjectClarification(
   goalId: string,
   actorId: string,
 ): void {
-  const store = new SqliteGoalBoardStore(project.database_path);
+  const store = new LocalProjectDatabase(project.database_path);
   try {
-    new GoalBoardCoordinator(store).executionValidation.commands.selectGoalAndStart({
+    new GoalProjectApplication(store).executionValidation.commands.selectGoalAndStart({
       board_id: project.board_id,
       goal_id: goalId,
       actor_id: actorId,
@@ -1240,7 +1238,7 @@ function startProjectClarification(
 }
 
 function boardSnapshot(databasePath: string, boardId: string) {
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
     return store.snapshot(boardId);
   } finally {
@@ -1251,8 +1249,8 @@ function boardSnapshot(databasePath: string, boardId: string) {
 test("Web distinguishes automatic parent completion from decomposition confirmation and structural conflicts", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-parent-completion-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   const boardId = "web-parent-completion-board";
   coordinator.initializeBoard({
     board_id: boardId,
@@ -1366,8 +1364,8 @@ test("Web distinguishes automatic parent completion from decomposition confirmat
 
 test("Web view derives understandable Goal states from canonical SQLite facts", () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   const now = new Date().toISOString();
   store.db
     .prepare(`
@@ -2127,8 +2125,8 @@ test("Web projects an expired Claim and started Run as one stopped lifecycle", (
   const boardId = "web-expired-lifecycle";
   const goalId = "web-expired-goal";
   let now = new Date("2026-08-30T00:00:00.000Z");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store, () => now);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store, () => now);
   try {
     coordinator.initializeBoard({
       board_id: boardId,
@@ -2183,8 +2181,8 @@ test("Web projects an expired Claim and started Run as one stopped lifecycle", (
 
 test("Decision Center keeps canonical risk and rewire results visible after pending cards disappear", () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.addRisk(
     DEMO_BOARD_ID,
     {
@@ -2517,8 +2515,8 @@ test("Decision Center never presents a Runtime review as user approval", () => {
   const databasePath = join(directory, "goalboard.db");
   const boardId = "runtime-review-result-board";
   const goalId = "RUNTIME-REVIEW-RESULT";
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: boardId,
     title: "Runtime 复核主体展示",
@@ -2601,8 +2599,8 @@ test("Decision Center prioritizes pending human decisions and submits the linked
   const databasePath = join(directory, "goalboard.db");
   const boardId = "human-decision-inbox-board";
   const goalId = "HUMAN-DECISION-INBOX";
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: boardId,
     title: "人工决定 Inbox 闭环",
@@ -2735,8 +2733,8 @@ test("Decision Center prioritizes pending human decisions and submits the linked
     const address = server.address();
     assert.ok(address && typeof address === "object");
     const origin = `http://127.0.0.1:${address.port}`;
-    const obligationStore = new SqliteGoalBoardStore(databasePath);
-    const obligationCoordinator = new GoalBoardCoordinator(obligationStore);
+    const obligationStore = new LocalProjectDatabase(databasePath);
+    const obligationCoordinator = new GoalProjectApplication(obligationStore);
     const humanObligation = obligationStore.snapshot(boardId).review_obligations.find(
       (item) => item.goal_id === goalId && item.role === "human_approver",
     )!;
@@ -2782,8 +2780,8 @@ test("Decision Center prioritizes pending human decisions and submits the linked
     assert.equal(replayed.review.review_id, submitted.review.review_id);
     assert.equal(replayed.evidence.evidence_id, submitted.evidence.evidence_id);
 
-    const verifiedStore = new SqliteGoalBoardStore(databasePath);
-    const verifiedCoordinator = new GoalBoardCoordinator(verifiedStore);
+    const verifiedStore = new LocalProjectDatabase(databasePath);
+    const verifiedCoordinator = new GoalProjectApplication(verifiedStore);
     const snapshot = verifiedStore.snapshot(boardId);
     assert.equal(
       snapshot.reviews.filter((item) => item.obligation_id === humanObligation.obligation_id).length,
@@ -2809,7 +2807,7 @@ test("Web project catalog switches browser scope without exposing storage or cha
   const fixture = await webProjectCatalogFixture();
   addProjectGoal(fixture.alpha, "ALPHA-ONLY", "仅 Alpha 可见的 Goal");
   addProjectGoal(fixture.beta, "BETA-ONLY", "仅 Beta 可见的 Goal");
-  const alphaFeedStore = new SqliteGoalBoardStore(fixture.alpha.database_path);
+  const alphaFeedStore = new LocalProjectDatabase(fixture.alpha.database_path);
   alphaFeedStore.db.prepare(`
     INSERT INTO feed_items (
       board_id, item_id, source_id, item_type, kind, title, summary, body,
@@ -3152,7 +3150,7 @@ test("Web project catalog switches browser scope without exposing storage or cha
     );
   }
 
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
   try {
     assert.deepEqual(catalog.listRuntimeContextBindingEvents(), fixture.bindingEvents);
     assert.equal(catalog.resolveRuntimeContext(fixture.alphaContext).project?.project_id, fixture.alpha.project_id);
@@ -3287,7 +3285,7 @@ test("Web maintains project guidance as a direct project document with immutable
     );
   }
 
-  const store = new SqliteGoalBoardStore(fixture.alpha.database_path);
+  const store = new LocalProjectDatabase(fixture.alpha.database_path);
   try {
     assert.equal(
       (store.db.prepare("SELECT COUNT(*) AS count FROM goal_tree_proposal_decisions").get() as { count: number }).count,
@@ -3829,7 +3827,7 @@ test("Web settings use shared Runtime and project services for confirmed setup f
     assert.match(readFileSync(codexConfig, "utf8"), /GOALBOARD_RUNTIME_ID = "codex"/);
     assert.equal(readlinkSync(join(runtime.userHomeDirectory, ".codex", "skills", "goal-advance")), runtime.skill);
 
-    const beforeCatalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+    const beforeCatalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
     let beforeBindings: ReturnType<GoalBoardProjectCatalog["listRuntimeContextBindingEvents"]>;
     try {
       beforeBindings = beforeCatalog.listRuntimeContextBindingEvents();
@@ -3866,7 +3864,7 @@ test("Web settings use shared Runtime and project services for confirmed setup f
     assert.match(await renamedResponse.text(), /网页项目已改名/);
     assert.equal((await webFetch(`${origin}${created.project_path}`)).status, 200);
 
-    const afterCatalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+    const afterCatalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
     try {
       assert.equal(afterCatalog.getProject(created.project.project_id).display_name, "网页项目已改名");
       assert.deepEqual(afterCatalog.listRuntimeContextBindingEvents(), beforeBindings);
@@ -4023,7 +4021,7 @@ test("Web clearly separates regenerable demo data from user projects and shares 
     });
     assert.equal(removed.status, 200);
 
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
     try {
       assert.equal(catalog.listProjects().length, 2);
       assert.ok(catalog.listProjects().every((project) => project.data_class === "user"));
@@ -4039,7 +4037,7 @@ test("global settings leaves Session and workspace management to project directo
   const fixture = await webProjectCatalogFixture();
   const workspacePath = join(fixture.homeDirectory, "..", "ordinary-workspace");
   mkdirSync(workspacePath, { recursive: true });
-  const workspaceCatalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+  const workspaceCatalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
   try {
     const context = {
       runtime_id: "codex",
@@ -4187,7 +4185,7 @@ test("Web local control gate rejects cross-site, missing-credential, hostile-hos
     assert.equal(replayed.status, 409);
     assert.match(await replayed.text(), /不会重复执行/);
 
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
     try {
       assert.equal(catalog.listProjects().filter((project) => project.display_name === "安全创建").length, 1);
     } finally {
@@ -4248,7 +4246,7 @@ test("Web first-run onboarding can be skipped without creating a project or Runt
     );
   }
 
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     assert.deepEqual(catalog.listProjects(), []);
     assert.deepEqual(catalog.listRuntimeContextBindingEvents(), []);
@@ -4336,7 +4334,7 @@ test("Web onboarding creates one real Project, root Draft Goal, and optional Wor
     );
   }
 
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     const projects = catalog.listProjects();
     assert.equal(projects.length, 1);
@@ -4344,7 +4342,7 @@ test("Web onboarding creates one real Project, root Draft Goal, and optional Wor
     assert.equal(projects[0]?.display_name, "真实首次项目");
     assert.deepEqual(catalog.listWorkspaceDirectory(projectId).map((item) => item.canonical_path), [realpathSync(workspaceDirectory)]);
     const project = catalog.getProject(projectId);
-    const store = new SqliteGoalBoardStore(project.database_path);
+    const store = new LocalProjectDatabase(project.database_path);
     try {
       const goals = store.snapshot(project.board_id).goals;
       assert.equal(goals.length, 1);
@@ -4570,7 +4568,7 @@ test("Web migrates an explicitly confirmed legacy DB into one project without ch
     assert.match(await withoutConfirmation.text(), /明确确认/);
     assert.equal(existsSync(legacyDatabasePath), true);
 
-    const unconfirmedCatalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+    const unconfirmedCatalog = await openGoalBoardProjectCatalog({ homeDirectory });
     try {
       assert.deepEqual(unconfirmedCatalog.listProjects(), []);
       assert.deepEqual(unconfirmedCatalog.listRuntimeContextBindingEvents(), []);
@@ -4596,7 +4594,7 @@ test("Web migrates an explicitly confirmed legacy DB into one project without ch
     assert.equal(migrated.project_path, `/projects/${encodeURIComponent(migrated.project.project_id)}/`);
     assert.equal(existsSync(legacyDatabasePath), false);
 
-    const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+    const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
     try {
       const project = catalog.getProject(migrated.project.project_id);
       assert.equal(project.display_name, "迁移后的产品");
@@ -4643,7 +4641,7 @@ test("Web leaves an invalid legacy DB and the project catalog unchanged when mig
     );
   }
 
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
   try {
     assert.deepEqual(catalog.listProjects(), []);
     assert.deepEqual(catalog.listRuntimeContextBindingEvents(), []);
@@ -4654,8 +4652,8 @@ test("Web leaves an invalid legacy DB and the project catalog unchanged when mig
 
 test("Web lets a user set an accepted Goal as the current Goal without starting Runtime work", async () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     DEMO_BOARD_ID,
     {
@@ -4767,8 +4765,8 @@ test("Web lets a user set an accepted Goal as the current Goal without starting 
 test("Web uses the named Goal Tree decision page for atomic whole confirmation", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-tree-decision-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-tree-board",
     title: "Web Tree Decision",
@@ -4978,8 +4976,8 @@ test("Web uses the named Goal Tree decision page for atomic whole confirmation",
 test("Web explains a materialization conflict before the user confirms a whole Goal Tree proposal", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-tree-preflight-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-tree-preflight-board",
     title: "Web Tree Preflight",
@@ -5174,8 +5172,8 @@ test("Web explains a materialization conflict before the user confirms a whole G
 test("Web shows and confirms one existing Candidate promotion without a duplicate decision", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-candidate-promotion-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-candidate-board",
     title: "Web Candidate Promotion",
@@ -5315,8 +5313,8 @@ test("Web shows and confirms one existing Candidate promotion without a duplicat
 test("Web lets the user repair a historical Goal Tree Risk without rewriting the proposal", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-invalid-tree-risk-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-invalid-risk-board",
     title: "Invalid Risk Proposal",
@@ -5539,8 +5537,8 @@ test("Web lets the user repair a historical Goal Tree Risk without rewriting the
 test("Web explains incomplete product decomposition and shows who owns each product path", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-incomplete-decomposition-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-decomposition-board",
     title: "Product Decomposition",
@@ -5751,8 +5749,8 @@ test("Web explains incomplete product decomposition and shows who owns each prod
 test("Web explains why a historical pseudo-leaf must be split before the user can adopt it", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-leaf-readiness-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-leaf-readiness-board",
     title: "Leaf Readiness",
@@ -5850,8 +5848,8 @@ test("Web explains why a historical pseudo-leaf must be split before the user ca
 test("Web presents the shared result chain, AI-specific checks, and foundation dependency in plain language", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-task-chain-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "web-task-chain-board",
     title: "Task Chain",
@@ -6418,8 +6416,8 @@ test("Web server keeps Candidate and Rewire as separate user decisions", async (
 test("Web lets a user save a minimal Draft and confirm a readable Contract Proposal", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-contract-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "contract-board",
     title: "Draft Contract",
@@ -6726,8 +6724,8 @@ test("Web lets a user save a minimal Draft and confirm a readable Contract Propo
 test("Web maintains a structured Draft Contract and initial Risk and Impact without editing accepted Goals", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-draft-editor-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "draft-editor-board",
     title: "Draft Editor",
@@ -6937,8 +6935,8 @@ test("Web maintains a structured Draft Contract and initial Risk and Impact with
 test("Web maintains complete Risk facts, linked Goals, lifecycle states, and their visible effect", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-risk-workbench-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "risk-workbench-board",
     title: "Risk Workbench",
@@ -7121,7 +7119,7 @@ test("Web maintains complete Risk facts, linked Goals, lifecycle states, and the
     assert.match(updatedPage, new RegExp(riskEvidence.evidence.evidence_id));
     assert.match(updatedPage, /下一次规则发布后仍需重新检查/);
     assert.match(updatedPage, /交付风险工作台/);
-    const verify = new SqliteGoalBoardStore(databasePath);
+    const verify = new LocalProjectDatabase(databasePath);
     try {
       assert.deepEqual(
         (verify.db.prepare("SELECT goal_id FROM goal_risks WHERE risk_id = ? ORDER BY goal_id").all(created.risk.risk_id) as Array<{ goal_id: string }>).map((row) => row.goal_id),
@@ -7141,12 +7139,12 @@ test("Web maintains complete Risk facts, linked Goals, lifecycle states, and the
     } finally {
       verify.close();
     }
-    const historical = new SqliteGoalBoardStore(databasePath);
+    const historical = new LocalProjectDatabase(databasePath);
     try {
       historical.db
         .prepare("UPDATE risks SET resolution_basis_json = NULL WHERE risk_id = ?")
         .run(created.risk.risk_id);
-      const historicalCoordinator = new GoalBoardCoordinator(historical);
+      const historicalCoordinator = new GoalProjectApplication(historical);
       const historicalView = buildGoalBoardWebView(historical, historicalCoordinator, {
         boardId: "risk-workbench-board",
       });
@@ -7165,8 +7163,8 @@ test("Web maintains complete Risk facts, linked Goals, lifecycle states, and the
 test("Web maintains Impact facts, access state, deactivation, and retained history", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-web-impact-workbench-"));
   const databasePath = join(directory, "goalboard.db");
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: "impact-workbench-board",
     title: "Impact Workbench",
@@ -7254,7 +7252,7 @@ test("Web maintains Impact facts, access state, deactivation, and retained histo
     });
     const created = (await createResponse.json()) as { binding_id: string };
     assert.equal(createResponse.status, 201, JSON.stringify(created));
-    const afterCreate = new SqliteGoalBoardStore(databasePath);
+    const afterCreate = new LocalProjectDatabase(databasePath);
     try {
       const createdImpact = afterCreate.snapshot("impact-workbench-board").impacts.find((impact) => impact.binding_id === created.binding_id);
       assert.equal(createdImpact?.goal_id, "IMPACT-A", "the URL Goal owns a newly created Impact");
@@ -7320,7 +7318,7 @@ test("Web maintains Impact facts, access state, deactivation, and retained histo
     assert.match(historyPage, /只作为历史保留，不再参与工作冲突判断/);
     assert.doesNotMatch(historyPage, /data-impact-edit-form data-live-form=/);
 
-    const verify = new SqliteGoalBoardStore(databasePath);
+    const verify = new LocalProjectDatabase(databasePath);
     try {
       const stored = verify.snapshot("impact-workbench-board").impacts.find((impact) => impact.binding_id === created.binding_id);
       assert.equal(stored?.surface, "src/domain/goal.ts");
@@ -7342,8 +7340,8 @@ test("Web maintains Impact facts, access state, deactivation, and retained histo
 
 test("Web edits project and Goal Policy and submits a user-only Human Review", async (context) => {
   const { databasePath, homeDirectory } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     DEMO_BOARD_ID,
     {
@@ -7412,8 +7410,8 @@ test("Web edits project and Goal Policy and submits a user-only Human Review", a
     });
     assert.equal(goalPolicy.status, 200, await goalPolicy.text());
 
-    const runtimeStore = new SqliteGoalBoardStore(databasePath);
-    const runtimeCoordinator = new GoalBoardCoordinator(runtimeStore);
+    const runtimeStore = new LocalProjectDatabase(databasePath);
+    const runtimeCoordinator = new GoalProjectApplication(runtimeStore);
     const claim = runtimeCoordinator.executionValidation.commands.claimGoal({
       board_id: DEMO_BOARD_ID,
       goal_id: "POLICY-WEB",
@@ -7656,8 +7654,8 @@ test("Web edits project and Goal Policy and submits a user-only Human Review", a
     assert.equal(missingReason.status, 400);
     assert.match(await missingReason.text(), /对话验收必须保留用户原话/);
 
-    const decisionStore = new SqliteGoalBoardStore(databasePath);
-    const decisionCoordinator = new GoalBoardCoordinator(decisionStore);
+    const decisionStore = new LocalProjectDatabase(databasePath);
+    const decisionCoordinator = new GoalProjectApplication(decisionStore);
     const decisionProjection = decisionCoordinator.executionValidation.query.getGoalActionProjection({
       board_id: DEMO_BOARD_ID,
       goal_id: "POLICY-WEB",
@@ -7682,7 +7680,7 @@ test("Web edits project and Goal Policy and submits a user-only Human Review", a
       },
     );
     assert.equal(reviewed.status, 200, await reviewed.text());
-    const verifiedStore = new SqliteGoalBoardStore(databasePath);
+    const verifiedStore = new LocalProjectDatabase(databasePath);
     const savedReview = verifiedStore
       .snapshot(DEMO_BOARD_ID)
       .reviews.find((item) => item.obligation_id === obligation.obligation_id);
@@ -7710,8 +7708,8 @@ test("Web edits project and Goal Policy and submits a user-only Human Review", a
 
 test("Web result confirmation names the criterion that still lacks passing evidence", async () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     DEMO_BOARD_ID,
     {
@@ -7815,8 +7813,8 @@ test("Web records manual Evidence, safely opens project references, and exposes 
   writeFileSync(join(directory, "outside.txt"), "这个文件不属于项目引用根目录。\n");
   symlinkSync(join(directory, "outside.txt"), join(notesDirectory, "outside-link.txt"));
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     DEMO_BOARD_ID,
     {
@@ -7981,8 +7979,8 @@ test("Web records manual Evidence, safely opens project references, and exposes 
     assert.match(largeResult.evidence.locator_validation_reason, /512 KiB/);
     assert.match(largeResult.evidence.locator_validation_reason, /内容未全文预检/);
 
-    const correctionStore = new SqliteGoalBoardStore(databasePath);
-    const correctionCoordinator = new GoalBoardCoordinator(correctionStore);
+    const correctionStore = new LocalProjectDatabase(databasePath);
+    const correctionCoordinator = new GoalProjectApplication(correctionStore);
     correctionCoordinator.executionValidation.commands.correctEvidence({
       board_id: DEMO_BOARD_ID,
       goal_id: "EVIDENCE-WEB",
@@ -8125,7 +8123,7 @@ test("Web opens a verified Evidence locator from its recorded Runtime workspace,
     host_declares_stable: true,
     workspace: { canonical_path: unrelatedWorkspace, realpath_verified: true },
   };
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: fixture.homeDirectory });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: fixture.homeDirectory });
   try {
     catalog.bindRuntimeContext({
       context: sourceContext,
@@ -8143,10 +8141,10 @@ test("Web opens a verified Evidence locator from its recorded Runtime workspace,
     catalog.close();
   }
 
-  const store = new SqliteGoalBoardStore(fixture.alpha.database_path);
+  const store = new LocalProjectDatabase(fixture.alpha.database_path);
   let evidenceId: string;
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.goals.commands.createGoal(
       fixture.alpha.board_id,
       {
@@ -8239,10 +8237,10 @@ test("Web opens verified Evidence from the recorded root of a registered Git wor
   const worktreeFile = join(worktreeRoot, "fresh-review.txt");
   writeFileSync(worktreeFile, "reviewed from the registered isolated worktree\n");
 
-  const store = new SqliteGoalBoardStore(fixture.alpha.database_path);
+  const store = new LocalProjectDatabase(fixture.alpha.database_path);
   let evidenceId: string;
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     coordinator.goals.commands.createGoal(
       fixture.alpha.board_id,
       {
@@ -8316,8 +8314,8 @@ test("Web opens verified Evidence from the recorded root of a registered Git wor
 
 test("Web normal Tree excludes trashed Goals while the coordinator retains their facts", () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.goals.commands.createGoal(
     DEMO_BOARD_ID,
     {
@@ -8359,8 +8357,8 @@ test("Web normal Tree excludes trashed Goals while the coordinator retains their
 
 test("Web provides confirmed recoverable trash, blocked-work feedback, and restore", async () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   const createGoal = (goalId: string, title: string) =>
     coordinator.goals.commands.createGoal(
       DEMO_BOARD_ID,
@@ -8509,8 +8507,8 @@ test("Web provides confirmed recoverable trash, blocked-work feedback, and resto
 
 test("Web archives only completed Goals and provides a reversible archive view", async () => {
   const { databasePath } = webFixture();
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   for (const [goalId, title] of [
     ["ARCHIVE-WEB", "可归档的已完成 Goal"],
     ["ARCHIVE-UNMET", "尚未完成的 Goal"],

@@ -132,7 +132,10 @@ export const CLIENT_INITIALIZATION_SCRIPT = `      const reviewForm = submittedF
       if (desktopWorkSurfaces.length) setDesktopWorkSurface(decisionView ? "feed" : "goal", false, false);
     }
     const directGoalRequested = /^\\/(?:archive\\/|trash\\/)?goals\\/[^\\/]+\\/?$/.test(localPathname());
-    if (directGoalRequested && selected) {
+    const restoredNavigation = restoredUi && ["reload", "back_forward"].includes(
+      performance.getEntriesByType("navigation")[0]?.type,
+    );
+    if (directGoalRequested && selected && !restoredNavigation) {
       goalWorkspaceMode = "focus";
       setDesktopDirectory("goals", false, false);
       if (desktopWorkSurfaces.length) setDesktopWorkSurface("goal", false, false);

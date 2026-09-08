@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Goals relation UI preserves incoming direction, creation, cancel, deactivation and reloaded history", { timeout: 60_000 }, async (t) => {

@@ -26,7 +26,8 @@
   },
   "dependencies": {
     "@adeptify/goalboard-contracts": "workspace:*",
-    "better-sqlite3": "12.8.0"
+    "better-sqlite3": "12.8.0",
+    "@adeptify/search-evidence-layer": "file:../../vendor/search-evidence-layer/adeptify-search-evidence-layer-0.4.1.tgz"
   },
   "goalboard": {
     "path": "packages/storage",

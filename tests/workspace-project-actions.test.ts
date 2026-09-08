@@ -1,9 +1,10 @@
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import assert from "node:assert/strict";
 import { access, mkdtemp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardProjectCatalog } from "../src/projects/catalog.js";
+
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { createGoalBoardWebServer } from "../src/web/server.js";
 
@@ -16,7 +17,7 @@ test("project workspace actions require confirmation, repair matching Sessions, 
   const repairedPath = path.join(directory, "repository-after");
   await mkdir(previousPath, { recursive: true });
   await mkdir(repairedPath, { recursive: true });
-  const catalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
   const project = await catalog.createProject({ display_name: "工作目录动作", actor_id: "user" });
   catalog.close();
 
@@ -115,7 +116,7 @@ test("project workspace actions require confirmation, repair matching Sessions, 
     const unlink = await unlinkResponse.json() as { updated_session_count: number };
     assert.equal(unlink.updated_session_count, 3);
 
-    const finalCatalog = await GoalBoardProjectCatalog.open({ homeDirectory: home });
+    const finalCatalog = await openGoalBoardProjectCatalog({ homeDirectory: home });
     assert.equal(finalCatalog.listWorkspaceDirectory(project.project_id).length, 0);
     assert.equal(finalCatalog.listWorkspaceMemberships().some((membership) => membership.is_default), false);
     finalCatalog.close();

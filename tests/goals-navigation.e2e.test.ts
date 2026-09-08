@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEMO_BOARD_ID } from "../src/v1/demo.js";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
 test("Goal navigation preserves history, keyboard focus, failed selection recovery and open-tab limits without executing work", { timeout: 60_000 }, async t => {
@@ -129,4 +129,34 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   assert.deepEqual(after.claims, before.claims);
   assert.deepEqual(after.evidence, before.evidence);
   assert.equal(after.board.active_goal_id, "WEB");
+});
+
+test("Sources mutation and Feed reload preserve utility state while fresh Goal links still open Goals", { timeout: 60_000 }, async t => {
+  const browser = await openGoalBrowser(t);
+  if (!browser) return;
+  const { origin, sessionId, command, evaluate, waitFor, click, navigate, reloadPage } = browser;
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }, sessionId);
+  await navigate(() => command("Page.navigate", { url: origin + "/goals/V1?desktop=1#goal-records-V1" }, sessionId));
+  await waitFor("document.body.dataset.desktopSurface === 'goal'");
+  await click('[data-directory-panel="goals"] [data-directory-back]');
+  await click('[data-work-surface-open="sources"]');
+  await waitFor("document.body.dataset.desktopSurface === 'sources'");
+  await click('[data-feed-sources-open]');
+  await waitFor("document.querySelector('[data-feed-sources-dialog]')?.open");
+  const sourceDefinition = await evaluate<string>("document.querySelector('[data-feed-rss-definition]').value");
+  await navigate(() => click('[data-feed-source-register="rss"]'));
+  await waitFor("document.body.dataset.desktopSurface === 'sources'");
+  assert.equal(await evaluate("location.pathname"), "/goals/V1");
+  const response = await fetch(origin + "/api/feed");
+  assert.equal(response.status, 200);
+  const snapshot = await response.json();
+  assert.ok(snapshot.sources.some((source: { definition_id: string }) => source.definition_id === sourceDefinition));
+  await click('[data-directory-panel="sources"] [data-directory-back]');
+  await click('[data-work-surface-open="feed"][data-feed-preset="feed"]');
+  await waitFor("document.body.dataset.desktopSurface === 'feed'");
+  await reloadPage();
+  await waitFor("document.body.dataset.desktopSurface === 'feed'");
+  assert.equal(await evaluate("document.querySelector('[data-feed-directory]').dataset.feedPreset"), "feed");
+  await navigate(() => command("Page.navigate", { url: origin + "/goals/RELEASE?desktop=1" }, sessionId));
+  await waitFor("document.body.dataset.desktopSurface === 'goal' && Boolean(document.querySelector('[data-goal-view=RELEASE]'))");
 });

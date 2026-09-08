@@ -35,3 +35,11 @@ export const packageDescriptor = {
 } as const;
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
+
+export { RuntimeProjectResolution, boundResolution } from "./project-resolution.js";
+
+export { createRuntimeProjectBindingValidation, type RuntimeProjectBindingValidation, type RuntimeProjectBindingErrorFactory, type RuntimeProjectBindingErrorCode } from "./project-binding-validation.js";
+
+export { RuntimeProjectBindingCommands, type RuntimeProjectBindingPorts } from "./project-binding-commands.js";
+
+export { createRuntimeProjectSetup, type RuntimeProjectSetupPorts } from "./project-setup.js";

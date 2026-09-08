@@ -2,29 +2,8 @@ export const SERVICE_OWNER = "goalboard-web-service-v1";
 export const SERVICE_LABEL = "com.adeptify.goalboard.web";
 
 export type GoalBoardWebServiceAction = "install" | "start" | "stop" | "restart" | "remove";
-export type GoalBoardWebServiceState =
-  | "unsupported"
-  | "unavailable"
-  | "absent"
-  | "stopped"
-  | "running"
-  | "unhealthy"
-  | "needs_repair"
-  | "conflict";
-
-export interface GoalBoardWebServiceDetection {
-  provider: "macos-launchagent" | "unsupported";
-  state: GoalBoardWebServiceState;
-  supported: boolean;
-  owned: boolean;
-  running: boolean;
-  label: string;
-  plist_path: string;
-  command: string[];
-  stdout_log: string;
-  stderr_log: string;
-  message: string;
-}
+import type { GoalBoardWebServiceDetection } from "@adeptify/goalboard-contracts/platform/app-host";
+export type { GoalBoardWebServiceState, GoalBoardWebServiceDetection } from "@adeptify/goalboard-contracts/platform/app-host";
 
 export interface GoalBoardWebServicePlan {
   plan_id: string;

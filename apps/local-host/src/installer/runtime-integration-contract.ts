@@ -4,33 +4,14 @@ export const INTEGRATION_OWNER = "goalboard-runtime-integration-v1";
 
 export const INSTALLER_OWNER = "goalboard-home-install-v1";
 
-export const SUPPORTED_RUNTIME_IDS = ["codex", "claude-code", "opencode", "pi-agent", "grok-build"] as const;
-
-export type SupportedRuntimeId = (typeof SUPPORTED_RUNTIME_IDS)[number];
-
+import { SUPPORTED_RUNTIME_IDS } from "@adeptify/goalboard-contracts/platform/app-host";
+import type { SupportedRuntimeId } from "@adeptify/goalboard-contracts/platform/app-host";
+export { SUPPORTED_RUNTIME_IDS } from "@adeptify/goalboard-contracts/platform/app-host";
+export type { SupportedRuntimeId, RuntimeConnectionState, RuntimeIntegrationDetection } from "@adeptify/goalboard-contracts/platform/app-host";
 export function isSupportedRuntimeId(value: string): value is SupportedRuntimeId {
   return (SUPPORTED_RUNTIME_IDS as readonly string[]).includes(value);
 }
-
 export type RuntimeIntegrationAction = "connect" | "remove";
-
-export type RuntimeConnectionState =
-  | "not_detected"
-  | "goalboard_unavailable"
-  | "not_connected"
-  | "needs_repair"
-  | "connected"
-  | "conflict";
-
-export interface RuntimeIntegrationDetection {
-  runtime_id: SupportedRuntimeId;
-  display_name: string;
-  executable_path: string | null;
-  config_path: string;
-  skill_path: string;
-  connection_state: RuntimeConnectionState;
-  message: string;
-}
 
 export interface RuntimeIntegrationChange {
   kind: "runtime_config" | "skill_link" | "ownership_receipt";

@@ -91,7 +91,7 @@ Server Plugin 是 Team 决定安装的能力，可以有自己的私有 Store �
 
 一级目录对应 Native Plugin。Plugin 可以向 UI Host 声明页面、命令、Inspector、Slot 和 Embed；被嵌入的 Plugin 必须显式开放 Slot 和接受的 Contribution Contract。宿主控制位置、生命周期、权限和错误隔离，被嵌入内容不能直接读宿主 Store 或内部组件。
 
-AP3 已把稳定文档 Shell、命名 Slot、mount 校验、浏览器资产和视觉基础迁入 Workbench / UI Host / Design System。各产品页面仍由对应 Native Plugin Goal 逐项迁出；当前实现、兼容边界和剩余 owner 见 [`UI-PLATFORM.md`](../platform/UI-PLATFORM.md)。
+AP3 已把稳定文档 Shell、命名 Slot、mount 校验、浏览器资产和视觉基础迁入 Workbench / UI Host / Design System。Cutover 已将各产品页面迁入对应 Native Plugin，并将跨产品 UI 组合归 Workbench；当前实现与边界见 [`UI-PLATFORM.md`](../platform/UI-PLATFORM.md)。
 
 ## 8. 可靠性原则
 

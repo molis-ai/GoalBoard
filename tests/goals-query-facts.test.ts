@@ -1,15 +1,16 @@
+import { buildGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GoalsModule } from "@adeptify/goalboard-module-goals";
 import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
-import { buildGoalBoardWebView } from "../src/web/server.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+
 
 test("public Query preserves complete rule history, linked risks and Runtime dependency/replacement facts", () => {
-  const store = new SqliteGoalBoardStore(":memory:");
+  const store = new LocalProjectDatabase(":memory:");
   try {
-    const coordinator = new GoalBoardCoordinator(store);
+    const coordinator = new GoalProjectApplication(store);
     const goals = new GoalsModule(store.db, {
       supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
       currentActionToken: (_board, goal) => `token:${goal}`,

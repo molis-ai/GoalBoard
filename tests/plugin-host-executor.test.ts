@@ -10,14 +10,14 @@ import { UiHost, PluginUiAccessError } from "@adeptify/goalboard-ui-host";
 import { ArtifactsModule } from "@adeptify/goalboard-module-artifacts";
 import { createGithubIntegrationPlugin } from "@adeptify/goalboard-integration-github";
 import type { PluginDefinition, PluginStartContext } from "@adeptify/goalboard-contracts/platform/plugin";
-import { seedDemoBoard, DEMO_BOARD_ID } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Host gives a real Plugin private storage, Artifact exchange and revocable UI across restart and failed stop", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-plugin-host-"));
   const file = join(directory, "board.db");
   seedDemoBoard(file);
-  const store = new SqliteGoalBoardStore(file);
+  const store = new LocalProjectDatabase(file);
   const privateDb = new Database(join(directory, "plugin-private.db"));
   const privateOwner = new SqlitePluginPrivateStorage(privateDb);
   const artifacts = new ArtifactsModule({ db: store.db, appendEvent: event => store.appendEvent(event) });

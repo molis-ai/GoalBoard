@@ -9,8 +9,8 @@ import {
   EvidenceVerificationModule,
 } from "@adeptify/goalboard-module-evidence-verification";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 test("Evidence public module owns locator preflight, records, review links, and criterion coverage", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-evidence-module-"));
@@ -18,7 +18,7 @@ test("Evidence public module owns locator preflight, records, review links, and 
   const evidencePath = join(directory, "evidence.md");
   writeFileSync(evidencePath, "# Verification Result\n\nAll checks passed.\n", "utf8");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   let now = "2026-09-02T00:00:00.000Z";
   try {
     const evidence = new EvidenceVerificationModule({
@@ -108,7 +108,7 @@ test("Evidence corrections are immutable, owner-scoped, acyclic, and remove stal
   const directory = mkdtempSync(join(tmpdir(), "goalboard-evidence-correction-module-"));
   const databasePath = join(directory, "goalboard.sqlite");
   seedDemoBoard(databasePath);
-  const store = new SqliteGoalBoardStore(databasePath);
+  const store = new LocalProjectDatabase(databasePath);
   try {
     const evidence = new EvidenceVerificationModule({
       db: store.db,

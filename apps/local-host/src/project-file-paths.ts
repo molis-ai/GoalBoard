@@ -1,0 +1,33 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import type { ProjectRecord as GoalBoardProjectRecord } from "@adeptify/goalboard-contracts/modules/projects";
+import { GoalBoardProjectCatalogError } from "./project-catalog-contract.js";
+export function managedProjectDirectory(projectsDirectory: string, project: GoalBoardProjectRecord): string {
+    const directory = path.join(projectsDirectory, project.project_id);
+    const expectedDatabasePath = path.join(directory, "goalboard.db");
+    if (path.resolve(project.database_path) !== expectedDatabasePath) {
+      throw new GoalBoardProjectCatalogError(
+        "catalog.project_storage_invalid",
+        "项目目录记录不指向 GoalBoard 自己管理的项目数据库，拒绝删除",
+      );
+    }
+    return directory;
+  }
+
+export function isWithin(candidate: string, directory: string): boolean {
+  const relative = path.relative(directory, candidate);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+export async function exists(filePath: string): Promise<boolean> {
+  return (await statOrNull(filePath)) != null;
+}
+
+export async function statOrNull(filePath: string) {
+  try {
+    return await fs.stat(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}

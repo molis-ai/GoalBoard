@@ -4,22 +4,22 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { GoalBoardCoordinator } from "../src/v1/coordinator.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
 import { SessionContentService } from "@adeptify/goalboard-plugin-work";
 import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
 import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import type { RuntimeSessionTransport } from "../src/sessions/types.js";
+import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 
 function definitelyRejected(message: string): Error {
   return Object.assign(new Error(message), { deliveryAccepted: false, retryable: true });
 }
 
 function contractFixture(databasePath: string, boardId: string, goalId: string) {
-  const store = new SqliteGoalBoardStore(databasePath);
-  const coordinator = new GoalBoardCoordinator(store);
+  const store = new LocalProjectDatabase(databasePath);
+  const coordinator = new GoalProjectApplication(store);
   coordinator.initializeBoard({
     board_id: boardId,
     title: "Recovery",

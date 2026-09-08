@@ -15,8 +15,8 @@ import type {
 } from "@adeptify/goalboard-contracts/services/connector-host";
 import type { RawEventAdapter } from "@adeptify/goalboard-contracts/services/listener-host";
 
-import { DEMO_BOARD_ID, seedDemoBoard } from "../src/v1/demo.js";
-import { SqliteGoalBoardStore } from "../src/v1/store.js";
+import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 
 function rawEvent(id: string, cursorAfter?: unknown): ConnectorRawEvent {
   return {
@@ -50,7 +50,7 @@ function adapter(failOnceFor?: string): RawEventAdapter {
   };
 }
 
-function createSource(store: SqliteGoalBoardStore): string {
+function createSource(store: LocalProjectDatabase): string {
   const now = "2026-09-02T08:00:00.000Z";
   const sourceId = "source-fd1-fixture";
   new SourcesModule(store.db).commands.save({
@@ -89,7 +89,7 @@ test("Raw Event becomes one durable Signal and resumes after adapter failure wit
   try {
     const databasePath = join(directory, "goalboard.sqlite");
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       const sourceId = createSource(store);
       assert.equal(new SourcesModule(store.db).events.list(DEMO_BOARD_ID, sourceId).at(-1)?.type, "source.created");
@@ -207,7 +207,7 @@ test("Listener lease prevents two callers from consuming one Source concurrently
   try {
     const databasePath = join(directory, "goalboard.sqlite");
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     let releasePoll: (() => void) | undefined;
     try {
       const sourceId = createSource(store);
@@ -262,7 +262,7 @@ test("repeated Adapter failure quarantines the Raw Event without polling past it
   try {
     const databasePath = join(directory, "goalboard.sqlite");
     seedDemoBoard(databasePath);
-    const store = new SqliteGoalBoardStore(databasePath);
+    const store = new LocalProjectDatabase(databasePath);
     try {
       const sourceId = createSource(store);
       let polls = 0;

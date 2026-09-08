@@ -7,7 +7,6 @@ export { RuntimeIntegrationService } from "./installer/runtime-integration.js";
 export { RuntimeIntegrationError, SUPPORTED_RUNTIME_IDS, isSupportedRuntimeId } from "./installer/runtime-integration-contract.js";
 export type { SupportedRuntimeId, RuntimeIntegrationAction, RuntimeConnectionState, RuntimeIntegrationDetection, RuntimeIntegrationChange, RuntimeIntegrationPlan, RuntimeIntegrationConfirmation, RuntimeIntegrationResultStatus, RuntimeIntegrationResult, RuntimeIntegrationValidationContext, RuntimeIntegrationServiceOptions } from "./installer/runtime-integration-contract.js";
 export { runtimeGoalTreeDecisionAuthority } from "./runtime-decision.js";
-import { randomUUID } from "node:crypto";
 export { openWorkSessionRegistry } from "./session-registry.js";
 export { RuntimeSessionHost } from "./runtime-session.js";
 export { RuntimeProjectConnection } from "./runtime-project-connection.js";
@@ -19,14 +18,6 @@ export { PluginHostExecutor } from "./plugin-executor.js";
 export type { PluginHostExecutorOptions } from "./plugin-executor.js";
 export { runPluginDevelopment } from "./plugin-development.js";
 export type { LocalProjectStoragePreparation } from "./project-storage.js";
-
-import type {
-  HostCapabilityDefinition,
-  LocalHostProjectClient,
-  LocalHostProjectReference,
-  LocalHostStatus,
-} from "@adeptify/goalboard-contracts/platform/app-host";
-import { CapabilityRegistry, type CapabilityHandler } from "@adeptify/goalboard-kernel";
 
 export const packageDescriptor = {
   packageName: "@adeptify/goalboard-app-local-host",
@@ -41,210 +32,7 @@ export const packageDescriptor = {
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
 
-export interface LocalHostRuntimeFactory<Runtime> {
-  open(reference: LocalHostProjectReference): Runtime | Promise<Runtime>;
-  close(runtime: Runtime, reference: LocalHostProjectReference): void | Promise<void>;
-}
-
-export interface LocalHostOptions<Runtime> {
-  runtimeFactory: LocalHostRuntimeFactory<Runtime>;
-  instanceId?: string;
-}
-
-export class LocalHostError extends Error {
-  constructor(
-    readonly code:
-      | "host.closed"
-      | "host.project_invalid"
-      | "host.project_identity_conflict"
-      | "host.project_closing",
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-interface RuntimeEntry<Runtime> {
-  reference: LocalHostProjectReference;
-  runtime: Promise<Runtime>;
-  state: "opening" | "ready" | "closing";
-  operationTail: Promise<void>;
-  activeUses: number;
-  idleWaiters: Array<() => void>;
-}
-
-function normalizeReference(reference: LocalHostProjectReference): LocalHostProjectReference {
-  const normalized = {
-    project_id: reference.project_id.trim(),
-    board_id: reference.board_id.trim(),
-    storage_key: reference.storage_key.trim(),
-  };
-  if (!normalized.project_id || !normalized.board_id || !normalized.storage_key) {
-    throw new LocalHostError("host.project_invalid", "Local Host Project reference 不能为空");
-  }
-  return normalized;
-}
-
-/**
- * One process-local composition owner. Each storage key is opened exactly
- * once, including concurrent discovery, and all typed Capability calls are
- * serialized through that Project runtime.
- */
-export class LocalHost<Runtime> {
-  readonly instanceId: string;
-  readonly capabilities = new CapabilityRegistry<Runtime>();
-  private readonly entries = new Map<string, RuntimeEntry<Runtime>>();
-  private readonly closingKeys = new Set<string>();
-  private state: "running" | "closing" | "closed" = "running";
-
-  constructor(private readonly options: LocalHostOptions<Runtime>) {
-    this.instanceId = options.instanceId?.trim() || `local-host-${randomUUID()}`;
-  }
-
-  register<Input, Output>(
-    definition: HostCapabilityDefinition<Input, Output>,
-    handler: CapabilityHandler<Runtime, Input, Output>,
-  ): () => void {
-    this.assertRunning();
-    return this.capabilities.register(definition, handler);
-  }
-
-  client(reference: LocalHostProjectReference): LocalHostProjectClient {
-    const project = normalizeReference(reference);
-    this.assertCompatibleReference(project);
-    const client: LocalHostProjectClient = {
-      host_instance_id: this.instanceId,
-      project,
-      withScope: <Result>(operation: (client: LocalHostProjectClient) => Result | Promise<Result>) =>
-        this.withRuntime(project, () => operation(client)),
-      invoke: <Input, Output>(
-        capability: HostCapabilityDefinition<Input, Output>,
-        input: Input,
-      ) => this.invoke(project, capability, input),
-    };
-    return client;
-  }
-
-  async invoke<Input, Output>(
-    reference: LocalHostProjectReference,
-    capability: HostCapabilityDefinition<Input, Output>,
-    input: Input,
-  ): Promise<Output> {
-    const entry = this.ensureEntry(reference);
-    const operation = entry.operationTail.then(async () => {
-      const runtime = await entry.runtime;
-      return await this.capabilities.invoke(runtime, capability, input);
-    });
-    entry.operationTail = operation.then(() => undefined, () => undefined);
-    return await operation;
-  }
-
-  /** Compatibility composition port while legacy callers move to capabilities. */
-  async withRuntime<Result>(
-    reference: LocalHostProjectReference,
-    operation: (runtime: Runtime) => Result | Promise<Result>,
-  ): Promise<Result> {
-    const entry = this.ensureEntry(reference);
-    entry.activeUses += 1;
-    try {
-      return await operation(await entry.runtime);
-    } finally {
-      entry.activeUses -= 1;
-      if (entry.activeUses === 0) {
-        for (const resolve of entry.idleWaiters.splice(0)) resolve();
-      }
-    }
-  }
-
-  status(): LocalHostStatus {
-    return {
-      instance_id: this.instanceId,
-      state: this.state,
-      projects: [...this.entries.values()]
-        .map((entry) => ({ ...entry.reference, state: entry.state }))
-        .sort((left, right) => left.storage_key.localeCompare(right.storage_key)),
-      capabilities: this.capabilities.descriptors(),
-    };
-  }
-
-  async closeProject(referenceOrStorageKey: LocalHostProjectReference | string): Promise<boolean> {
-    const storageKey = typeof referenceOrStorageKey === "string"
-      ? referenceOrStorageKey.trim()
-      : normalizeReference(referenceOrStorageKey).storage_key;
-    const entry = this.entries.get(storageKey);
-    if (!entry) return false;
-    entry.state = "closing";
-    this.closingKeys.add(storageKey);
-    try {
-      await entry.operationTail;
-      if (entry.activeUses > 0) {
-        await new Promise<void>((resolve) => { entry.idleWaiters.push(resolve); });
-      }
-      await this.options.runtimeFactory.close(await entry.runtime, entry.reference);
-      return true;
-    } finally {
-      if (this.entries.get(storageKey) === entry) this.entries.delete(storageKey);
-      this.closingKeys.delete(storageKey);
-    }
-  }
-
-  async close(): Promise<void> {
-    if (this.state === "closed") return;
-    this.state = "closing";
-    const keys = [...this.entries.keys()];
-    await Promise.all(keys.map((key) => this.closeProject(key)));
-    this.state = "closed";
-  }
-
-  private ensureEntry(reference: LocalHostProjectReference): RuntimeEntry<Runtime> {
-    this.assertRunning();
-    const normalized = normalizeReference(reference);
-    if (this.closingKeys.has(normalized.storage_key)) {
-      throw new LocalHostError("host.project_closing", "这个 Project 的 Local Host runtime 正在关闭");
-    }
-    const existing = this.entries.get(normalized.storage_key);
-    if (existing) {
-      this.assertSameIdentity(existing.reference, normalized);
-      return existing;
-    }
-    const entry: RuntimeEntry<Runtime> = {
-      reference: normalized,
-      runtime: Promise.resolve().then(() => this.options.runtimeFactory.open(normalized)),
-      state: "opening",
-      operationTail: Promise.resolve(),
-      activeUses: 0,
-      idleWaiters: [],
-    };
-    this.entries.set(normalized.storage_key, entry);
-    entry.runtime.then(
-      () => { if (entry.state === "opening") entry.state = "ready"; },
-      () => { if (this.entries.get(normalized.storage_key) === entry) this.entries.delete(normalized.storage_key); },
-    );
-    return entry;
-  }
-
-  private assertCompatibleReference(reference: LocalHostProjectReference): void {
-    this.assertRunning();
-    const existing = this.entries.get(reference.storage_key);
-    if (existing) this.assertSameIdentity(existing.reference, reference);
-  }
-
-  private assertSameIdentity(
-    current: LocalHostProjectReference,
-    next: LocalHostProjectReference,
-  ): void {
-    if (current.project_id !== next.project_id || current.board_id !== next.board_id) {
-      throw new LocalHostError(
-        "host.project_identity_conflict",
-        `同一 storage_key 不能映射到不同 Project: ${current.project_id} / ${next.project_id}`,
-      );
-    }
-  }
-
-  private assertRunning(): void {
-    if (this.state !== "running") throw new LocalHostError("host.closed", "Local Host 已关闭");
-  }
-}
+export * from "./local-host.js";
 export { GoalBoardWebServiceManager } from "./installer/web-service.js";
 export { GoalBoardWebServiceError, type GoalBoardWebServiceAction, type GoalBoardWebServiceState, type GoalBoardWebServiceDetection, type GoalBoardWebServicePlan, type GoalBoardWebServiceResult, type GoalBoardWebServiceManagerOptions } from "./installer/web-service-contract.js";
 export { GoalBoardUninstallService } from "./installer/uninstall.js";
@@ -260,3 +48,92 @@ export { migrateFeedTables, migrateInfoflowContractV2 } from "./feed-migrations.
 export { LocalProjectDatabase } from "./project-database.js";
 
 export * from "./goal-project-application.js";
+
+export * from "./web-locale.js";
+
+export { createLocalHostWorkbenchRenderer } from "./workbench-renderer.js";
+
+export { CATALOG_SCHEMA_VERSION, CATALOG_OWNER, GoalBoardProjectCatalogError, catalogSchemaCompatibilityError, type GoalBoardProjectCatalogErrorDetails } from "./project-catalog-contract.js";
+export { initializeProjectDatabase, readManagedBoard, validateManagedBoard, assertProjectHasNoActiveWork } from "./managed-project-database.js";
+
+export { ManagedProjectFiles } from "./managed-project-files.js";
+export { ManagedProjectDeletion, type ProjectDeletionCleanupPorts } from "./managed-project-deletion.js";
+export { DemoProjectLifecycle, type DemoProjectSeedPort } from "./demo-project-lifecycle.js";
+export { exists } from "./project-file-paths.js";
+export type { CreateGoalBoardProjectInput, ManageGoalBoardDemoProjectInput, GoalBoardDemoProjectResult } from "./project-catalog-contract.js";
+
+export { initializeCatalog, assertOwnedCatalog, migrateCatalog, type CatalogDesktopSchema } from "./catalog-migrations.js";
+
+export * from "./project-catalog.js";
+export { seedDemoBoard, DEMO_BOARD_ID } from "./demo-seed.js";
+
+export { hydrateFeedItemContent, hydrateFeedSnapshotContent } from "./feed-content.js";
+
+export { createLocalFeedApplication } from "./feed-application.js";
+
+export { createFeedSourceRuntime, type FeedSourceRuntime } from "./feed-source-runtime.js";
+export { createIntelligenceCollectAdapter, type IntelligenceCollectRequest, type IntelligenceCollectResult, type IntelligenceCollectAdapter } from "./feed-intelligence-client.js";
+
+export { createLocalFeedSourceService, listFeedSourceCatalog } from "./feed-source-service.js";
+export type { FeedSourceService, RegisterFeedSourceInput, UpdateFeedSourceInput, ConfigureFeedSourceScheduleInput, FeedSourceSyncResult, FeedSourceCatalogView } from "@adeptify/goalboard-plugin-feed";
+
+export * from "./connector-credentials.js";
+export * from "./github-oauth.js";
+
+export * from "./gmail-oauth.js";
+
+export { createGithubConnector } from "./github-connector.js";
+export { createGmailConnector } from "./gmail-connector.js";
+export { OfficialIntegrationRegistry, type OfficialProviderFactory } from "./official-integrations.js";
+
+export { createLocalFeedConnectorSync } from "./feed-connector-sync.js";
+
+export { createLocalFeedConnectorService } from "./feed-connector-service.js";
+
+export { createLocalFeedSourceScheduler } from "./feed-source-scheduler.js";
+
+export { defaultRelayDatabasePath, detectRelayImport, importRelayData } from "./relay-import.js";
+
+export { createLocalFeedGoalPromotion } from "./feed-goal-promotion.js";
+
+export { handleFeedNativePluginHttp, type FeedNativePluginHttpOptions } from "./feed-native-plugin-http.js";
+
+export { createLocalArtifactHttp, renderGoalArtifactContext } from "./artifact-native-plugin-http.js";
+
+export * from "./onboarding.js";
+
+export { createLocalHostCapsule } from "./capsule.js";
+
+export { attachGoalBoardPtySocket, type GoalBoardPtySocketHandlers } from "./pty-socket.js";
+
+export { buildGoalBoardWebView, cachedGoalBoardWebView, type GoalBoardWebViewCache, type WebViewOptions } from "./web-view.js";
+
+export { sendLocalWebJson, readLocalWebBody, authorizeLocalWebRequest, type LocalMutationState } from "./web-http.js";
+export { createLocalWebAssets } from "./web-assets.js";
+
+export * from "./web-session.js";
+export { reconcileLegacySessionCatalog } from "./session-migration.js";
+export { handleLocalRuntimeSettingsHttp, serviceProcessId } from "./web-runtime-settings.js";
+export * from "./web-project-settings.js";
+export * from "./web-project-presentation.js";
+export { importV3Board } from "./board-v3-import.js";
+export * from "./project-host.js";
+export { importV3Capability, projectResumeFactsCapability, trashedGoalsCapability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability } from "@adeptify/goalboard-plugin-goals";
+export type { CreateGoalCapabilityInput, ImportV3CapabilityInput } from "@adeptify/goalboard-plugin-goals";
+export { runLocalPluginDevelopment } from "./local-plugin-development.js";
+export { createLocalOnboardingHttp } from "./web-onboarding.js";
+export { createLocalPanelHttp } from "./web-panel.js";
+export { createLocalWorkSessionHttp } from "./web-work-session.js";
+export { handleLocalProjectReferenceHttp } from "./web-project-reference.js";
+export { createLocalPlanningHttp } from "./web-planning.js";
+export { createLocalGoalsReadHttp } from "./web-goals-read.js";
+export { createLocalWebServerFactory } from "./web-server.js";
+export type { WebServerOptions } from "./web-types.js";
+export type { LocalWebPlatform } from "./web-composition.js";
+export { createLocalUninstallService } from "./local-uninstall.js";
+export { LocalMcpServer } from "./mcp-server.js";
+export type { GoalBoardMcpAudience, GoalBoardMcpToolCallContext } from "./mcp-server.js";
+export { runV1Cli } from "./cli-project.js";
+export type { V1CliOptions } from "./cli-project.js";
+export { runLocalCli } from "./cli-host.js";
+export type { LocalCliOptions } from "./cli-host.js";
