@@ -1,5 +1,5 @@
-# F2 Monorepo package roots. The legacy root package remains the current
-# compatibility/release surface until the later Cutover Goal retires it.
+# Active Monorepo package roots. The root package provides product launchers
+# and the supported 0.1.x SDK/release surface.
 packages:
   - 'apps/*'
   - 'packages/*'

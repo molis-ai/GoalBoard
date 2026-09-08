@@ -299,12 +299,6 @@ importers:
         specifier: workspace:*
         version: link:../../plugins/native/goals
 
-  apps/server:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
   apps/workbench:
     dependencies:
       '@adeptify/goalboard-contracts':
@@ -356,18 +350,6 @@ importers:
         specifier: 1.1.0
         version: 1.1.0
 
-  horizontal/scheduler:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
-  modules/actions:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
   modules/artifacts:
     dependencies:
       '@adeptify/goalboard-contracts':
@@ -375,12 +357,6 @@ importers:
         version: link:../../packages/contracts
 
   modules/attention-resumption:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
-  modules/automation:
     dependencies:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
@@ -428,12 +404,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
 
-  modules/identity-team-access:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
   modules/private-work-context:
     dependencies:
       '@adeptify/goalboard-contracts':
@@ -465,12 +435,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
 
-  modules/sync-replication:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-
   packages/contracts: {}
 
   packages/design-system:
@@ -482,19 +446,7 @@ importers:
         specifier: ^1.31.0
         version: 1.31.0
 
-  packages/exchange:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-
   packages/kernel:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../contracts
-
-  packages/observability:
     dependencies:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*
@@ -536,19 +488,7 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
-  plugins/native/actions:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../../packages/contracts
-
   plugins/native/artifacts:
-    dependencies:
-      '@adeptify/goalboard-contracts':
-        specifier: workspace:*
-        version: link:../../../packages/contracts
-
-  plugins/native/automation:
     dependencies:
       '@adeptify/goalboard-contracts':
         specifier: workspace:*

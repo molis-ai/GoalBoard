@@ -1,5 +1,7 @@
 # 架构重组迁移矩阵
 
+2026-09-08 清理补充：已删除 10 个无实现、无消费者的占位包，实际 workspace 为 38 包；未来设计见 SSOT 的 absent 条目。根 src 仅保留 6 个启动/SDK 文件。历史记录中的 48 包是当时口径。
+
 2026-09-08 Cutover：原混合实现 caller 已退出。当前运行结果以 [统一验收](../../specs/goalboard-architecture-reorganization/cutover-validation.md) 为准，下面表格为最终实现位置。
 
 | 原路径 | 当前实现 | 旧路径状态 |

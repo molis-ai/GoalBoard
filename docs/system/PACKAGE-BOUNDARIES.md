@@ -88,7 +88,7 @@ F3 已建立自动门禁，覆盖：public entrypoint、禁止 deep import、Mod
 
 ```bash
 pnpm boundary:test   # 用失败样例证明规则真的会拦截
-pnpm boundary:check  # 扫描当前 48 个目标 package
+pnpm boundary:check  # 扫描当前实际 workspace package
 pnpm workspace:verify # 门禁 + 所有目标 package 的 typecheck/build
 ```
 
