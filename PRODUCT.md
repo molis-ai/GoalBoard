@@ -113,11 +113,11 @@ Relay 所有权迁移由用户显式触发：GoalBoard 以只读方式打开本�
 - `specs/goalboard-mvp/goalboard.md`：开发 Goal、Coverage、Risk 和 Review 状态。
 - `specs/goalboard-mvp/domain-contract.md`：Canonical Domain Contract。
 - `specs/goalboard-mvp/coordinator-contract.md`：Coordinator 决策与场景。
-- `src/v1/`：SQLite Store、Coordinator、V1 types、管理 CLI 与一次性旧数据导入。
-- `src/cli/main.ts` 与 `src/mcp/server.ts`：V1-only CLI/MCP 入口及 Runtime/management audience 边界。
-- `src/web/`：读取同一 SQLite 的 Goal Tree 与文档式工作区。
-- `src/feed/`：Feed Workbench 的 Item、来源、资料、处理状态、公开来源与账号连接器运行时、加密本地存储，以及 Relay 所有权迁移。
-- `desktop/`：可选 macOS App 壳，复用同一套带 TUI 的 Web 工作台。
+- `modules/` 与 `apps/local-host/`：业务事实、跨模块用例装配、项目数据库和旧数据导入。
+- `apps/desktop/launchers/cli/main.ts` 与 `apps/desktop/launchers/mcp/server.ts`：V1-only CLI/MCP 入口及 Runtime/management audience 边界。
+- `apps/workbench/` 与 `plugins/native/goals/`：Goal Tree 与文档式工作区。
+- `plugins/native/feed/`、相关 Modules 与官方 Integrations：Feed Workbench 的 Item、来源、资料、处理状态、公开来源与账号连接器运行时、加密本地存储，以及 Relay 所有权迁移。
+- `apps/desktop/`：可选 macOS App 壳，复用同一套带 TUI 的 Web 工作台。
 - `tests/v1.test.ts`、`tests/mcp.test.ts`、`tests/feed.test.ts`、`tests/web.test.ts`：状态门禁、权限、迁移和 UI 数据流证据。
 
 ## Product Principles

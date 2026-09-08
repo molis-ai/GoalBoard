@@ -10,7 +10,7 @@ import type { RegisterArtifactVersionInput } from "@adeptify/goalboard-contracts
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 

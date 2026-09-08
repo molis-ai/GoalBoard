@@ -1,72 +1,56 @@
-# @adeptify/goalboard-app-mcp
+# MCP 工具适配
 
-Status: `partial`  
-Workspace path: `apps/mcp`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/app-host`
+向 AI Runtime 提供 GoalBoard 工具、输入 schema 和响应视图。维护工具名、参数、上下文呈现或协议错误时使用本包。
 
-## Purpose
+包名：`@adeptify/goalboard-app-mcp`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Thin MCP schema, audience, and capability adapter.
+## 一次典型调用
 
-This package explicitly does **not** own Business rules, direct Store access, or Runtime Skill policy.
+根 apps/desktop/launchers/mcp/server.ts 处理进程入口；Host 管理项目连接和调用身份。本包通过 handleMcpMessage、工具目录及 dispatchMcpProjectTool 把请求交给 Host Client，再组合返回值。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` binds MCP Goal tools to `GoalsApplicationApi` and Claim → Run → Evidence → Review tools to `ExecutionValidationApplicationApi`. It does not register a Runtime provider, create a Store, or copy business rules.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-`handleMcpMessage` owns the stdio message/reply protocol independently of storage: initialization, notifications, discovery, tool replies and errors. The host injects audience-filtered tools, the authorized tool application and domain-error formatting. Per-call session identity comes only from host `_meta` in the existing priority order (`goalboard/sessionId`, `threadId`, `sessionId`), never from the model's tool arguments.
+| 文件 | 用途 |
+| --- | --- |
+| [src/protocol.ts](src/protocol.ts) | handleMcpMessage：协议处理 |
+| [src/tool-catalog.ts](src/tool-catalog.ts) | 公开工具目录 |
+| [src/tool-dispatch.ts](src/tool-dispatch.ts) | 项目工具分发 |
+| [src/launcher-validation.ts](src/launcher-validation.ts) | 启动器验证 |
 
-`MCP_TOOLS`, `RUNTIME_MCP_TOOLS` and `MCP_SERVER_INFO` provide the actual management/Runtime discovery catalog. `isRuntimeMcpTool` and `isRuntimeContextMcpTool` let the host classify calls using the same audience definition before executing them. Classification is not permission to mutate data: the host and Module application still enforce identity, project binding and operation-specific authority, including calls made directly without discovery.
+可对照现有调用方 [apps/local-host/src/mcp-server.ts](../local-host/src/mcp-server.ts) 阅读装配方式。
 
-Inside this package, `tool-schemas.ts` owns shared wire schemas, `goal-tools.ts` and `context-tools.ts` own their tool definitions, and `tool-catalog.ts` owns audience projection. Schema changes belong here, not in the legacy server. Runtime projection clones definitions before removing management-only fields, so it cannot alter the management catalog. These are protocol declarations, not a second business validator.
+## 接入与边界
 
-`buildMcpResumeView` renders Host-provided Goal summaries and existing action projections. It preserves host focus, Session focus and the original fallback ordering without claiming work or mutating facts. The Host reads resume facts and the trash list/cursor through typed capabilities; MCP no longer accesses Store directly, including V3 import.
+Session 身份来自 Host 上下文，不能把模型提交的参数直接当作身份。工具 schema 与响应适配属于这里；Goal 的可执行性和完成规则属于下游 owner。
 
-The legacy server delegates protocol, discovery and audience classification through this public entrypoint and re-exports its old catalog names for compatibility. It retains executable routing, trusted-host checks and injection of catalog/Session implementations; Local Host owns resource and identity composition, while the App owns context wire conversion and presentation.
+工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-plugin-goals`。其他运行依赖见 [package.json](package.json)。
 
-`createMcpGoalToolHandlers` and `createMcpExecutionToolHandlers` adapt named tools to public Goals and execution-validation commands. Call them only after the host's audience/connection/impersonation checks. `mcpBoardPayload` keeps the selected top-level Board over a nested payload's Board; it is wire conversion, not business validation. Risk actor kind comes from the host audience. Evidence location context is lazily supplied by the host and overrides any model field. Errors, idempotency and lifecycle decisions remain with the application owner; the adapters never retry.
+## 本地开发
 
-`createMcpAvailabilityToolHandlers` consumes the typed `GoalEntryCompositionApi` client for Ready / Available / Explain; Available and its action projections arrive from one Host operation. `query-presentation.ts` owns method catalog presentation, Available summary/full shaping and Draft history pagination. It preserves existing catalog IDs, field selection, sorting, cursors and JSON formatting. A host-supplied error factory retains the original error class, code and details without importing legacy errors. Draft pagination knows only `turn_index`; it preserves the rest of the result and full turns rather than duplicating a Draft domain model.
-
-## Dependencies
-
-`createMcpGoalTrashHandlers` adapts confirmed trash/restore requests and presents the lifecycle result with its current work state. Blocking activity, relation changes, persistence and replay remain with Goals/Execution. `mcpGoalContractResponse` and `mcpWebUrl` own links and the existing URL error presentation.
-
-`runtimeGoalTreeDecisionInput` validates the existing Runtime confirmation fields before invoking an injected host provenance function. Host identity never comes from model arguments; Local Host retains the original attestation format. Management decisions retain their original input. Full Contract and project-guidance reads, plus active-goal writes, invoke the protected Goals Plugin's named public capabilities through the Host Client. Board/import/resume/trash-list capabilities and their full snapshot/input/report types also come from the public Goals Plugin entrypoint; root keeps compatibility re-exports, not duplicate definitions. DV1 acceptance is recorded in `specs/goalboard-architecture-reorganization/dv1-validation.md`.
-
-`createMcpRuntimeContextHandlers` owns the seven existing project/context tools' argument conversions and list presentation. It consumes `RuntimeProjectCatalogProvider` and `RuntimeProjectConnectionState` from the public App Host Contract. The host supplies identity and the scoped catalog operation; a model-supplied context is not consumed. The catalog remains open until asynchronous response composition settles. Denied bind leaves the existing connection intact; resolve clears its old cache before reading, while unbind/rejection/deletion retain their original invalidation conditions.
-
-`mcpRuntimeSessionActivity` converts successful Goal tool input/result into the existing secondary Session activity descriptor. It preserves operation labels, Goal/result lookup order and depth, nested idempotency-key priority and source IDs; denied selection and unrelated tools produce no activity. It neither opens a Registry nor writes an association. Local Host records the descriptor against the host-selected Session and Project.
-
-`createMcpDraftDialogueHandlers`, `createMcpGoalTreeHandlers` and `createMcpLegacyProposalHandlers` consume the protected Goals Plugin's public application Contracts. Draft turn/resume pagination is validated before invoking a write; start still returns its original full result. Legacy tools preserve top-level Board precedence. Runtime Goal Tree decisions first pass this App's confirmation-field checks and the injected host provenance function; this App neither manufactures user authority nor implements proposal materialization. The existing method implementations are bound by the Host pending their own owner migration.
-
-Dependencies are limited to public Contracts and the protected Goals Native Plugin entrypoint that publishes the execution-validation application Contract.
-
-`createMcpContextPresenter` assembles the existing resolution response through typed Host ports: URL, guidance, connection acceptance, Session read, resume facts, then JSON. Guidance/URL failure cannot accept a new connection; an unavailable secondary Session still leaves the primary connection and recovery response visible. Session result fields are declared once in the Private Work Context Contract.
-
-The Draft/Goal Tree/legacy proposal handlers now return promises and accept either the existing synchronous application or its `AsyncApplicationMethods` client. Production uses `createGoalProposalClients` over finite public capabilities; the old runtime scope fields have no callers and were removed. History validation still runs before invoking a write, and root awaits handler completion before serialization or Session activity recording. Goals, Execution and availability handlers also await typed Host Client operations.
-
-`createGoalsEntryClient`, `createExecutionEntryClient` and `createGoalEntryCompositionClient` supply the remaining production handlers. Host combines Available/projections, trash/work state and planning methods/composition as named operations without an async gap between their owner calls. App handlers only validate wire data and present these completed facts. `client.withScope` retains the original open-before-adaptation and close-after-response lifetime without exposing Coordinator or Store. The legacy synchronous adapter factories remain compatibility exports.
-
-## Commands
-
-`validateGoalBoardMcpLauncher` owns the existing installer-to-MCP stdio probe: initialize, tool discovery, timeout/failure, and child cleanup. It consumes a host-owned `McpLauncherValidationContext`, not model arguments, and does not bind a project or write Runtime configuration. The installer retains confirmation, backup and rollback; its former embedded handshake now calls this public function. DV2 verifies the real launcher and failure rollback as well as the public Runtime lifecycle journey.
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-app-mcp typecheck
 pnpm --filter @adeptify/goalboard-app-mcp build
 ```
 
-## Migration Goals
+已有行为示例与回归：[host-entry-consistency.test.ts](../../tests/host-entry-consistency.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-dv1`
-- `goal-reorg-dv2`
-- `goal-reorg-gw4`
-- `goal-reorg-ex4`
+```bash
+node --import tsx --test --test-concurrency=1 tests/host-entry-consistency.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/mcp/`
+## 进一步阅读
 
-GW4 moved Goal write, Lifecycle, and Planning calls through this adapter. EX4 moved execution and acceptance calls through the same public application port while preserving the existing MCP schema, errors, authority checks, and results. See [the architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/cli-and-development.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/app-host`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-dv1`, `goal-reorg-dv2`, `goal-reorg-gw4`, `goal-reorg-ex4`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

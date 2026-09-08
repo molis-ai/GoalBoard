@@ -14,7 +14,7 @@ import {
   goalBoardHostProjectReference,
   snapshotBoardCapability,
 } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
 
@@ -169,7 +169,7 @@ test("legacy entrypoints no longer construct independent business stores", async
     assert.doesNotMatch(source, /new\s+(?:SqliteGoalBoardStore|LocalProjectDatabase|GoalBoardCoordinator|GoalProjectApplication)\s*\(/u, relativePath);
     assert.match(source, /GoalBoardLocalHost|localHost/u, relativePath);
   }
-  const mcpEntrypoint = await readFile(new URL("../src/mcp/server.ts", import.meta.url), "utf8");
+  const mcpEntrypoint = await readFile(new URL("../apps/desktop/launchers/mcp/server.ts", import.meta.url), "utf8");
   assert.doesNotMatch(mcpEntrypoint, /new\s+(?:LocalProjectDatabase|GoalProjectApplication)|prepareLocalProjectStorage|callV1Tool|assertToolAllowed/u);
   assert.match(mcpEntrypoint, /GoalBoardServer.*from "@adeptify\/goalboard-app-desktop"/u);
   const composition = await readFile(new URL("../apps/local-host/src/project-host.ts", import.meta.url), "utf8");

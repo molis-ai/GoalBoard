@@ -7,10 +7,10 @@ import { fileURLToPath } from "node:url";
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const packageVersion = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).version;
 const tauriVersion = JSON.parse(
-  readFileSync(resolve(repoRoot, "desktop/src-tauri/tauri.conf.json"), "utf8"),
+  readFileSync(resolve(repoRoot, "apps/desktop/src-tauri/tauri.conf.json"), "utf8"),
 ).version;
-const cargoToml = readFileSync(resolve(repoRoot, "desktop/src-tauri/Cargo.toml"), "utf8");
-const cargoLock = readFileSync(resolve(repoRoot, "desktop/src-tauri/Cargo.lock"), "utf8");
+const cargoToml = readFileSync(resolve(repoRoot, "apps/desktop/src-tauri/Cargo.toml"), "utf8");
+const cargoLock = readFileSync(resolve(repoRoot, "apps/desktop/src-tauri/Cargo.lock"), "utf8");
 const feedRuntime = readFileSync(resolve(repoRoot, "apps/local-host/src/feed-source-runtime.ts"), "utf8");
 const codexTransport = readFileSync(
   resolve(repoRoot, "horizontal/runtime-host/src/adapters/codex-app-server.ts"),
@@ -27,9 +27,9 @@ const codexTransportVersion = codexTransport.match(
 
 const versions = {
   "package.json": packageVersion,
-  "desktop/src-tauri/tauri.conf.json": tauriVersion,
-  "desktop/src-tauri/Cargo.toml": cargoTomlVersion,
-  "desktop/src-tauri/Cargo.lock#goalboard-desktop": cargoLockVersion,
+  "apps/desktop/src-tauri/tauri.conf.json": tauriVersion,
+  "apps/desktop/src-tauri/Cargo.toml": cargoTomlVersion,
+  "apps/desktop/src-tauri/Cargo.lock#goalboard-desktop": cargoLockVersion,
   "apps/local-host/src/feed-source-runtime.ts#APP_VERSION": feedRuntimeVersion,
   "horizontal/runtime-host/src/adapters/codex-app-server.ts#clientInfo.version": codexTransportVersion,
 };

@@ -2,13 +2,13 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "apps/desktop/launchers",
+    "rootDir": "apps/local-host/sdk",
     "types": [
       "node"
     ]
   },
   "include": [
-    "apps/desktop/launchers/**/*.ts"
+    "apps/local-host/sdk/**/*.ts"
   ],
   "exclude": [
     "node_modules",

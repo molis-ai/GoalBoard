@@ -10,7 +10,7 @@ import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboa
 import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const TOKEN = "goalboard-session-directory-token-0123456789";
 

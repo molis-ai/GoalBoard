@@ -66,7 +66,7 @@ async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>)
   }
 }
 
-test("public CLI without --source installs its product root even when invoked from another directory", async () => {
+test("source and built CLI without --source use the product root even from another directory", async () => {
   await withTemporaryDirectory(async (directory) => {
     const productRoot = process.cwd();
     const home = join(directory, ".goalboard");
@@ -85,7 +85,8 @@ test("public CLI without --source installs its product root even when invoked fr
     assert.match(help.stdout, /GoalBoard commands/);
     assert.match(help.stdout, /goalboard plugin/);
     const again = await execFileAsync(process.execPath, [
-      join(productRoot, "dist", "cli", "main.js"), "install", "--home", home, "--json",
+      "--import", import.meta.resolve("tsx"),
+      join(productRoot, "apps", "desktop", "launchers", "cli", "main.ts"), "install", "--home", home, "--json",
     ], { cwd: directory });
     assert.equal(JSON.parse(again.stdout).status, "unchanged");
   });
@@ -200,11 +201,19 @@ test("workspace source changes reject an old build before touching the installed
   await withTemporaryDirectory(async directory => {
     const source = await fixtureSource(directory, "1.0.0");
     const workspace = join(source, "apps", "local-host");
-    await mkdir(join(source, "src"), { recursive: true });
+    const launchers = join(source, "apps", "desktop", "launchers");
+    const sdk = join(workspace, "sdk");
+    await mkdir(launchers, { recursive: true });
+    await mkdir(sdk, { recursive: true });
     await mkdir(join(workspace, "src"), { recursive: true });
     await mkdir(join(workspace, "dist"), { recursive: true });
     await mkdir(join(workspace, "node_modules"), { recursive: true });
-    await writeFile(join(source, "src", "entry.ts"), "export const root = 1;\n");
+    const launcherSource = join(launchers, "entry.ts");
+    const sdkSource = join(sdk, "index.ts");
+    const sdkConfig = join(source, "tsconfig.sdk.json");
+    await writeFile(launcherSource, "export const root = 1;\n");
+    await writeFile(sdkSource, "export const sdk = 1;\n");
+    await writeFile(sdkConfig, "{}\n");
     await writeFile(join(source, "tsconfig.json"), "{}\n");
     await writeFile(join(source, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\n");
     await writeFile(join(workspace, "package.json"), '{"name":"fixture-workspace","version":"1.0.0"}\n');
@@ -221,11 +230,16 @@ test("workspace source changes reject an old build before touching the installed
     await writeFile(join(workspace, "node_modules", "generated.txt"), "package manager output\n");
     assert.equal((await installGoalBoardHome({ homeDirectory: home, sourceDirectory: source })).status, "unchanged");
 
+    for (const changedInput of [workspaceSource, launcherSource, sdkSource, sdkConfig]) {
+      const original = await readFile(changedInput, "utf8");
+      await writeFile(changedInput, original + "\n// changed source input\n");
+      await assert.rejects(installGoalBoardHome({ homeDirectory: home, sourceDirectory: source }),
+        (error: unknown) => error instanceof GoalBoardHomeInstallError && error.code === "source.build_stale");
+      assert.equal(await readFile(installationPath, "utf8"), before);
+      assert.equal(await readFile(installed.launchers.cli, "utf8"), launcherBefore);
+      await writeFile(changedInput, original);
+    }
     await writeFile(workspaceSource, "export const implementation = 2;\n");
-    await assert.rejects(installGoalBoardHome({ homeDirectory: home, sourceDirectory: source }),
-      (error: unknown) => error instanceof GoalBoardHomeInstallError && error.code === "source.build_stale");
-    assert.equal(await readFile(installationPath, "utf8"), before);
-    assert.equal(await readFile(installed.launchers.cli, "utf8"), launcherBefore);
     const execution = await execFileAsync(installed.launchers.cli, []);
     assert.match(execution.stdout, /cli:embedded/, "the old installation remains runnable after rejection");
     await writeGoalBoardBuildManifest(source);

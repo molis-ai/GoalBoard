@@ -24,9 +24,9 @@ export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 pnpm --dir "$REPO_ROOT" build
 bash "$SCRIPT_DIR/prepare-macos-runtime.sh"
 
-(cd "$REPO_ROOT/desktop" && "$REPO_ROOT/node_modules/.bin/tauri" build --bundles app,dmg --ci)
+(cd "$REPO_ROOT/apps/desktop" && "$REPO_ROOT/node_modules/.bin/tauri" build --bundles app,dmg --ci)
 
-BUNDLE_ROOT="$REPO_ROOT/desktop/src-tauri/target/release/bundle"
+BUNDLE_ROOT="$REPO_ROOT/apps/desktop/src-tauri/target/release/bundle"
 APP_PATH="$BUNDLE_ROOT/macos/GoalBoard.app"
 DMG_PATH="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
 if [[ ! -d "$APP_PATH" || -z "$DMG_PATH" || ! -f "$DMG_PATH" ]]; then

@@ -1,54 +1,56 @@
-# @adeptify/goalboard-module-evidence-verification
+# 依据记录与验证条件
 
-Status: `partial`  
-Workspace path: `modules/evidence-verification`  
-Contract entrypoint: `@adeptify/goalboard-contracts/modules/evidence-verification`
+保存 Evidence、不可变更正和标准覆盖，判断现有依据是否足以进入验证流程。
 
-## Purpose
+包名：`@adeptify/goalboard-module-evidence-verification`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Evidence, immutable corrections, safe project-file references, criterion coverage, and automatic verification gates.
+## 一次典型调用
 
-This package explicitly does **not** own Artifact bodies, Goal Contracts, Runs, or Review verdicts.
+EvidenceVerificationModule.commands 记录依据及更正；query 由验证服务提供。locator preflight 校验引用形态，coverage 区分当前有效依据与已有结果；实际 Review 结论由 Governance 保存。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the real `EvidenceVerificationModule`, its public Repository and migration helpers, file-reference utilities, and pure coverage projection functions.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-The application API exposes:
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | Module Command/Query |
+| [src/lifecycle.ts](src/lifecycle.ts) | 依据及更正生命周期 |
+| [src/coverage.ts](src/coverage.ts) | 有效依据与覆盖 |
+| [src/locator.ts](src/locator.ts) | 引用预检 |
 
-- Query: Evidence and Correction lists, review-safe Evidence references, project-reference source lookup, criterion coverage, and post-rework freshness.
-- Command: authorized Evidence submission, immutable supersede/retract, and attaching the Review that consumed human-verdict Evidence.
-- Events: `evidence.submitted`, `evidence.superseded`, and `evidence.retracted` through the host event port.
+可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
-`AuthorizedEvidenceSubmissionInput` means the caller has already checked the Goal Contract and optional Run ownership. The Module still owns Evidence invariants, locator validation, persistence, Correction rules, and coverage decisions; it never reads or writes the Goals Store.
+## 接入与边界
 
-## Internal boundaries
+依据不是 Artifact 正文，也不是用户/Runtime 的 Review verdict。旧记录的更正须保留历史，不能覆盖原始依据来制造通过结果。
 
-- `repository.ts`: Evidence/Correction schema, queries, mappings, and event-sequence reads.
-- `lifecycle.ts`: submission, locator preflight, immutable Correction, ownership and cycle rules.
-- `verification.ts` / `coverage.ts`: current criterion coverage, rework freshness, and snapshot projection rules.
-- `locator.ts`: bounded local text/Markdown preflight and safe registered-worktree handling.
-- `migrations.ts`: migrations 17–20 and the Evidence columns owned inside migration 30.
+由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
-## Dependencies
+## 本地开发
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Node filesystem and Git inspection use built-in APIs. The package does not deep-import legacy code or another Module implementation.
-
-## Commands
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-module-evidence-verification typecheck
 pnpm --filter @adeptify/goalboard-module-evidence-verification build
 ```
 
-## Migration Goals
+已有行为示例与回归：[evidence-verification-module.test.ts](../../tests/evidence-verification-module.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-ex2`
-- `goal-reorg-ex4`
+```bash
+node --import tsx --test --test-concurrency=1 tests/evidence-verification-module.test.ts
+```
 
-## Current caller ownership
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-Native Goals owns Goal/Run authorization, idempotency, action tokens, lifecycle reconciliation and Review orchestration through public Module APIs. Evidence invariants, persistence and locator validation remain here. Local Host assembles migrations, snapshot queries and bounded Web file access. The old Coordinator, Store, action projection and locator forwarding files have been removed.
+## 进一步阅读
 
-Web/CLI/MCP keep their existing payloads. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [migration matrix](../../docs/system/MIGRATION.md), and [final validation](../../specs/goalboard-architecture-reorganization/cutover-validation.md).
+- [职责与接入说明](../../docs/modules/evidence-verification.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/modules/evidence-verification`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-ex2`, `goal-reorg-ex4`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

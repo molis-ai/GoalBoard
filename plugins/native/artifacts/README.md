@@ -1,51 +1,56 @@
-# @adeptify/goalboard-plugin-artifacts
+# 交付物浏览与 Plugin 客户端
 
-DV3 author integration: `createPluginArtifactClient` binds a Runtime grant context, Manifest, project and actor to the existing public Artifacts API. Authors can publish personal versions of declared types and read supported exact references regardless of producer Plugin. It checks declared permissions and actual grants, rejects another user's personal content, and does not accept caller-supplied identity or Team sharing authority. Content/version rules remain in the Artifacts Module. This adapter is being connected to the developer Host; it alone is not a complete Plugin installation experience.
+把 Artifact 事实展示为项目可引用、可浏览、可导出的交付物，并给 Plugin 提供受授权约束的读写客户端。
 
-Status: `partial`
-Workspace path: `plugins/native/artifacts`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+包名：`@adeptify/goalboard-plugin-artifacts`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-## Purpose
+## 一次典型调用
 
-Protected first-party Artifact browsing, embedding, and composition.
+readArtifactBrowser 读取浏览模型，UI contribution 渲染目录/版本；openArtifactProjectReference 解析项目引用。createPluginArtifactClient 在 Host context 下调用 Artifact 公开服务，publish/read 使用同一权限边界。
 
-This package explicitly does **not** own Artifact facts, Stores, or producer/consumer implementations.
+## 从哪里读代码
 
-## Public entrypoint
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-`openArtifactProjectReference` opens existing result/file locators through injected public Evidence queries and the host's safe content reader. `ArtifactProjectReferenceError` preserves the existing 404/409 application failures. The Plugin checks the exact Evidence locator and verification status, prefers its recorded workspace, and returns only file name and bytes; it does not expose the reader's absolute file path.
+| 文件 | 用途 |
+| --- | --- |
+| [src/browser.ts](src/browser.ts) | 浏览、版本与导出 |
+| [src/project-reference.ts](src/project-reference.ts) | 项目引用打开 |
+| [src/plugin-client.ts](src/plugin-client.ts) | Plugin Artifact 客户端 |
+| [src/goal-context.ts](src/goal-context.ts) | 目标中的 Artifact 引用 |
 
-`artifactReferenceUiContribution` renders the existing external/file/copy reference controls. Workbench registers it with UI Host and exposes `createArtifactReferenceRenderer`; legacy Goal/Evidence/Run renderers retain their call signature but no longer decide reference presentation. Styling, icons, request-local translation and copy behavior remain unchanged. The host injects UI primitives; this Plugin does not import another Plugin's renderer.
+可对照现有调用方 [apps/local-host/src/plugin-executor.ts](../../../apps/local-host/src/plugin-executor.ts) 阅读装配方式。
 
-`readArtifactBrowser` reads Project-scoped exact versions through `ArtifactsQueryApi`; `matchArtifactBrowserRoute` requires explicit positive integer versions. `exportArtifactVersion` returns the exact local JSON record without registering, publishing, sharing or changing it. No consumer is inferred from producer identity.
+## 接入与边界
 
-`artifactBrowserUiContribution` provides `directory`, `detail` and `embed` surfaces; `ARTIFACT_EN` owns their English copy. Workbench mounts them and supplies the document shell, existing theme, icons and request locale. The root HTTP adapter binds the selected Project and public query to `/artifacts`, `/artifacts/:id/versions/:version` and `/api/artifacts/:id/versions/:version/export`; missing versions return 404 rather than latest. Consumer declarations are type/schema pairs supplied to the application; the current Web host supplies none. Raw JSON is not an application-specific preview, and a content locator is not a promise that today's file still matches an old version.
+不复制 Artifact Store，不依赖生产者/消费者 Plugin 实现。引用精确版本；自定义 payload 没有兼容 renderer 时保留可读取的数据表达。
 
-`readGoalArtifactEmbeds` consumes explicit `goal.input` / `goal.output` relations from the public Context Ledger query and resolves each exact Artifact version. Workbench mounts those results in the Goal's lazily loaded context panel. Missing versions retain their reference; unavailable/archived versions retain their state. No relation, payload or Goal snapshot is written by viewing. The reader never interprets legacy locators as Artifact identities or searches private Sessions for results.
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
 
-## Dependencies
+## 本地开发
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Implementation dependencies are added by the Goal that migrates a complete use case, never by deep-importing legacy code.
-
-## Commands
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-plugin-artifacts typecheck
 pnpm --filter @adeptify/goalboard-plugin-artifacts build
 ```
 
-## Migration Goals
+已有行为示例与回归：[artifact-browser.test.ts](../../../tests/artifact-browser.test.ts)、[plugin-artifact-client.test.ts](../../../tests/plugin-artifact-client.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-ar1`
-- `goal-reorg-ar3`
+```bash
+node --import tsx --test --test-concurrency=1 tests/artifact-browser.test.ts tests/plugin-artifact-client.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/web/render.ts`
-- `src/web/server.ts`
+## 进一步阅读
 
-AR1 owns the formal Artifact Contract and Core. AR3 has moved the first existing Web project-reference caller here; filesystem containment, symlink, size and text checks remain in Evidence & Verification. No Artifact version is invented for a URL, file locator or private Work result, and opening a result does not mutate Goal, Evidence, Run or Review state.
+- [职责与接入说明](../../../docs/modules/artifacts.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
 
-The browser and Goal-context embedding now have real HTTP and navigation callers. Legacy string references keep their original identity and history while using the new contribution and application. No installation or Team-sync workflow is claimed. AR3 acceptance and the remaining full-product E2E are tracked separately; see [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-ar3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

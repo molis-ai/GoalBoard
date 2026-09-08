@@ -15,7 +15,7 @@ import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { type GoalBoardProjectCatalog, normalizeRuntimeWorkContext } from "@adeptify/goalboard-app-local-host";
 import { RuntimeIntegrationService } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardWebServiceManager } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import {
   GOAL_TREE_STATUS_ORDER,
   activeOutgoingDependsOn,
@@ -41,7 +41,7 @@ import {
   WEB_GOAL_STATUSES,
   WEB_GOAL_EVENT_PAGE_SIZE,
 } from "./workbench-renderer-fixture.js";
-import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const WEB_TEST_CONTROL_TOKEN = "goalboard-web-test-control-token-0123456789abcdef";
 const WORKBENCH_CLIENT_SCRIPT = renderGoalBoardWorkbenchClientScript();
@@ -4506,7 +4506,7 @@ test("Web chrome switches between Chinese and English without translating Goal t
 test("Web command only starts from the project catalog", () => {
   const result = spawnSync(
     process.execPath,
-    ["--import", "tsx", "src/web/server.ts", "--db", "/tmp/legacy-goalboard.db"],
+    ["--import", "tsx", "apps/desktop/launchers/web/server.ts", "--db", "/tmp/legacy-goalboard.db"],
     { cwd: process.cwd(), encoding: "utf8" },
   );
   assert.equal(result.status, 1);

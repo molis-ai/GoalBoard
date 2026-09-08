@@ -1,116 +1,57 @@
-# @adeptify/goalboard-plugin-goals
+# 目标用例与原生界面
 
-DD2 application entrypoints have migrated: native submit/read/check/decide and historical Contract/Candidate/Dependency submissions and Contract/Candidate/Rewire decisions. Host/Web/CLI/MCP use the public applications; the original Coordinator methods are removed. Proposal/Decision contributions, their client behavior, copy and styles also use the new owners. DD2 has 209 passing scoped acceptance tests; canonical review state remains in GoalBoard.
+把目标合同、执行、依据、复核和上下文组合成用户可操作的目标工作流，并提供目标树、文档和决定界面。
 
-`GoalTreeDecisionPlan` validates the exact confirmation against current facts; `GoalTreeDecisionApplication` composes atomic materialization and results. `LegacyGoalTreeDecisionApplication` routes historical IDs to their original workflows. `GoalTreeDecisionNormalizer` preserves trusted-source/input checks, while `GoalTreeDecisionFollowup` owns revisions, semantic review and equivalent historical Rewire close-out. All idempotency records and decision events stay in Governance.
+包名：`@adeptify/goalboard-plugin-goals`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-`GoalTreeCheckApplication` uses public validation/query APIs and `GoalTreeMaterializationApplication` inside Governance preview savepoints. `GoalTreeFactMaterializer` and `GoalTreeGovernanceMaterializer` cover Goal/Contract, Relation, Policy, Risk, Candidate and Rewire. Submission never materializes proposed facts. `proposal-baselines.ts`, `goal-tree-inputs.ts` and `goal-tree-run-authority.ts` retain the original reference, payload and Run checks. `lifecycle-application.ts` and `contract-revision-transition.ts` compose finite owner commands, without callbacks to the old Coordinator product helpers.
+## 一次典型调用
 
-`GoalTreeWebDecisionInput` prepares Risk repairs and automatic rejection reasons only; Host retains input-envelope checks, trusted user/message provenance, HTTP and the real decision call. `proposal-ui.ts`, `legacy-proposal-ui.ts` and `decision-results-ui.ts` provide registered contributions. Item/decomposition copy, historical Contract/Candidate/Rewire renderers, grouping and recent-result selection are separate bounded implementations. `proposal-client.ts` owns confirmation/rejection/repair submission and shared decision form validation; Workbench supplies routing, control headers, cross-surface refresh and receipts. `proposal-en.ts` and `proposal-styles.ts` are composed in the original catalog/cascade positions. See `specs/goalboard-architecture-reorganization/dd2-caller-audit.md` and `dd2-validation.md`.
+Host 注入各 Module 的公开端口；ExecutionValidationApplication、GoalReadApplication 等组合状态与操作，HTTP handler 和 UI contribution 将结果交给各 App。批量工作状态复用本次读取的 snapshot。
 
-Project work rules use Policy contribution surface `project`, not a root-owned settings document. It selects the last active project-default binding for form prefill and reuses the existing policy form; authoritative policy resolution stays in the Module. `project-policy-client.ts` owns validation, save/retry and the one-time reload receipt through the existing Host `L`/control-headers globals; `project-policy-styles.ts` owns its unchanged CSS. Nineteen dedicated translations moved to `policy-en.ts`. Workbench still supplies shared settings navigation, head/meta and Desktop chrome.
+## 从哪里读代码
 
-GW5 page/read ownership: `document-routes.ts` selects the requested current/archive/trash item and preserves fragment availability and page-not-found behavior. It never reads a Store. The Tree contribution also supplies the `root-entry` surface: Goals' first-level directory button, count and selected state. Workbench chooses placement and mounts it; full-page Shell composition remains outside this Plugin.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-`planning-routes.ts` owns Planning path parsing and selection within the Host's already-resolved method list, including new-method, personal vs project visibility and original 404 copy. It does not load, authorize, save or adopt methods; those facts and commands remain with their existing owners.
+| 文件 | 用途 |
+| --- | --- |
+| [src/execution-validation-application.ts](src/execution-validation-application.ts) | 执行与验收用例 |
+| [src/goal-query-application.ts](src/goal-query-application.ts) | 目标读取 |
+| [src/goal-tree-decision.ts](src/goal-tree-decision.ts) | 目标树确认 |
+| [src/document-collection.ts](src/document-collection.ts) | 文档列表投影 |
+| [src/http/index.ts](src/http/index.ts) | Web 操作入口 |
 
-GW5 collection/refresh ownership: `collection-model.ts` selects the visible Goal and formats existing collection labels from supplied query counts; it does not compute authority. Tree's `directory` and `refresh` surfaces now provide the complete Goal directory, with their original different DOM wrappers. Sixteen collection/search/footer translations live in `tree-en.ts`. The root renderer mounts these surfaces instead of duplicating collection logic or templates.
+可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
-`GOALS_REFRESH_CLIENT_FACTORY_SCRIPT` prepares a Goals-only refresh without changing DOM. It returns the selected id, an optional collection-move receipt, and an apply operation. Workbench performs its existing selection/search/dirty-input guards before applying, updates Shell links at the original callback position, and restores shared state afterward. The factory owns tree/body/filter/count/new-create-choice replacement; cursor requests, fallback requests, Decision/Feed updates, shared persistence and navigation remain Host-owned. These server-produced HTML fragments are not a third-party HTML extension API.
+## 接入与边界
 
-Status: `partial`  
-Workspace path: `plugins/native/goals`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+这里拥有跨 Module 用例及呈现，不取代 Module 事实 owner。提案检查、确认、执行和完成各有独立门禁；legacy 文件仍承接旧提案/数据，不是可以整批删除的空壳。
 
-## Purpose
+工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-module-evidence-verification`、`@adeptify/goalboard-module-execution`、`@adeptify/goalboard-module-goals`。其他运行依赖见 [package.json](package.json)。
 
-Protected first-party Goals navigation, UI, commands, and composition.
+## 本地开发
 
-This package explicitly does **not** own Goal facts, Stores, or another Plugin implementation.
-
-## Public entrypoint
-
-`src/index.ts` exports the execution-validation application Contract and the pure action/work projection used by every product entry. It does not create a Store or own Goal, Claim, Run, Evidence, or Review persistence.
-
-`GoalAvailabilityQueryApi` and the Ready / Available / Explain result types are the public Contract for existing work-discovery queries. The types have one owner here; legacy `src/v1/types.ts` and Coordinator exports are compatibility aliases. The current Host still binds these queries to the legacy implementation, so this Contract migration does not claim that eligibility, dependency or parallel-suggestion algorithms have left Coordinator.
-
-## Dependencies
-
-`board-entry-capabilities.ts` publishes the existing initialize, snapshot, create, V3 import, resume-facts and trashed-Goals operations with unchanged IDs and versions. `board-import-contract.ts` owns the legacy import input/report types only, not its mapping algorithm. `BoardSnapshot` combines existing fact-owner records and the execution snapshot; complete Goal/coverage revision records belong to the Goals Contract. Legacy root types and capability exports are aliases for existing consumers. Host still registers the original implementations; this does not move persistence into the Plugin.
-
-`GoalContractView` is the full cross-owner application view, extending the existing `GoalFactsView` with Execution, Evidence and Governance records; the old root type is an alias. `goal-entry-contract.ts` publishes `readGoalContractCapability`, `readProjectGuidanceCapability` and `setActiveGoalCapability`. The Host registers these finite, typed operations against the existing implementations. In particular, active-goal input and write metadata remain separate so adapters preserve their original replay semantics; this declaration does not claim that the legacy active-goal implementation has migrated out of Coordinator.
-
-`DraftDialogueApplicationApi`, `GoalTreeApplicationApi` and `LegacyProposalApplicationApi` publish the existing cross-owner workflows and exact inputs/results. Dialogue records belong to Governance; Claim/Run records belong to Execution. Legacy root exports alias these Contracts rather than copy them.
-
-DD1's `DraftDialogueApplication` implements start/turn/resume through narrow public Goals Query/Command, Execution Query/Validation and Governance clarification/provenance ports. Governance owns the unchanged record schema's persistence, atomic transaction and replay; the Plugin owns workflow checks and composition, not SQL. Host constructs this application and registers the existing capability IDs. CLI/MCP payloads, errors, saved history and pagination remain unchanged. The three old Coordinator methods are deleted; Goal Tree/legacy decisions and dialogue close-out are covered by DD2’s migrated public applications. Existing Web Draft editing stays with its GW5 contribution; DD1 adds no new Web form.
-
-DD2's `GoalTreeQueryApplication` now implements native/legacy proposal reads through public Goals Query and Governance Query/Provenance. Host/Web callers no longer use the old Coordinator list method. Decision-time dialogue closure also uses Governance's public clarification API. Submit/check/decide, legacy composition and their presentation now use the migrated implementations described above; no old Coordinator list facade remains.
-
-Dependencies are public Goals and Evidence Module entrypoints. They provide read-only rules required to compose the cross-owner action projection; no Module Store or implementation deep import escapes this package.
-
-`proposal-capabilities.ts` publishes the finite Draft, Goal Tree and legacy proposal operations using their existing method parameter/result types, plus `createGoalProposalClients`. The client is asynchronous; it does not change the synchronous domain APIs or expose an arbitrary operation-name dispatcher. Host registers each operation explicitly. Draft resume and Goal Tree check are commands because they persist claim/dialogue/check history; proposal listing is read-only.
-
-`goals-entry-capabilities.ts` and `execution-entry-capabilities.ts` expose only the existing CLI/MCP command surface (no trusted human-review submission). `entry-composition-capabilities.ts` describes the combined Available/projection, trash/work-state and planning reads, keeping their owner calls together when crossing the async Client boundary. Clients are finite method objects derived from the existing Contracts, not arbitrary operation-name dispatchers.
-
-## Commands
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-plugin-goals typecheck
 pnpm --filter @adeptify/goalboard-plugin-goals build
 ```
 
-## Migration Goals
+已有行为示例与回归：[execution-validation-app-adapters.test.ts](../../../tests/execution-validation-app-adapters.test.ts)、[goals-document-ui.test.ts](../../../tests/goals-document-ui.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-f826dfb8-bf63-4e98-b6b7-57f6b4b7c3b8`
-- `goal-reorg-gw4`
-- `goal-reorg-gw5`
-- `goal-reorg-ex4`
-- `goal-reorg-dd1`
+```bash
+node --import tsx --test --test-concurrency=1 tests/execution-validation-app-adapters.test.ts tests/goals-document-ui.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/web/render.ts`
+## 进一步阅读
 
-EX4 moved the Claim → Run → Evidence → Review application Contract and action projection here, switched Web/CLI/MCP callers, and deleted the former legacy projection implementation. Accepted GW5 owns the remaining Goals product UI; EX4 does not claim those screens. See [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../../docs/modules/goals.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
 
-GW5 provides real Policy, Safety, Relations, Tree, Momentum, Document, Context/Draft, Planning, Status, Factors and Dialog contributions. Workbench mounts them and supplies generic locale, escaping, icons, dates and references. Form prefills and read-only presentation never replace Module policy/lifecycle resolution. Remaining cross-owner detail composition, shared browser handlers and routes are still pending; completed slices do not complete GW5.
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-f826dfb8-bf63-4e98-b6b7-57f6b4b7c3b8`, `goal-reorg-gw4`, `goal-reorg-gw5`, `goal-reorg-ex4`.
 
-`GOALS_SAFETY_CLIENT_FACTORY_SCRIPT`, `GOALS_IMPACT_CLIENT_FACTORY_SCRIPT` and `GOALS_POLICY_CLIENT_FACTORY_SCRIPT` bind ordinary risk facts/pickers, Impact and Policy forms to finite Host ports: route, control headers, translation, generic validation, refresh and feedback. Risk and Impact payload readers are private to their respective owners. Policy min/max and required fields remain UI feedback backed by unchanged authoritative server checks. Unmatched submit handlers return null synchronously; matched handlers retain existing validation, payload and retry behavior. Risk decisions, their preview, Human Review and Evidence retain their separate owner. Earlier byte-identical fragment evidence predates this explicit binding; current browser/HTTP regressions cover it.
-
-`relation-ui.ts` supplies relation lists, full/quick forms and inactive history through `goalsRelationUiContribution`. `relation-presentation.ts` owns labels for all nine existing relation types; `relation-client.ts` owns preview/direction/create/deactivate/disclosure behavior; `relation-en.ts` preserves existing translations. Relation facts stay in the Goals Module. The optional `dependencyHistoryHtml` argument is trusted output from the separate Decision renderer, not user-supplied HTML: root composition appends that owner output at the original location without moving Decision logic into this Plugin surface. Remaining cross-owner detail composition and host routing/client cleanup are tracked below.
-
-`tree-ui.ts` owns the tree/list and search/filter/collection toolbar through the `workbench.directory` contribution. `tree-presentation.ts` owns read-only progress, dependency display and compact reference disambiguation, consuming recorded facts rather than deciding lifecycle permissions. Legacy detail callers and Plugin Momentum/document surfaces share these helpers. Status markup is now provided by the native Status contribution through explicit composition. Remaining detail composition, shared browser startup/refresh handlers and routes are not yet fully migrated.
-
-`goal-state-presentation.ts` projects supplied Goal/Proposal/Run summaries for display only. `goal-state-explanation.ts` and `goal-state-copy.ts` own Goal/parent explanations; `action-presentation.ts` labels already-resolved actions. They never claim work, approve a proposal or decide fulfillment. `status-ui.ts` owns badges/icons through the main slot, including archive/trash/replacement precedence. Decision-specific questions remain with their existing owner. `status-en.ts` owns the dedicated copy.
-
-`factors-ui.ts` owns the relations/risks/impacts/rules tab composition and display counts. Its four trusted content inputs are rendered by the existing owner contributions, never user HTML; Decision history remains inside its explicit owner output. Workbench mounts the contribution rather than defining its tabs or risk rules.
-
-`dialogs-ui.ts` owns create-Draft and recoverable trash/restore overlays; `dialogs-client.ts` owns their click, cancel, submit, failure/retry and blocked-work feedback. The public `GOALS_DIALOGS_CLIENT_FACTORY_SCRIPT` owns trash intent, dialog controls, draft snapshots, focus restoration and refreshed create choices. Host supplies explicit DOM/headers/refresh, original storage-clear callbacks, relation preview and navigation. Browser locale comes from the page language, not the server-only `currentLocale` function. `dialogs-en.ts` preserves dedicated copy. Only actual user submission sends writes; creating a Draft does not accept it, and recovery keeps the same Goal identity/history. Module checks still reject trash while active work exists.
-
-`document-ui.ts` and `document-overview-ui.ts` own normal/archive/trash document surfaces, tabs, lazy placeholders, next-action presentation and current overview. `document-ui-model.ts` exposes only the needed facts and explicit owner-produced Draft/Runtime markup; Decision count remains a host input. Do not import the root Web view, Store, or another owner's implementation to fill this model. `document-en.ts` carries existing document copy. A document contribution is not the application's outer HTML shell and does not claim ownership of the remaining detail subpanels or editor.
-
-`context-ui.ts` owns the Context panel and public acceptance, summary, scope, draft-editor, draft-gap, record-basics and record-relations surfaces. Records and parent/dependency coverage have separate renderers; `draft-ui.ts` owns the actual editor. These consume minimal public facts, not the root Web view or Store. Record basics preserves recorded owner/date/status metadata; relations takes three explicit trusted outputs from the relation, safety and policy owners. The existing Artifact reference/deck/heading and status explanations remain explicit host inputs. `draft-client.ts` owns criterion editing, target parsing and save/error handling while preserving shared host headers and refresh. `context-en.ts` carries the dedicated copy. Save remains a Draft update; accepting a Contract is still a separate user workflow. Execution/check/history and the outer compound record deck remain outside this UI scope.
-
-Safety's `risk-summary` and Policy's `check-summary` surfaces render the progress page's open/triggered risks and already-resolved check requirements. They do not decide completion or recompute policy. Workbench mounts them at the existing positions; the execution state/blocker content stays with its original owner.
-
-`buildGoalsNavigationItems` in `navigation-model.ts` produces only the existing initial/refresh navigation fields from minimal Goal summaries, a public child query callback and the status icon contribution. It preserves supplied order and independent waiting/compound flags. Project/Board/cursor composition and safe JSON embedding remain Host work; no private execution records are copied into navigation.
-
-`GOALS_TREE_CLIENT_FACTORY_SCRIPT` binds Tree filtering/search, disclosure, collapse and keyboard behavior to finite Host ports. Its instance owns selected statuses and IME composition; selection highlighting, ancestor expansion and collapsed-state read/restore are also Tree-owned. Workbench registers the returned listener-binding methods at the original positions and only combines saved state/TUI selection through public methods. Host search activity/deferred refresh remains shared with Feed, while graph visibility is an explicit callback. It does not read or mutate the instance status Set.
-
-`momentum-model.ts`, `momentum-cadence.ts`, `momentum-layout.ts` and `momentum-view.ts` replace the old root `goal-momentum.ts`: typed summaries, historical cadence, deterministic row placement, and read-only topology/action presentation have distinct owners here. Action ranking and `startable` are display hints, not permission/Claim checks. `momentum-ui.ts` exposes real full/placeholder contribution surfaces, consuming the minimal model from `momentum-ui-model.ts`; `momentum-en.ts` carries existing copy. The public `GOALS_MOMENTUM_CLIENT_FACTORY_SCRIPT` owns open/all filtering, period, selection, zoom/autofit and its load promise. Its internal viewport factory owns ResizeObserver, edge drawing and pointer panning; that internal binding is not a package-root export. Host supplies workspace/search DOM, route/collection, live Goal/status getters, translation, persistence and deferred mode callbacks. Finite read/restore/layout methods preserve the existing saved-field names and recovery order. Workbench injects shared mode/refresh/persistence dependencies; it does not calculate the graph or render the product template. The obsolete root source was removed after switching its production and test callers to public package exports.
-
-`planning-ui.ts` registers library/method/project surfaces. Presentation, method body, form, project composition, routes, styles, browser handlers and dedicated copy live in the adjacent `planning-*` files. They consume public Planning Method/Composition records and only the Project navigation fields they need. The Goals Module still computes the composition; the Plugin displays it. The host injects the settings frame/navigation, contextual/desktop URL primitives and control headers. `matchGoalsPlanningRoute` owns page matching; HTTP authorization, project resolution and method persistence stay outside the UI Plugin. A user click on “加入组合” sends the required explicit confirmation; mounting or filtering never adopts a method. Built-ins, personal versions and project versions retain their existing independent save rules. See GW5 progress for the real browser regression and remaining non-Planning work.
-
-`document-routes.ts` owns the existing Goal page/collection and read-fragment descriptors: refresh, momentum, document, panels, records, event pages and quick record. It decodes the id once and preserves original collection/offset errors; the HTTP host invokes it only for GET requests after resolving Project scope. `GoalDocumentCollection` and `LazyGoalPanel` have one public type owner here. Workbench selects the supplied owner renderer; it neither reads facts nor defines error copy. Project authorization, response headers and data/Artifact query assembly remain host work. Record routing does not transfer Execution/Decision record UI ownership to Goals.
-
-`document-client.ts` exports `GOALS_DOCUMENT_CLIENT_FACTORY_SCRIPT`, a browser factory with explicit pane, collection, route, translation, abort classification, error and before/after replacement ports. It owns its request state, cancellation, late-response guard, document replacement and busy indicator per instance. Workbench binds cross-owner preview/reset callbacks in the original order and receives only `loadGoalDocument`; the unused old lexical script export and shared bootstrap request variable are gone. The generated browser factory uses native DOM/fetch, not a new global registry or bundler.
-
-`GOALS_PANELS_CLIENT_FACTORY_SCRIPT` owns hash targets, panel/factor keys, request state, selection, retry, clicks and keyboard handling. Host supplies explicit pane/route/collection, translation/error, focus, persistence, post-load preview and records ports. `GOALS_RECORDS_CLIENT_FACTORY_SCRIPT` owns full-record loading and pagination with a shared request local to that instance, not record content. Host supplies route/collection, translation/error and deep-link reveal. Old public lexical fragment exports and shared bootstrap request/key variables are gone. Each cancelled request immediately releases its own busy/disabled UI; completed or failed old responses cannot mutate DOM or clear a newer request. This preserves retry after users switch away mid-load. Unhandled record clicks return synchronously so the shared event dispatcher does not introduce an extra await before unrelated actions. Navigation, tabs and draft editing also bind finite Host ports as described below; lifecycle, dialogs and ordinary fact forms also use explicit factories; shared refresh and cross-owner composition remain unfinished.
-
-`GOALS_NAVIGATION_CLIENT_FACTORY_SCRIPT` binds selection, failure rollback and history to explicit Host callbacks. It reads live selection/active Goal through getters, not a copied shared state; Workbench registers returned history handlers at the original listener positions. `GOALS_WORK_TABS_CLIENT_FACTORY_SCRIPT` owns the open Goal list, restore/filter/limit behavior, rendering, focus and handlers. Host provides storage access, current selection/surface and shell callbacks; utility tabs and pane ARIA composition remain Workbench-owned. `GOALS_DRAFT_CLIENT_FACTORY_SCRIPT` owns criterion rows, target parsing, edit opening and saving through route/control-header, split-lines, refresh, translation/toast and panel ports. Draft opening still awaits completion-panel loading before focus; failed saves retain input. Unmatched async click/submit handlers return null synchronously, so other default actions are not delayed. Later-defined Host functions are passed through callbacks, not eagerly captured during bootstrap. Old public fragment exports and Host open-list storage are gone. `GOALS_LIFECYCLE_CLIENT_FACTORY_SCRIPT` binds explicit current/archive requests to route/headers/refresh/toast/navigation, not lifecycle rules. `GOALS_RELATION_CLIENT_FACTORY_SCRIPT` binds create and relation previews, direction changes, disclosure and create/deactivate requests to explicit form, locale, validation, refresh and feedback ports. Shared refresh and cross-owner composition are unfinished.
-
-The existing document contribution also provides the initial Goal tab and compact/full empty archive/trash content. The shell keeps its tablist, utility labels and drag region. User titles are escaped at the initial tab's attribute boundary, matching browser `setAttribute` behavior. Eight original navigation/empty-state messages moved into `document-en.ts`. Before the focus repair the assembled client remained byte-identical; the only subsequent script change restores the selected tab's focus after a click, because the old shell rerender removed the clicked button. See GW5 progress for real history/keyboard/network-retry/archive tests. Execution/Decision content and final cross-owner page composition are not claimed complete.
-Execution validation application code now lives in `src/execution-validation-*`: claim/run/verification use cases consume public Module APIs and four finite snapshot/event/transaction functions. They cannot access a raw database or legacy Store. The Host injects the existing error constructor to preserve error codes, details and `instanceof` behavior. Remaining readiness/policy/completion composition in the legacy Coordinator still needs Cutover; the move does not certify that all Coordinator responsibilities have exited.
-
-Cutover: `GoalEligibility` is the shared role/dependency/risk/lease/Impact qualification owner for reads and Claim acquisition. `GoalAvailability` derives Ready/Available/Explain; `GoalWorkStateQueries` composes phases and completion gates. `RiskActionAuthorization`, `ensureGoalReviewObligations` and `GoalReadApplication` own cross-module authorization, Review requirements and Contract projections. They use public Module APIs and bounded snapshot/clock/error ports, without legacy Store/Coordinator imports. Local Host assembly and the remaining root UI surfaces are still being migrated.
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

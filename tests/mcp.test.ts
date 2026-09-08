@@ -6,8 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import Database from "better-sqlite3";
-import { GoalBoardCoordinator, SqliteGoalBoardStore } from "../src/index.js";
-import { GoalBoardServer, runtimeContextHostFromEnvironment } from "../src/mcp/server.js";
+import { GoalBoardCoordinator, SqliteGoalBoardStore } from "../apps/local-host/sdk/index.js";
+import { GoalBoardServer, runtimeContextHostFromEnvironment } from "../apps/desktop/launchers/mcp/server.js";
 
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 

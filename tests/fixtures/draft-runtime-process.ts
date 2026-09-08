@@ -1,4 +1,4 @@
-import { GoalBoardServer } from "../../src/mcp/server.js";
+import { GoalBoardServer } from "../../apps/desktop/launchers/mcp/server.js";
 
 // Separate Runtime processes share the real project DB; the test controls only
 // when requests are released, never the production transaction implementation.

@@ -10,7 +10,7 @@ import type { TestContext } from "node:test";
 import { WebSocket } from "ws";
 import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../../src/web/server.js";
+import { createGoalBoardWebServer } from "../../apps/desktop/launchers/web/server.js";
 
 
 /** One isolated project and Chrome profile; no user services or Runtime bindings. */

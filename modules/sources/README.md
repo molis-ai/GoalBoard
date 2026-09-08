@@ -1,32 +1,53 @@
-# @adeptify/goalboard-module-sources
+# 信息来源配置
 
-Status: `partial`  
-Workspace path: `modules/sources`  
-Contract entrypoint: `@adeptify/goalboard-contracts/modules/sources`
+保存用户选择的来源、监听意图、启停状态和 Provider 绑定引用，给同步流程提供稳定的配置入口。
 
-## What it owns
+包名：`@adeptify/goalboard-module-sources`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Source identity, display/configuration, enabled/paused/disconnected state, listening scope, schedule intent and connection reference. `SourcesModule.query` and `SourcesModule.commands` are the only public behavior entrypoints.
+## 一次典型调用
 
-Listener cursor, lease, retry and quarantine are intentionally absent from `SourceRecord`; they belong to Listener Host. Secrets, Signals, Feed disposition and Goals also remain outside this package.
+SourcesModule.query 查询项目来源，commands.save/setEnabled/retire 等操作更新来源事实。Native Feed 按这些配置发起同步，Listener Host 记录实际运行进度。
 
-## FD1 implementation
+## 从哪里读代码
 
-`SourcesModule` now owns the existing `feed_sources` schema and Source transition rules. The old `FeedStore` methods are compatibility forwards to this public API. The legacy `cursor_json` column is retained only as a migration input for existing databases and is no longer read or updated as the active cursor.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Remaining legacy callers
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | SourcesModule、迁移与来源命令/查询 |
 
-- `src/feed/sources/service.ts` still contains public-source registration/provider orchestration and calls the compatibility facade.
-- `src/feed/connectors/service.ts` still owns provider authorization composition until `goal-reorg-fd3`.
-- Web routes switch from the facade in `goal-reorg-fd4`.
+可对照现有调用方 [apps/local-host/src/feed-application.ts](../../apps/local-host/src/feed-application.ts) 阅读装配方式。
 
-The compatibility Source methods can be deleted after those callers use `SourcesApi` directly and FD4 completes behavior comparison.
+## 接入与边界
 
-## Commands
+来源希望何时运行与实际游标/租约是不同事实：前者在此，后者归 Listener。凭据内容不进入 Source 记录；这里只保留相关引用。
+
+由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-module-sources typecheck
 pnpm --filter @adeptify/goalboard-module-sources build
 ```
 
-Migration Goals: `goal-reorg-f2`, `goal-reorg-fd1`.
+已有行为示例与回归：[feed-module-repositories.test.ts](../../tests/feed-module-repositories.test.ts)。完成上述构建后运行：
+
+```bash
+node --import tsx --test --test-concurrency=1 tests/feed-module-repositories.test.ts
+```
+
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
+
+## 进一步阅读
+
+- [职责与接入说明](../../docs/modules/sources.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/modules/sources`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd1`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

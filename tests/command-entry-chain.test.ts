@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference,
   initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 import type { ClaimRunDecision, SubmitEvidenceResult, SubmitReviewResult } from "@adeptify/goalboard-plugin-goals";
 

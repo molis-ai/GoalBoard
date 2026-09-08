@@ -25,7 +25,7 @@ Desktop 是 GoalBoard 在 macOS 上的“外壳和控制台”。它负责开窗
 | `apps/desktop/src/capsule-shell.ts` | Capsule 的 HTML、CSS、浏览器脚本和壳层交互 | Goal/Run 状态组合 |
 | `apps/desktop/adapters/tauri/` | 窗口、菜单栏、PTY、本地 Web 服务启动与恢复 | Module 业务规则 |
 | `apps/desktop/src/adapters/sqlite-panels.ts` | Desktop Panel SQLite Repository | 面板业务判断 |
-| `desktop/src-tauri/` | Cargo/Tauri 配置、权限和打包资源 | Desktop 业务源码 |
+| `apps/desktop/src-tauri/` | Cargo/Tauri 配置、权限和打包资源 | Desktop 业务源码 |
 
 旧 `src/desktop/` 与 `src/web/desktop-shell.ts` 已删除；caller 使用 `@adeptify/goalboard-app-desktop`。
 
@@ -54,6 +54,6 @@ AP4 保持并迁移了以下既有能力：
 
 原混合 Tauri main.rs 已按窗口、菜单、服务、面板等职责拆分；旧 Desktop 转发、Catalog 面板兼容方法与 Web Capsule 文件均已删除。Panel 持久化 Adapter 归 Desktop，Catalog 通过公开端口装配；Session 与 Runtime 规则归各 owner。
 
-`desktop/src-tauri/` 保留 Cargo/Tauri 发布配置和资源。最终 App、DMG、zip 与 ad-hoc 签名已构建，DMG 安装至临时目录后真实启动、退出并恢复原服务。没有升级现用安装，也未进行 Developer ID 公证或公开发布。
+`apps/desktop/src-tauri/` 保留 Cargo/Tauri 发布配置和资源。最终 App、DMG、zip 与 ad-hoc 签名已构建，DMG 安装至临时目录后真实启动、退出并恢复原服务。没有升级现用安装，也未进行 Developer ID 公证或公开发布。
 
 历史分工见 [AP4](../../specs/goalboard-architecture-reorganization/ap4-validation.md)，最终证据见 [Cutover 验证](../../specs/goalboard-architecture-reorganization/cutover-validation.md)。

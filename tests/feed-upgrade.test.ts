@@ -7,7 +7,7 @@ import { createLocalFeedApplication } from "@adeptify/goalboard-app-local-host";
 import { createLocalFeedSourceService, listFeedSourceCatalog } from "@adeptify/goalboard-app-local-host";
 import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 test("opening a pre-reorg project initializes Listener storage and preserves old cursors and Goal content", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-feed-upgrade-"));

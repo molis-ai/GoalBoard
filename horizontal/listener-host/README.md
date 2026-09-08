@@ -1,32 +1,53 @@
-# @adeptify/goalboard-service-listener-host
+# 持久同步进度与事件投递
 
-Status: `partial`  
-Workspace path: `horizontal/listener-host`  
-Contract entrypoint: `@adeptify/goalboard-contracts/services/listener-host`
+保存监听游标、租约、投递尝试和运行收据，使进程中断后能恢复尚未处理的事件。
 
-## What it owns
+包名：`@adeptify/goalboard-service-listener-host`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Durable Source cursor/checkpoint, single-listener lease, Raw Event delivery, attempts, retry boundary, quarantine and technical Run receipts. It calls a declared Integration Adapter for a Signal Draft and advances the cursor only after Signals returns an accepted Receipt.
+## 一次典型调用
 
-It does not own Source configuration, formal Signal facts, Feed/Attention decisions, credentials or Provider protocol rules.
+ListenerHost.run 经 Connector 取得 Raw Event，再调用 Integration Adapter 生成 SignalDraft；Signals 接受后才推进游标。未完成投递保留在库中，同一来源的有效租约阻止重复消费，多次转换失败进入隔离状态。
 
-## FD1 implementation and recovery
+## 从哪里读代码
 
-`ListenerHost` persists `listener_instances` and `listener_deliveries`; the former `feed_source_runs` table is now owned through this package. Existing `feed_sources.cursor_json` is copied once for migration and then ignored as an authority.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-Call `migrateListenerHost` after Sources initialization before using the standalone recovery/checkpoint functions. Local Host does this when assembling the Feed application: pre-reorganization installations already recorded historical Feed migrations 22–29, so those markers cannot prove that Listener storage exists. Repeated initialization keeps the current Listener checkpoint and never replaces it with the legacy cursor. The old-project HTTP opening and reopen regression is `tests/feed-upgrade.test.ts`.
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | ListenerHost、迁移、checkpoint 和 Run 恢复 |
 
-On a process or Adapter failure, the Raw Event stays durable and the Run becomes interrupted. Retrying the same operation recovers the pending delivery. Repeated Provider delivery is safe because both Raw Event and Signal identities are Source-scoped and idempotent. A live lease rejects concurrent consumption of the same Source; repeated conversion failure enters quarantine.
+可对照现有调用方 [apps/local-host/src/feed-application.ts](../../apps/local-host/src/feed-application.ts) 阅读装配方式。
 
-## Current callers
+## 接入与边界
 
-Native Feed owns source scheduling and dispatch use cases; Local Host owns the Web timer and lifecycle. Integration Plugins own public-source protocols. The old `src/feed/sources/scheduler.ts` has been removed. The general-purpose Scheduler package remains contract-only; this migration does not claim future automation scheduling.
+装配时须在 Sources 初始化后调用 migrateListenerHost；旧 Feed migration 编号不能证明 Listener 表已存在。Native Feed 负责来源调度用例，Host 管 timer 生命周期；通用 Scheduler 仍是未来设计。
 
-## Commands
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-service-listener-host typecheck
 pnpm --filter @adeptify/goalboard-service-listener-host build
 ```
 
-Migration Goals: `goal-reorg-f2`, `goal-reorg-fd1`.
+已有行为示例与回归：[feed-receive-chain.test.ts](../../tests/feed-receive-chain.test.ts)、[feed-upgrade.test.ts](../../tests/feed-upgrade.test.ts)。完成上述构建后运行：
+
+```bash
+node --import tsx --test --test-concurrency=1 tests/feed-receive-chain.test.ts tests/feed-upgrade.test.ts
+```
+
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
+
+## 进一步阅读
+
+- [职责与接入说明](../../docs/horizontal/listener-host.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/services/listener-host`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd1`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

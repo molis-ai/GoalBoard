@@ -1,6 +1,6 @@
 # GoalBoard 架构 SSOT 索引
 
-2026-09-08 Cutover：现有产品实现已退出旧混合目录，正式调用链位于 38 个实际 workspace 包；根目录仅保留三个启动入口和 0.1.x SDK 兼容出口。完整用户验收与当前证据见 [Cutover 验证](../specs/goalboard-architecture-reorganization/cutover-validation.md)。本文描述当前 owner；各阶段历史数字保留在对应验证报告，不再作为当前实现位置。
+2026-09-08 Cutover：现有产品实现已退出旧混合目录，正式调用链位于 38 个实际 workspace 包；产品启动器已归 apps/desktop/launchers，0.1.x SDK 兼容出口已归 apps/local-host/sdk。完整用户验收与当前证据见 [Cutover 验证](../specs/goalboard-architecture-reorganization/cutover-validation.md)。本文描述当前 owner；各阶段历史数字保留在对应验证报告，不再作为当前实现位置。
 
 权威需求书：[架构需求书](../specs/goalboard-architecture-reorganization/spec.md)。每项事实只有一个 owner，详细规则在下列链接维护。
 
@@ -40,7 +40,7 @@
 
 | 目标 package | 负责什么 | 当前来源 | 包成熟度 | 迁移 / 实现 Goal |
 | --- | --- | --- | --- | --- |
-| `apps/desktop` | macOS 外壳、生命周期、Native Bridge | Native Bridge、Panel、Capsule 与发布工具；Tauri 配置在 desktop/src-tauri | `partial` | AP4/DV4/Cutover；实际平台安装证据见验证报告 |
+| `apps/desktop` | macOS 外壳、生命周期、Native Bridge | Native Bridge、Panel、Capsule 与发布工具；Tauri 配置在 apps/desktop/src-tauri | `partial` | AP4/DV4/Cutover；实际平台安装证据见验证报告 |
 | `apps/workbench` | 本地产品 UI 与页面组合 | Shell、导航、页面组合与注册 UI contribution；无数据库实现 | `partial` | AP3/FD4/GW5/EX4/AR3/WK3/Cutover |
 | `apps/local-host` | 本地唯一业务 composition root 和 single writer | 唯一项目数据库和业务装配；Web/CLI/MCP、凭据与本机 IO 适配 | `partial` | AP2/Cutover；同库事务与跨入口恢复已验证 |
 | `apps/server` | 轻量交换、Team 控制面、Team Plugin Host | 当前无正式 Server 实现 | `absent` | F2；未来独立功能 Spec |
@@ -122,9 +122,9 @@ Goals 与 Artifacts 是官方签名保护的一等 Plugin。Plugin 之间不依�
 | --- | --- | --- |
 | plugin CLI 与示例 | tooling/plugin-cli；examples/plugin-sample | 公开 SDK scaffold → validate/pack/sign → 本地安装 → Artifact/UI；样例不进生产 workspace |
 | workspace / npm | 根 scripts 调用 App-owned 构建与打包工具 | 38 包拓扑构建；发布包包含必要内部 JS 和资产，消费者安装原生依赖；不独立发布私有包 |
-| root SDK | src/index.ts、sdk-store.ts、sdk-types.ts | 0.1.x 已发布名称兼容期，仅转发公开 owner；内部 caller 不得通过 root SDK 绕过边界；移除须另行破坏性版本决策 |
-| CLI / MCP / Web bins | src/cli/main.ts、src/mcp/server.ts、src/web/server.ts | 只保留启动环境/stdio/资源路径与公开 App 入口；无业务 SQL 或状态机 |
-| Desktop / Tauri | apps/desktop + desktop/src-tauri | App/DMG/zip、bundle、ad-hoc codesign、本地安装/恢复；Developer ID、公证和公开发布不在本期验收承诺内 |
+| root SDK | apps/local-host/sdk/{index,sdk-store,sdk-types}.ts | 0.1.x 已发布名称兼容期，仅转发公开 owner；内部 caller 不得通过 root SDK 绕过边界；移除须另行破坏性版本决策 |
+| CLI / MCP / Web bins | apps/desktop/launchers/cli/main.ts、apps/desktop/launchers/mcp/server.ts、apps/desktop/launchers/web/server.ts | 只保留启动环境/stdio/资源路径与公开 App 入口；无业务 SQL 或状态机 |
+| Desktop / Tauri | apps/desktop + apps/desktop/src-tauri | App/DMG/zip、bundle、ad-hoc codesign、本地安装/恢复；Developer ID、公证和公开发布不在本期验收承诺内 |
 | Runtime Skill | skills/goal-advance | 仅消费正式公开 Contract 与入口，不读取内部 Store |
 | CI / vendor | .github/workflows、vendor；App-owned 发布工具 | 仅手动 CI；来源、版本、许可证、SBOM 与原发布供应链完整性保留 |
 | 文档 | 本索引与对应 owner 文档 | 当前位置以此表和 MIGRATION 为准；阶段性验收保留历史，不代表未来能力落地 |

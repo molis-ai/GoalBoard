@@ -1,51 +1,62 @@
-# @adeptify/goalboard-app-desktop
+# 桌面应用装配
 
-Status: `partial`  
-Workspace path: `apps/desktop`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/app-host`
+把本地 Web 产品接入桌面窗口、Panel、Capsule 和 Runtime 启动流程，并提供 macOS 发布工具。
 
-## Purpose
+包名：`@adeptify/goalboard-app-desktop`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-GoalBoard macOS product shell and native bridge composition root.
+## 一次典型调用
 
-This package explicitly does **not** own Business facts, Module rules, or Runtime state.
+createDesktopWebHost 向 Local Host 注入桌面能力；项目目录装配由 openGoalBoardProjectCatalog 提供。Panel 和 Capsule 通过 native bridge 与 Tauri 外壳交互，业务数据仍经各 Module 的公开接口访问。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exposes native-shell detection/bootstrap, Runtime launch recipes, guarded advance prompts, Desktop Panel lifecycle and the Capsule presentation shell. The legacy `src/desktop/` and `src/web/desktop-shell.ts` files have been removed; callers use this public package.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/web-host.ts](src/web-host.ts) | 桌面 Web Host 装配 |
+| [src/project-catalog.ts](src/project-catalog.ts) | 项目目录装配 |
+| [src/panels.ts](src/panels.ts) | Panel API |
+| [src/launch.ts](src/launch.ts) | Runtime 启动 |
 
-`AliasDesktopPanelSessionInput` now has its sole definition in the App Host Contract; the Desktop entrypoint re-exports it. Alias behavior and persistence still belong to the existing Desktop Panel service. Local Host consumes it when connecting a late native Session to its original panel.
+可对照现有调用方 [apps/desktop/launchers/web/server.ts](../../apps/desktop/launchers/web/server.ts) 阅读装配方式。
 
-The app depends on public Contracts and the Feed native Plugin's external-content redactor. Panel persistence and Project context are injected ports. It does not deep-import legacy code, import SQLite, or own Module Stores.
+## 接入与边界
 
-The native adapter source lives under `adapters/tauri/src/`, split into window/Capsule composition, PTY, managed Web service and Runtime environment responsibilities. `../../desktop/src-tauri/` remains distribution configuration and points its binary at this adapter.
+Tauri 工程、配置和资源已集中在本包的 `src-tauri/`，启动占位页在 `webview-placeholder/`；本包不另建 Goal 状态机。App 构建、安装与 Developer ID 签名/公证是不同步骤，当前实现不能据此声称已公证或已公开发布。
 
-The public native bootstrap reads Tauri's real fullscreen state on page load and window resize. It publishes `data-native-fullscreen` and one `--desktop-window-safe-inline-start` value: 88px in a window, 2px in fullscreen. Workbench, settings and onboarding consume that same inset; maximization and viewport width are not fullscreen signals. The 48px Workbench titlebar places its controls at a visible 22px center in the packaged macOS App, matching the traffic lights. See `specs/native-titlebar-alignment/spec.md` for real-window verification and browser compatibility coverage.
+本包的装配依赖见 [package.json](package.json)；包之间的允许方向由仓库边界检查约束。
 
-## Commands
+## 产品启动与打包
 
-DV4 release tooling lives under `tooling/`: build, verified Node download/runtime preparation, App install/start and release-version checks. Root `pnpm desktop:*` commands call these files; they are not a second application package. `prepare-runtime-payload.mjs` consumes Local Host's public `createGoalBoardRuntimePayload`, verifies native dependencies and CLI using the payload's Node with the payload as cwd, then replaces generated resources. A failed preparation leaves the previous resources untouched. It does not run npm install over unresolved `workspace:*` manifests. Node checksum and target-architecture checks remain in the shell preparation step.
+`launchers/` 保存 CLI、MCP、Web 的最终产品启动装配；它使用根产品 manifest 的依赖，由根 `tsconfig.json` 编译到原来的 `dist/cli`、`dist/mcp`、`dist/web`。协议实现仍在 CLI/MCP App，业务装配仍在 Local Host。
 
-The Local Host dependency is for this release composition; Desktop still does not own installer rules or Module Stores. Tauri configuration remains under `desktop/src-tauri`; final DMG/signing/notarization and installed recovery acceptance are not implied by payload tests.
+桌面 Rust 入口为 `adapters/tauri/src/main.rs`，`src-tauri/Cargo.toml` 指向它。仓库根运行 `pnpm desktop` 启动开发版，`pnpm desktop:build:macos` 构建 App/DMG；后者会准备本地 Runtime 资源，但不会自动安装应用。
 
-The release command preserves an explicit `APPLE_SIGNING_IDENTITY`; when absent, it explicitly selects ad-hoc (`-`). Before exporting DMG/zip and their SHA256 sidecars, it verifies the App signature and then reports the artifact's actual signing metadata. Local integrity verification is not notarization or Gatekeeper approval. The GitHub release workflow is currently manual-only; this migration does not enable automatic publication. Desktop first-run verification still uses the existing fixed 4173 endpoint and user LaunchAgent label, so changing GOALBOARD_HOME alone does not isolate it from a running user service.
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-app-desktop typecheck
 pnpm --filter @adeptify/goalboard-app-desktop build
 ```
 
-## Migration Goals
+已有行为示例与回归：[desktop-tui.test.ts](../../tests/desktop-tui.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-ap4`
-- `goal-reorg-dv4`
+```bash
+node --import tsx --test --test-concurrency=1 tests/desktop-tui.test.ts
+```
 
-## Legacy sources
+这些测试使用隔离数据或注入端口；Provider/桌面相关测试的通过不等于真实账户连接、安装或发布验收。
 
-- `desktop/`
-- `src/desktop/`
+## 进一步阅读
 
-AP4 moved the real callers, Desktop Panel rules, Capsule presentation and Tauri source into this boundary while preserving existing behavior. System notifications and a Desktop Keychain were not present in the baseline and are not represented by fake implementations. Final install/sign/notarize/SBOM validation remains DV4. See [the Desktop boundary](../../docs/platform/DESKTOP.md), [architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/platform/DESKTOP.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/app-host`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-ap4`, `goal-reorg-dv4`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

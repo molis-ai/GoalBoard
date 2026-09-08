@@ -36,6 +36,11 @@ jobs:
       - name: Verify package contracts and boundaries
         run: pnpm workspace:verify
 
+      - name: Typecheck product launchers and compatibility SDK
+        run: |
+          pnpm exec tsc --noEmit -p tsconfig.json
+          pnpm exec tsc --noEmit -p tsconfig.sdk.json
+
   verify:
     name: Verify
     needs: architecture-boundaries

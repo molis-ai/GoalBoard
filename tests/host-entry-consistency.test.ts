@@ -6,7 +6,7 @@ import test from "node:test";
 import { LocalHost } from "@adeptify/goalboard-app-local-host";
 import { createGoalEntryCompositionClient } from "@adeptify/goalboard-plugin-goals";
 import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 
 test("MCP combined responses cannot be split by a queued competing Goal write", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-entry-consistency-"));

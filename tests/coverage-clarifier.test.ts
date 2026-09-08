@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { GoalBoardCoordinator, SqliteGoalBoardStore, type DecompositionReview } from "../src/index.js";
+import { GoalBoardCoordinator, SqliteGoalBoardStore, type DecompositionReview } from "../apps/local-host/sdk/index.js";
 
 const board_id = "coverage-board";
 const actor_id = "runtime";

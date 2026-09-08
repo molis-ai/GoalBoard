@@ -17,7 +17,7 @@ import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const WEB_TOKEN = "goalboard-session-handoff-token-0123456789abcdef";
 

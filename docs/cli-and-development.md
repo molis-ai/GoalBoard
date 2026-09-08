@@ -79,14 +79,14 @@ tooling/plugin-cli/          Plugin CLI 边界；真实开发工具由 DV3 实�
 scripts/workspace-packages.mjs
                              48 包清单、manifest、入口、README 与 Contract 接线检查
 src/index.ts、sdk-*.ts        0.1.x SDK 兼容出口；实现由 owner 包提供
-src/mcp/server.ts            MCP 启动入口；协议归 apps/mcp，装配归 Local Host
-src/web/server.ts            Web 启动入口；HTTP/资源装配归 Local Host，页面归 Workbench/Native Plugin
+apps/desktop/launchers/mcp/server.ts            MCP 启动入口；协议归 apps/mcp，装配归 Local Host
+apps/desktop/launchers/web/server.ts            Web 启动入口；HTTP/资源装配归 Local Host，页面归 Workbench/Native Plugin
 apps/desktop/               Desktop 平台与 Native adapter；旧 src/desktop 已删除
 apps/local-host/src/installer/
                              安装、Runtime 接入、常驻服务与安全卸载的唯一实现
 apps/local-host/tooling/     构建记录与 npm 发布包生成；调用 Local Host 公开 API
 apps/desktop/tooling/        macOS 构建、Runtime payload、安装与启动脚本
-src/cli/main.ts              CLI 启动入口；命令归 apps/cli，装配归 Local Host
+apps/desktop/launchers/cli/main.ts              CLI 启动入口；命令归 apps/cli，装配归 Local Host
 desktop/                     macOS App 的 Cargo/Tauri 发布配置；源码位于 apps/desktop/adapters/tauri
 examples/seed-demo.mts       调用产品 demo 生命周期的开发脚本
 docs/screenshots/            README 产品截图

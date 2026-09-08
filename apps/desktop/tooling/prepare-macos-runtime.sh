@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-RESOURCE_DIR="$REPO_ROOT/desktop/src-tauri/resources/goalboard-runtime"
+RESOURCE_DIR="$REPO_ROOT/apps/desktop/src-tauri/resources/goalboard-runtime"
 NODE_VERSION="${GOALBOARD_NODE_VERSION:-24.14.0}"
 REQUESTED_ARCH="${GOALBOARD_MACOS_ARCH:-$(uname -m)}"
 

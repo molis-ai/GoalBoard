@@ -8,7 +8,7 @@ import { runtimeGoalTreeDecisionAuthority } from "@adeptify/goalboard-app-local-
 import { readGoalContractCapability, type GoalContractView } from "@adeptify/goalboard-plugin-goals";
 import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
 
 const createError = (code: string, message: string) => new GoalBoardV1Error(code, message);

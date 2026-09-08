@@ -31,7 +31,7 @@ import {
   renderGoalBoardWorkbenchClientScript,
   renderGoalBoardWorkbenchStylesheet,
 } from "./workbench-renderer-fixture.js";
-import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer as createBaseGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const WEB_TEST_CONTROL_TOKEN = "goalboard-web-test-control-token-0123456789abcdef";
 const PTY_CLIENT_SOURCE = readFileSync(new URL("../plugins/native/work/src/terminal/client.ts", import.meta.url), "utf8");
@@ -40,10 +40,10 @@ const TERMINAL_PANELS_SOURCE = readFileSync(new URL("../plugins/native/work/src/
 const WEB_RENDER_SOURCE = readFileSync(new URL("../apps/workbench/src/renderer.ts", import.meta.url), "utf8");
 const WORKBENCH_UI_SOURCE = [WEB_RENDER_SOURCE, CLIENT_SCRIPT, ONBOARDING_CLIENT_SCRIPT].join("\n");
 const DESKTOP_CAPABILITIES = JSON.parse(
-  readFileSync(new URL("../desktop/src-tauri/capabilities/default.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../apps/desktop/src-tauri/capabilities/default.json", import.meta.url), "utf8"),
 ) as { permissions?: string[] };
 const TAURI_CONFIG = JSON.parse(
-  readFileSync(new URL("../desktop/src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../apps/desktop/src-tauri/tauri.conf.json", import.meta.url), "utf8"),
 ) as { app?: { windows?: Array<{ label?: string; titleBarStyle?: string; hiddenTitle?: boolean; trafficLightPosition?: { x?: number; y?: number } }> } };
 let webRequestSequence = 0;
 

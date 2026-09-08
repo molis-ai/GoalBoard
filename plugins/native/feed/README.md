@@ -1,38 +1,57 @@
-# @adeptify/goalboard-plugin-feed
+# 信息流用例与原生界面
 
-Status: `partial`  
-Workspace path: `plugins/native/feed`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+把来源配置、同步、Signal、Feed 处置和注意事项接成完整的信息处理流程，并提供页面与路由。
 
-## Purpose
+包名：`@adeptify/goalboard-plugin-feed`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-First-party Feed navigation, UI, disposition, and Module composition.
+## 一次典型调用
 
-This package explicitly does **not** own Source/Signal/Feed/Attention facts or Provider implementations.
+FeedApplication 组合注入的 Module API；FeedSourceService、FeedConnectorSync 和 FeedSourceScheduler 处理来源同步用例。用户将条目推进为 Goal 时，promoteFeedItemToGoal 协调正式命令与来源关联，Host 提供文件、凭据和网络适配。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exposes the native Plugin's public module composition, UI Contribution, and HTTP route table. The contribution renders Feed / Attention lists and details, source management, connector setup, scheduling, empty/error/retry states, and Relay migration entrypoints. `apps/workbench` registers it through `packages/ui-host`; Web only supplies host primitives and current view data.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/application.ts](src/application.ts) | 信息流应用组合 |
+| [src/source-service.ts](src/source-service.ts) | 来源操作 |
+| [src/connector-sync.ts](src/connector-sync.ts) | Connector 同步 |
+| [src/goal-promotion.ts](src/goal-promotion.ts) | Feed 推进为 Goal |
+| [src/route-handlers.ts](src/route-handlers.ts) | HTTP 用例适配 |
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Feed facts remain owned by the Feed and Attention Modules; this package consumes their public records and does not open Stores or deep-import another package.
+可对照现有调用方 [apps/local-host/src/feed-application.ts](../../../apps/local-host/src/feed-application.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+本包不拥有 Source/Signal/Feed 数据表，也不直接实现 GitHub/Gmail 协议。正文渲染在 rich-content 中处理；Provider 失败、部分接收与重试不能混成同一个成功状态。
+
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-plugin-feed typecheck
 pnpm --filter @adeptify/goalboard-plugin-feed build
 ```
 
-## Migration Goals
+已有行为示例与回归：[feed-native-plugin.test.ts](../../../tests/feed-native-plugin.test.ts)、[feed-goal-promotion.test.ts](../../../tests/feed-goal-promotion.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-fd4`
+```bash
+node --import tsx --test --test-concurrency=1 tests/feed-native-plugin.test.ts tests/feed-goal-promotion.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/web/render.ts`
-- `src/web/server.ts`
+## 进一步阅读
 
-FD4 moved the real Feed UI and HTTP route ownership here and switched the Web callers. Goal-specific decision cards remain host-owned content inserted through the declared Feed detail slot. See [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../../docs/modules/feed.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd4`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

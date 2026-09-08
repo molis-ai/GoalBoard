@@ -8,7 +8,7 @@ import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
 import { mcpRuntimeSessionActivity } from "@adeptify/goalboard-app-mcp";
 
 import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import type { ClaimRunDecision } from "@adeptify/goalboard-plugin-goals";
 
 test("activity extraction preserves established priority, ignored operations and bounded result lookup", () => {

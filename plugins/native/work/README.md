@@ -1,47 +1,57 @@
-# @adeptify/goalboard-plugin-work
+# 会话、终端与交接体验
 
-Handoff preparation passes the actual Goal Contract revision to Work's public draft command. Work's cross-module source/target endpoints are recorded through Ledger; encrypted private content and delivery state remain with Private Work Context. Preparing or sending a private Handoff does not automatically publish an Artifact or Team content. Existing edit, native/fallback delivery, retry and cancellation behavior is preserved.
+组合 Session、Runtime 和项目上下文，提供会话目录、内容读取、恢复、handoff 和终端操作。
 
-Status: `partial`
-Workspace path: `plugins/native/work`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+包名：`@adeptify/goalboard-plugin-work`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-## Purpose
+## 一次典型调用
 
-First-party Session, Runtime, resume, and handoff product UI.
+SessionDirectoryService 处理发现/创建，SessionContentService 处理内容与恢复，SessionHandoffService 准备并交付交接包。HTTP/UI 接收 Host 注入的 Project、Session、Panel 和 Runtime API；浏览器 terminal-client 负责 xterm 与连接控制。
 
-This package explicitly does **not** own Session/Run/Goal facts or Runtime adapter implementations.
+## 从哪里读代码
 
-## Public entrypoint
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-`src/index.ts` exposes Session creation/discovery, content/resume, handoff preparation/delivery and TUI recording. Applications supply `WorkSessionApi` and `RuntimeHostApi`; the Plugin never opens a database or writes another owner's Store. Handoff draft coordination, delivery/recovery and package rendering are separate implementation units.
+| 文件 | 用途 |
+| --- | --- |
+| [src/directory.ts](src/directory.ts) | 会话发现和创建 |
+| [src/content.ts](src/content.ts) | 内容与恢复 |
+| [src/handoff.ts](src/handoff.ts) | 交接用例 |
+| [src/http/index.ts](src/http/index.ts) | 会话 HTTP 路由 |
+| [src/ui](src/ui) | 会话与终端界面 |
 
-Work UI contributes Session directory/detail/dialog surfaces through UI Host. Content/resume, directory navigation, creation, associations and handoff browser initializers have explicit inputs and separate local state. Session HTTP handlers preserve the existing project checks, confirmation rules and public serialization; Local Host supplies authentication, HTTP IO and workspace checks.
+可对照现有调用方 [apps/local-host/src/web-work-session.ts](../../../apps/local-host/src/web-work-session.ts) 阅读装配方式。
 
-The public `terminal-client` entry starts the browser UI from Workbench. Terminal channel authentication/reconnect, panel lifecycle, context autofill, and xterm rendering have independent controllers. Browser code is typechecked with the package; Workbench retains the asset bootstrap and the existing public asset URL.
+## 接入与边界
 
-Work also owns the Session/workspace read model, terminal markup, panel HTTP flow and workspace recovery coordination. The Host supplies public Project/Session/Panel APIs, authenticated HTTP IO and filesystem observations. No Store or implementation dependency crosses into the Plugin. See [WK3 validation](../../../specs/goalboard-architecture-reorganization/wk3-validation.md).
+Session 事实归 Private Work Context，跨对象关联归 Ledger，进程归 Runtime Host。交接包保持私人内容，不自动发布 Artifact/Team 数据。发送失败、重试和取消保留对应状态，不能把准备完成视为发送成功。
 
-## Dependencies
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. xterm and its fit addon belong to this package's terminal rendering. Implementation dependencies are added by the Goal that migrates a complete use case, never by deep-importing legacy code.
+## 本地开发
 
-## Commands
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-plugin-work typecheck
 pnpm --filter @adeptify/goalboard-plugin-work build
 ```
 
-## Migration Goals
+已有行为示例与回归：[session-handoff.test.ts](../../../tests/session-handoff.test.ts)、[session-directory.test.ts](../../../tests/session-directory.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-wk3`
+```bash
+node --import tsx --test --test-concurrency=1 tests/session-handoff.test.ts tests/session-directory.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/web/render.ts`
-- `src/web/server.ts`
-- `src/web/pty-client.ts`
+## 进一步阅读
 
-The production Web server and Workbench consume these public entries. Full regression passed 535 tests; final workspace recovery cutover passed 90 targeted tests. This does not replace final whole-product simulated-user verification. See [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../../docs/modules/private-work-context.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-wk3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

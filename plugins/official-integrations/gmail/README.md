@@ -1,38 +1,57 @@
-# @adeptify/goalboard-integration-gmail
+# Gmail 信息接入
 
-Status: `partial`  
-Workspace path: `plugins/official-integrations/gmail`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+提供 Gmail OAuth、账户安装配置、历史游标与邮件 Provider，使授权邮件更新进入 Signal/Feed。
 
-## Purpose
+包名：`@adeptify/goalboard-integration-gmail`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Official Gmail OAuth, connector, listener, Signal, settings, and Action adapters.
+## 一次典型调用
 
-This package explicitly does **not** own Source/Signal/Feed/Attention facts or Host business decisions.
+createGmailIntegrationPlugin 注册 Provider/Adapter；OAuth 处理配置、pending state、回调和 token 生命周期，provider 读取邮件更新，history-cursor 处理历史位置。Host 注入网络和 Secret ports。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the reviewed Manifest, Integration Plugin definition factory, Gmail Provider, scope/cursor rules, and closed error normalization. The local composition layer injects only Secret/OAuth ports.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | Integration 公共入口 |
+| [src/oauth.ts](src/oauth.ts) | 授权流程 |
+| [src/oauth-types.ts](src/oauth-types.ts) | scope/回调与端口 |
+| [src/provider.ts](src/provider.ts) | 邮件更新读取 |
+| [src/history-cursor.ts](src/history-cursor.ts) | 历史游标 |
 
-The Plugin depends only on the public Plugin Contract and Plugin SDK. Gmail token refresh and OAuth remain behind the injected provider boundary during this compatibility phase.
+可对照现有调用方 [apps/local-host/src/official-integrations.ts](../../../apps/local-host/src/official-integrations.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+默认 scope、授权回调和 refresh token 规则见 oauth-types/scope 的实际定义。凭据不能写进 Source 或 Signal 正文；游标失效与授权过期是不同恢复路径。
+
+工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-plugin-sdk`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-integration-gmail typecheck
 pnpm --filter @adeptify/goalboard-integration-gmail build
 ```
 
-## Migration Goals
+已有行为示例与回归：[gmail-oauth.test.ts](../../../tests/gmail-oauth.test.ts)、[feed-connectors.test.ts](../../../tests/feed-connectors.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-fd3`
+```bash
+node --import tsx --test --test-concurrency=1 tests/gmail-oauth.test.ts tests/feed-connectors.test.ts
+```
 
-## Legacy sources
+这些测试使用隔离数据或注入端口；Provider/桌面相关测试的通过不等于真实账户连接、安装或发布验收。
 
-- `src/feed/connectors/gmail.ts` is now a thin Secret/OAuth compatibility entrypoint.
-- `src/feed/connectors/gmail-oauth.ts`
+## 进一步阅读
 
-FD3 moved Gmail Provider protocol, scope, history cursor, error normalization, identity, and Signal transformation into this package. OAuth Secret persistence remains a Host-injected compatibility seam, not a second Integration model. See [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../../docs/platform/PLUGIN-DEVELOPMENT.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

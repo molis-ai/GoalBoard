@@ -73,8 +73,15 @@ function checkSourceImports(repositoryRoot, packages) {
   let sourceFileCount = 0;
   let importCount = 0;
 
-  for (const importer of packages) {
-    const sourceFiles = ["src", "tooling", "bin"].flatMap(directory => filesUnder(path.join(importer.root, directory), (filePath) =>
+  const productDirectories = ["apps/desktop/launchers", "apps/local-host/sdk"];
+  const productManifest = readJson(path.join(repositoryRoot, "package.json"));
+  const product = {
+    name: productManifest.name, path: ".", root: repositoryRoot, kind: "app",
+    declaredDependencies: Object.keys(productManifest.dependencies ?? {}),
+  };
+  for (const importer of [...packages, product]) {
+    const directories = importer === product ? productDirectories : ["src", "tooling", "bin"];
+    const sourceFiles = directories.flatMap(directory => filesUnder(path.join(importer.root, directory), (filePath) =>
       SOURCE_EXTENSIONS.has(path.extname(filePath)),
     ));
     sourceFileCount += sourceFiles.length;
@@ -88,7 +95,9 @@ function checkSourceImports(repositoryRoot, packages) {
 
         if (specifier.startsWith(".")) {
           const resolvedTarget = path.resolve(path.dirname(sourceFile), specifier);
-          const relativeOwner = ownerForPath(resolvedTarget, packages);
+          const relativeOwner = importer === product && productDirectories.some(directory =>
+            isWithin(resolvedTarget, path.join(repositoryRoot, directory)))
+            ? product : ownerForPath(resolvedTarget, packages);
           if (relativeOwner && relativeOwner.name !== importer.name) target = relativeOwner;
           relativeCrossOwner = !isWithin(resolvedTarget, importer.root);
         }
@@ -495,7 +504,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
     errors.push(`${reconciliationPath}: lifecycle reconciliation must compose public owner APIs without legacy callbacks or persistence`);
   }
 
-  const storePath = "src/sdk-store.ts";
+  const storePath = "apps/local-host/sdk/sdk-store.ts";
   const store = read(storePath);
   for (const method of [
     "migrateGoalArchive",
@@ -602,7 +611,7 @@ function checkMigratedGoalsCommandOwnership(repositoryRoot) {
   ) {
     errors.push(`${goalReadApplicationPath}: compatibility composition must not own Goal persistence or bypass Goals Query`);
   }
-  for (const relativePath of ["src/sdk-store.ts", "plugins/native/goals/src/board-v3-import.ts"]) {
+  for (const relativePath of ["apps/local-host/sdk/sdk-store.ts", "plugins/native/goals/src/board-v3-import.ts"]) {
     errors.push(...checkGoalStorageOwnership(read(relativePath)).map(error => `${relativePath}: ${error}`));
   }
   errors.push(...checkGoalReadOwnerSql(read("apps/local-host/src/feed-application.ts")).map(error => `apps/local-host/src/feed-application.ts: ${error}`));
@@ -829,14 +838,14 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
     `\\b(?:CREATE TABLE IF NOT EXISTS|FROM|INTO|UPDATE|DELETE FROM)\\s+(?:${governanceTables})\\b`,
     "giu",
   );
-  for (const relativePath of [coordinatorPath, "src/sdk-store.ts"]) {
+  for (const relativePath of [coordinatorPath, "apps/local-host/sdk/sdk-store.ts"]) {
     const source = read(relativePath);
     for (const match of source.matchAll(directGovernanceSql)) {
       errors.push(`${relativePath}: direct Governance SQL must use the owning Module public entrypoint (${match[0]})`);
     }
   }
 
-  const legacyTypes = read("src/sdk-types.ts");
+  const legacyTypes = read("apps/local-host/sdk/sdk-types.ts");
   for (const typeName of [
     "ReviewObligationRecord",
     "ReviewRecord",
@@ -850,7 +859,7 @@ function checkMigratedGovernanceOwnership(repositoryRoot) {
       "u",
     );
     if (!typeAlias.test(legacyTypes)) {
-      errors.push(`src/sdk-types.ts: ${typeName} must remain a public Governance Contract alias`);
+      errors.push(`apps/local-host/sdk/sdk-types.ts: ${typeName} must remain a public Governance Contract alias`);
     }
   }
 
@@ -1148,17 +1157,17 @@ function checkArtifactsOwnership(repositoryRoot) {
     errors.push(`${pluginPath}: Native Plugin entrypoint must not own Artifact facts or construct its Repository`);
   }
 
-  const store = read("src/sdk-store.ts");
+  const store = read("apps/local-host/sdk/sdk-store.ts");
   const coordinator = read("apps/local-host/src/goal-project-application.ts");
   const projectMigrations = read("apps/local-host/src/project-migrations.ts");
   if (!read("apps/local-host/src/project-database.ts").includes("migrateLocalProjectDatabase") || !projectMigrations.includes("ARTIFACTS_SCHEMA_SQL") || !projectMigrations.includes("migrateArtifactsSchema")) {
-    errors.push("src/sdk-store.ts: root storage must compose the Artifact owner schema and migration");
+    errors.push("apps/local-host/sdk/sdk-store.ts: root storage must compose the Artifact owner schema and migration");
   }
   if (!coordinator.includes("ArtifactsModule") || !coordinator.includes("readonly artifacts: ArtifactsApplicationApi")) {
     errors.push("apps/local-host/src/goal-project-application.ts: compatibility composition must expose the public Artifacts API");
   }
   const directArtifactSql = /\b(?:CREATE TABLE(?: IF NOT EXISTS)?|FROM|INTO|UPDATE|DELETE FROM)\s+(artifacts|artifact_versions)\b/giu;
-  for (const relativePath of ["apps/local-host/src/goal-project-application.ts", "src/sdk-store.ts", "src/sdk-types.ts"]) {
+  for (const relativePath of ["apps/local-host/src/goal-project-application.ts", "apps/local-host/sdk/sdk-store.ts", "apps/local-host/sdk/sdk-types.ts"]) {
     const source = read(relativePath);
     for (const match of source.matchAll(directArtifactSql)) {
       errors.push(`${relativePath}: direct ${match[1]} SQL must stay inside modules/artifacts`);

@@ -1,38 +1,53 @@
-# @adeptify/goalboard-kernel
+# Host 能力注册与调用
 
-Status: `partial`  
-Workspace path: `packages/kernel`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/kernel`
+按明确的 capability 身份注册处理器，使 Host 能发现和调用功能而不把业务逻辑塞进分发器。
 
-## Purpose
+包名：`@adeptify/goalboard-kernel`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Capability registration, selection, grants, and lifecycle skeleton.
+## 一次典型调用
 
-This package explicitly does **not** own Business state machines, Provider implementations, or application UI.
+CapabilityRegistry.register 绑定定义与 handler，并返回注销函数；descriptors 提供已注册能力；invoke 根据定义找到处理器，将调用上下文和输入传入并返回输出。
 
-## Public entrypoint
+## 从哪里读代码
 
-`CapabilityRegistry` registers versioned Query/Command handlers, rejects invalid or duplicate identities, publishes stable descriptors, and invokes a handler against Host-provided context. It never stores Module facts or selects business outcomes.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | CapabilityRegistry、错误与处理器类型 |
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Implementation dependencies are added by the Goal that migrates a complete use case, never by deep-importing legacy code.
+可对照现有调用方 [apps/local-host/src/local-host.ts](../../apps/local-host/src/local-host.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+Registry 负责身份、重复注册和缺失能力错误。参数的业务校验、用户权限、事务和状态转换由 Host 与实际 handler 负责。
+
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-kernel typecheck
 pnpm --filter @adeptify/goalboard-kernel build
 ```
 
-## Migration Goals
+已有行为示例与回归：[local-host.test.ts](../../tests/local-host.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-f3`
-- `goal-reorg-ap2`
+```bash
+node --import tsx --test --test-concurrency=1 tests/local-host.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- No current implementation source; a future feature Spec is required.
+## 进一步阅读
 
-AP2 uses the registry from the Local Host public entrypoint and verifies duplicate/missing capability errors. Grants, provider policy, and Plugin lifecycle remain with their own later slices. See [the architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/platform/LOCAL-HOST.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/kernel`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-f3`, `goal-reorg-ap2`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

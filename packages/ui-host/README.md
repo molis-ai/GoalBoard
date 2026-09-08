@@ -1,38 +1,54 @@
-# @adeptify/goalboard-ui-host
+# UI 扩展注册与装载
 
-Status: `partial`  
-Workspace path: `packages/ui-host`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/ui`
+让 Workbench 按 contribution 和 slot 组合 Plugin 界面，并在注册与挂载时检查身份和格式。
 
-## Purpose
+包名：`@adeptify/goalboard-ui-host`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-UI Contribution, Slot, Embed, isolation, and Host bridge boundary.
+## 一次典型调用
 
-This package explicitly does **not** own Native Plugin product behavior or Module business facts.
+UiHost.register 保存 contribution，render 调用对应渲染器；mount 检查 surface 与目标 slot 的兼容性。createPluginUiClient 为 Plugin 提供受权限约束的注册接口。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports `UiHost`, a small registry that validates and mounts public `UiContribution` objects. It owns contribution identity, surface lookup, and compatibility between declared Plugin surfaces and Workbench slots; it does not own Feed behavior, product facts, browser state, or a Store.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | UiHost 注册、渲染与挂载 |
+| [src/plugin-client.ts](src/plugin-client.ts) | Plugin UI 访问边界 |
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Implementation dependencies are added by the Goal that migrates a complete use case, never by deep-importing legacy code.
+可对照现有调用方 [apps/local-host/src/plugin-executor.ts](../../apps/local-host/src/plugin-executor.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+UI Host 不解释 Goal、Feed 或 Artifact 状态。Plugin 客户端的注册释放由 Host 生命周期负责；注册/渲染协议不等于任意 HTML 或脚本都获得隔离执行。
+
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-ui-host typecheck
 pnpm --filter @adeptify/goalboard-ui-host build
 ```
 
-## Migration Goals
+已有行为示例与回归：[workbench-ui-platform.test.ts](../../tests/workbench-ui-platform.test.ts)、[plugin-host-executor.test.ts](../../tests/plugin-host-executor.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-ap3`
-- `goal-reorg-fd4`
+```bash
+node --import tsx --test --test-concurrency=1 tests/workbench-ui-platform.test.ts tests/plugin-host-executor.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/web/render.ts`
+## 进一步阅读
 
-FD4 supplied the first real consumer: `apps/workbench` registers the official Feed contribution and renders it through this host. See [the architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/platform/UI-PLATFORM.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/ui`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd4`, `goal-reorg-ap3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

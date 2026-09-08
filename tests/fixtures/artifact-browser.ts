@@ -5,7 +5,7 @@ import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../../src/web/server.js";
+import { createGoalBoardWebServer } from "../../apps/desktop/launchers/web/server.js";
 
 const directory = mkdtempSync(join(tmpdir(), "goalboard-ar3-browser-"));
 const databasePath = join(directory, "fixture.db");

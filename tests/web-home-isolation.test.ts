@@ -9,7 +9,7 @@ import { createFileSecretStore, resetSecretStoreCache, runWithGoalBoardHome } fr
 import { createFeedEvidenceContentStore } from "@adeptify/goalboard-module-feed";
 import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const controlToken = "home-isolation-test-control-token-0123456789";
 const authRef = "connector:github:token";

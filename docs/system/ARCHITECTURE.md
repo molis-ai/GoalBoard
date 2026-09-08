@@ -79,7 +79,7 @@ Local Host 是用户真正工作的地方，组合完整 Module、Horizontal Ser
 
 AP2 已落地 embedded Local Host：typed Capability/Client Contract、Kernel registry、按 Project 复用的单 Runtime，以及 Web/CLI/MCP 的统一兼容装配。当前不宣称独立 daemon 或跨进程自动发现已经实现；详细边界和迁移端口见 [`LOCAL-HOST.md`](../platform/LOCAL-HOST.md)。
 
-AP4 已把 Desktop 的启动配方、Panel lifecycle、Capsule presentation 和 Tauri native adapter 迁入 `apps/desktop`。Desktop 通过 port 使用 Project/context 能力，不直接拥有 Projects Store；`desktop/src-tauri/` 只保留发布配置。当前能力和未来系统通知、Keychain、App updater 的边界见 [`DESKTOP.md`](../platform/DESKTOP.md)。
+AP4 已把 Desktop 的启动配方、Panel lifecycle、Capsule presentation 和 Tauri native adapter 迁入 `apps/desktop`。Desktop 通过 port 使用 Project/context 能力，不直接拥有 Projects Store；`apps/desktop/src-tauri/` 只保留发布配置。当前能力和未来系统通知、Keychain、App updater 的边界见 [`DESKTOP.md`](../platform/DESKTOP.md)。
 
 ### Server
 

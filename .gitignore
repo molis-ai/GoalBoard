@@ -10,9 +10,9 @@ dist/
 
 # Desktop / Rust
 target/
-desktop/src-tauri/target/
-desktop/src-tauri/gen/
-desktop/src-tauri/WixTools/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/WixTools/
 *.app
 release/macos/
 

@@ -10,7 +10,7 @@ import { WebSocket } from "ws";
 import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 // This checks the real browser clipboard, not the automation tool's virtual clipboard.
 test("migrated result reference copies exact text and handles denied clipboard permission without changing facts", { timeout: 30_000 }, async (t) => {

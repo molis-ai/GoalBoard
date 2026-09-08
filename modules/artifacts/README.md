@@ -1,47 +1,56 @@
-# @adeptify/goalboard-module-artifacts
+# 交付物身份与版本
 
-Status: `partial`  
-Workspace path: `modules/artifacts`  
-Contract entrypoint: `@adeptify/goalboard-contracts/modules/artifacts`
+保存 Artifact 身份、版本、内容引用、隐私范围及生产者信息，让交付物能被精确引用和读取。
 
-## Purpose
+包名：`@adeptify/goalboard-module-artifacts`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Artifact identity, version, type, content reference, scope, and provenance facts.
+## 一次典型调用
 
-This package explicitly does **not** own Plugin implementation dependencies, cross-object relationships, transport receipts, or private drafts.
+ArtifactsModule 通过 query/commands 发布和读取；身份与版本分开记录，引用使用 artifact_id + version。内容服务保存规范化的 opaque JSON 或经存储端口验证的外部内容引用。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the Contract-typed `ArtifactsModule`, its Query/Command API, Repository, schema migration and opaque-content helpers.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-The Module stores an Artifact identity separately from its Plugin-managed integer versions. An exact `artifact_id + version` is the reference boundary; the platform does not invent a canonical head or interpret custom payload fields.
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | ArtifactsModule |
+| [src/service.ts](src/service.ts) | 身份与版本写入规则 |
+| [src/content.ts](src/content.ts) | opaque 内容处理 |
+| [src/repository.ts](src/repository.ts) | 记录与查询 |
 
-- Inline JSON is normalized, hashed and returned without domain interpretation.
-- Large content remains behind a Storage-validated content reference.
-- Producer Plugin version may change, but the Plugin ID and binding signature stay fixed for one Artifact lineage.
-- Local publication defaults to personal. A `team_project` version requires explicit sharing authorization.
-- A missing compatible consumer leaves the Artifact readable and exchangeable as opaque data.
+可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
-## Dependencies
+## 接入与边界
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. SQLite is supplied through a narrow port by the Local Host composition; the package does not import Plugin implementations, Goals/Evidence Stores, or Server transport.
+平台不解释 Plugin 自定义 payload，也不凭旧字符串虚构 Artifact。个人范围是默认路径，Team 共享需要授权；缺少兼容消费者时仍可作为 opaque 数据读取。
 
-## Commands
+由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-module-artifacts typecheck
 pnpm --filter @adeptify/goalboard-module-artifacts build
 ```
 
-## Migration Goals
+已有行为示例与回归：[artifacts-module.test.ts](../../tests/artifacts-module.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-ar1`
-- `goal-reorg-ar3`
+```bash
+node --import tsx --test --test-concurrency=1 tests/artifacts-module.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/v1/`
-- `src/evidence/`
+## 进一步阅读
 
-AR1 owns the Artifact facts and Repository. AR3 will add the Native Plugin UI and explicitly convert eligible legacy result/file references; AR1 does not guess Artifact records from old strings. See [the architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/modules/artifacts.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/modules/artifacts`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-ar1`, `goal-reorg-ar3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

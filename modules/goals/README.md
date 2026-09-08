@@ -1,70 +1,57 @@
-# @adeptify/goalboard-module-goals
+# 目标、关系与生命周期事实
 
-Status: `partial`  
-Workspace path: `modules/goals`  
-Contract entrypoint: `@adeptify/goalboard-contracts/modules/goals`
+拥有目标合同、完成标准、关系图、策略、风险、项目指导和规划事实，是目标写入及正式生命周期判断的入口。
 
-## Purpose
+包名：`@adeptify/goalboard-module-goals`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Goal Contract, graph, policy, risk, lifecycle, guidance, and planning facts.
+## 一次典型调用
 
-This package explicitly does **not** own Claims/Runs, Evidence, Reviews/Decisions, or cross-Module provenance.
+GoalsModule 公开 commands、query 与 lifecycle；Host 提供跨 owner hooks，Native Goals 用公开接口组合页面和执行验收。createGoalReadServices 给读取场景提供明确服务，schema 与 revision 迁移也由本包提供。
 
-## Public entrypoint
+## 从哪里读代码
 
-GW6: `GOALS_SCHEMA_SQL` owns the remaining Goal tables and indexes. The public migrations for 15/25/26 own Risk/Guidance upgrades. Migration 30 exposes `migrateGoalContractRevisionColumn` and `backfillGoalContractRevisions`; the Host calls both on the same connection inside its existing cross-owner transaction, with the success marker last. Do not run these stages in separate transactions.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-`query.listLegacyCoverage(boardId)` and `commands.importLegacyCoverage(boardId, rows)` own the V3 `coverage_items` compatibility records. The importer still maps old IDs/status and owns the aggregate transaction and audit event; Web only reads the public Query. This is not Contract revision coverage or a new Ledger. No arbitrary SQL API is exposed.
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | GoalsModule 与读取服务 |
+| [src/goal-commands.ts](src/goal-commands.ts) | 目标写入 |
+| [src/query.ts](src/query.ts) | 查询与策略解析 |
+| [src/lifecycle-commands.ts](src/lifecycle-commands.ts) | 生命周期入口 |
+| [src/planning](src/planning) | 规划与方法库 |
 
-`GoalsModuleHooks.supersedePendingContractProposals` is required for Draft edits. Bind the public Governance records operation on the same transaction connection. It returns superseded IDs in original creation order, preserving the existing Draft audit event; no no-op fallback or Governance SQL belongs in Goals. Direct Module tests must bind the real owner as well.
+可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
-`src/index.ts` exports the public Goals Contract implementation. `GoalsModule.query` owns Goal/Relation/Risk/Policy/Guidance reads and Goal-owned snapshots. `GoalsModule.commands` owns Goal and Draft writes, relations, Policy, Risk, and project Guidance. `GoalsModule.lifecycle` owns Draft acceptance, Contract revision, completion/revalidation, archive, trash/restore, compound-parent reconciliation, and Goal lifecycle migrations. `GoalsModule.planning` owns project method selection/versioning, graph checks, metrics, and change-impact analysis. `GoalsRepository` is the repository used by those handlers.
+## 接入与边界
 
-`GoalsModule.impacts` owns resource declarations, their audit history and idempotent commands. `impact-repository.ts` owns their schema and history migration; `impact-commands.ts` uses the existing Goals command context. Accepted Proposal application uses `registerAccepted` inside the caller's authorized aggregate transaction, without adding duplicate standalone events. Execution consumes these public declaration types for compatibility checks; resource surfaces are not Ledger ObjectRefs.
+执行 Claim/Run、证据、Review/Decision 各有独立 owner。规划事实不等于已确认提案；旧 coverage 兼容逻辑仍服务历史数据。不得以页面推导状态回写替代正式生命周期。
 
-The 37 built-in planning methods are package assets under `methods/`. Keeping them beside their owner makes source builds, npm packages, and the installed home runtime load the same catalog. The home installer exposes a contained compatibility link under the installed Runtime Skill for older readers; it does not create a second source copy.
+由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
-`PersonalPlanningMethods` owns the personal method library, including its existing catalog table, saved versions and validation. `save` normalizes and persists within one transaction; `list` never upgrades an old catalog. The Local Host supplies the Home catalog location to `readPersonalPlanningMethods`; Goals opens and closes the readonly connection. Catalog provisioning calls `createPersonalPlanningMethodSchema` inside the original schema transaction; it does not maintain a second SQL implementation. Personal/project/built-in precedence remains in the Planning Engine.
+## 本地开发
 
-Claims/Runs, Review obligations, Project active-Goal state, and action projection stay with their own owners. Lifecycle calls them through narrow ports; it does not read or write their stores. Planning consumes proposal-shaped values only for validation; Proposal and Decision persistence remain Governance-owned.
-
-## Dependencies
-
-DD2 adds finite already-confirmed Goal/Draft, Policy, Risk and Relation commands. `confirmed-goal`, `confirmed-policy`, `confirmed-risk` and `confirmed-relations` keep each owner's existing validation, writes and lifecycle behavior; they are not new external confirmation bypasses. `goal-contract-records` shares ordinary/confirmed creation and criteria records. The caller retains the whole decision transaction and Governance completion ordering. `planning.contracts` owns business-contract comparison and accepted closure/revision structure checks; the existing acceptance/revision/closure lifecycle methods are now typed in public Contracts. Legacy proposal composition remains DD2 work.
-
-The only declared workspace dependency is `@adeptify/goalboard-contracts`. Implementation dependencies are added by the Goal that migrates a complete use case, never by deep-importing legacy code.
-
-## Commands
-
-Legacy aggregate confirmation also uses `registerAcceptedPolicy`, `registerAcceptedRisk` and `applyAcceptedRewireRelations`; their original audit ordering and distinct native/legacy behavior remain intact. All open Risk inserts share the repository implementation. `query.policyBindingVersion` encapsulates legacy and semantic-v1 proposal compatibility, including original serialized Policy values. Do not replace saved baselines with a newly parsed representation. Rewire and native planning share `planning.wouldCreatePartOfCycle`.
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-module-goals typecheck
 pnpm --filter @adeptify/goalboard-module-goals build
 ```
 
-## Migration Goals
+已有行为示例与回归：[goals-command-module.test.ts](../../tests/goals-command-module.test.ts)、[goals-query-module.test.ts](../../tests/goals-query-module.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-f826dfb8-bf63-4e98-b6b7-57f6b4b7c3b8`
-- `goal-reorg-gw1`
-- `goal-reorg-gw2`
-- `goal-reorg-gw3`
-- `goal-reorg-gw4`
-- `goal-reorg-gw6`
+```bash
+node --import tsx --test --test-concurrency=1 tests/goals-command-module.test.ts tests/goals-query-module.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-AR2 also moves Goal input confirmation behind `GoalInputBindings(db, ledger)`. The host must supply a Ledger API on the same transaction connection. Goals owns `input_bindings` and its migration; parseable Feed source endpoints live only in Ledger, while confirmation metadata and opaque legacy locators remain here. Public `list` reconstructs compatible locators and rejects a missing registered source edge instead of silently losing provenance.
+## 进一步阅读
 
-- `src/v1/`
-- `src/planning/`
+- [职责与接入说明](../../docs/modules/goals.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
 
-Goals Query, GW1 Command/Repository, GW2 Lifecycle/Migrations, GW3 Planning Engine, and GW4 application-entry migration are implemented. Web, MCP, and CLI Goal reads use the separate `goalQueries` boundary; Goal writes, lifecycle operations, and planning calls use app-owned adapters over `GoalsApplicationApi`. The old Coordinator write/lifecycle/planning forwarding methods and zero-caller Planning re-export files have been removed. Query compatibility delegates and cross-owner work/action projection remain until their owning migration Goals finish; EX4 owns the latter. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [migration matrix](../../docs/system/MIGRATION.md), and [one-off migration tooling](../../tooling/migrations/README.md).
-# 查询消费说明（2026-09-06）
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/modules/goals`
+- Migration Goals: `goal-reorg-f2`, `goal-f826dfb8-bf63-4e98-b6b7-57f6b4b7c3b8`, `goal-reorg-gw1`, `goal-reorg-gw2`, `goal-reorg-gw3`, `goal-reorg-gw4`.
 
-旧 FeedStore 的 Attention Goal subject 校验也必须调用公开 Goals Query；同项目 archived/trashed Goal 仍算存在，不用过滤后的可见 Goal 列表替代。缺失或跨项目 Goal 仍由 Attention 返回原错误，不能落 Inbox/审计事件。
-
-Web 的全部 Policy 历史与 Risk 关联，以及 Runtime 的依赖、开放风险、最新替代关系必须通过 `GoalsQueryApi` 读取。`query-facts-repository.ts` 维护这一组已有读取，不增加新表或第二存储。历史规则使用 `listPolicyHistory`（含 active/replaced/withdrawn、来源与理由），不能用 `resolvePolicy` 或 active-only snapshot 代替。旧公开 Query caller 审查遗漏的旁路及纠正验收见 `specs/goalboard-architecture-reorganization/goals-query-correction.md`。
-
-Cutover: Board schema, creation and current-Goal writes now belong to Goals. Completion/archive/trash clear the current pointer inside the same Goals transaction, without a Host SQL callback. Public Query exposes active policy inputs; public Planning exposes existing dependency metrics for the Goals Plugin.
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

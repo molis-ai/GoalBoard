@@ -12,7 +12,7 @@ function ptyClientFilePath(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
     path.join(here, "pty-client.js"),
-    path.resolve(here, "../../dist/web/pty-client.js"),
+    path.resolve(here, "../../../../dist/web/pty-client.js"),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
 }

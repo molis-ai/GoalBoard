@@ -1,5 +1,7 @@
 # 架构重组迁移矩阵
 
+产品工程归拢：根 src 与 desktop 已退出。启动器位于 apps/desktop/launchers，SDK 兼容源码位于 apps/local-host/sdk，Tauri 配置/资源位于 apps/desktop/src-tauri；构建输出和公开命令不变。下方旧路径为迁移历史。
+
 2026-09-08 清理补充：已删除 10 个无实现、无消费者的占位包，实际 workspace 为 38 包；未来设计见 SSOT 的 absent 条目。根 src 仅保留 6 个启动/SDK 文件。历史记录中的 48 包是当时口径。
 
 2026-09-08 Cutover：原混合实现 caller 已退出。当前运行结果以 [统一验收](../../specs/goalboard-architecture-reorganization/cutover-validation.md) 为准，下面表格为最终实现位置。

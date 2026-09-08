@@ -1,38 +1,56 @@
-# @adeptify/goalboard-integration-github
+# GitHub 信息接入
 
-Status: `partial`  
-Workspace path: `plugins/official-integrations/github`  
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+提供 GitHub Provider、设备授权流程和账户呈现，将外部更新交给统一监听与 Signal 链路。
 
-## Purpose
+包名：`@adeptify/goalboard-integration-github`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Official GitHub authorization, connector, listener, Signal, settings, and Action adapters.
+## 一次典型调用
 
-This package explicitly does **not** own Source/Signal/Feed/Action facts or Host business decisions.
+createGithubIntegrationPlugin 通过 SDK 注册 Driver/Adapter，createGithubProvider 处理 Provider 请求。OAuth 使用注入的端口维护授权过程；Local Host 提供凭据存储和 HTTP 装配。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the reviewed Manifest, the Integration Plugin definition factory, and the real GitHub notification Provider. `manifest.json` is the package-facing install declaration.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/index.ts](src/index.ts) | Integration Manifest 与工厂 |
+| [src/provider.ts](src/provider.ts) | GitHub Provider |
+| [src/oauth.ts](src/oauth.ts) | 设备授权 |
+| [src/account-presentation.ts](src/account-presentation.ts) | 账户展示 |
 
-The Plugin depends only on the public Plugin Contract and Plugin SDK. Credential resolution is injected by the local composition layer; credentials never enter Signal or Feed records.
+可对照现有调用方 [apps/local-host/src/official-integrations.ts](../../../apps/local-host/src/official-integrations.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+Manifest 声明权限并不等于已经获得授权；实际 grant 与凭据由 Host 管理。本包不拥有 Feed 状态，也不以导入测试的通过声称真实 GitHub 账号已连通。
+
+工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-plugin-sdk`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-integration-github typecheck
 pnpm --filter @adeptify/goalboard-integration-github build
 ```
 
-## Migration Goals
+已有行为示例与回归：[github-device-flow.test.ts](../../../tests/github-device-flow.test.ts)、[feed-connectors.test.ts](../../../tests/feed-connectors.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-fd3`
+```bash
+node --import tsx --test --test-concurrency=1 tests/github-device-flow.test.ts tests/feed-connectors.test.ts
+```
 
-## Legacy sources
+这些测试使用隔离数据或注入端口；Provider/桌面相关测试的通过不等于真实账户连接、安装或发布验收。
 
-- `src/feed/connectors/github.ts` is now a thin compatibility entrypoint.
-- `src/feed/connectors/github-oauth.ts`
+## 进一步阅读
 
-FD3 moved the GitHub protocol implementation and event transformation behind this Plugin. OAuth UI/application composition remains a compatibility seam until the app cutover. See [the architecture SSOT](../../../docs/SSOT-MATRIX.md) and [migration matrix](../../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../../docs/platform/PLUGIN-DEVELOPMENT.md)
+- [架构与当前实现索引](../../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/plugin`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-fd3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

@@ -6,7 +6,7 @@ import test from "node:test";
 import type { BoardSnapshot, DraftDialogueView, GoalContractView, GoalTreeApplicationApi, ClaimRunDecision, SubmitEvidenceResult, SubmitReviewResult } from "@adeptify/goalboard-plugin-goals";
 import type { ActionTransitionReceipt } from "@adeptify/goalboard-plugin-goals";
 import type { GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 
 test("Runtime public protocol carries one Draft through restart, user decision, execution and automatic completion", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-runtime-skill-"));

@@ -14,7 +14,7 @@ import type { IntelligenceCollectRequest, IntelligenceCollectResult } from "@ade
 import { FeedDomainError } from "@adeptify/goalboard-contracts/modules/feed";
 import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 import { resetSecretStoreCache } from "@adeptify/goalboard-storage";
 
 test("public Feed sources register offline, replay terminal sync, and roll back failed commits", async () => {

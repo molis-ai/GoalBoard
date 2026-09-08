@@ -14,7 +14,7 @@ import {
 } from "@adeptify/goalboard-app-workbench";
 import { icon } from "@adeptify/goalboard-design-system";
 import { renderGoalBoardWeb, type GoalBoardWebView } from "./workbench-renderer-fixture.js";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const TOKEN = "goalboard-session-web-token-0123456789abcdef";
 

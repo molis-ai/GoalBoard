@@ -6,7 +6,7 @@ import test from "node:test";
 import { cliFlagValue, cliGoalUrl, readCliJsonPayload } from "@adeptify/goalboard-app-cli";
 import { createGoalBoardLocalHost, goalBoardHostProjectReference, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import type { LegacyV3ImportInput } from "@adeptify/goalboard-plugin-goals";
 
 async function captureCli(operation: () => Promise<number>): Promise<string[]> {

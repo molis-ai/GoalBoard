@@ -1,22 +1,56 @@
-# @adeptify/goalboard-storage
+# 本地存储基础设施
 
-Status: `partial`
-Workspace path: `packages/storage`
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/storage`
+为各 owner 提供 SQLite 连接、共享日志、幂等记录、原子文件写入和本地安全存储适配，避免每个模块各建一套底层机制。
 
-`LocalSqliteStorage` owns the existing connection settings (WAL, FULL synchronous, foreign keys and five-second busy timeout), immediate transactions, the shared event journal and idempotency records. `LOCAL_JOURNAL_SCHEMA_SQL` exposes their original schema for the Host migration transaction.
+包名：`@adeptify/goalboard-storage`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Module schemas and migration ordering remain outside Storage. The package depends on Contracts and the existing `better-sqlite3` driver. It does not implement Outbox or Exchange.
+## 一次典型调用
 
-## Commands
+LocalSqliteStorage 打开连接并配置 WAL、FULL synchronous、外键和 busy timeout；LocalSqliteJournal 借用连接处理日志/幂等。Host 负责模块 schema 的迁移顺序。runWithGoalBoardHome 将文件适配限定到当前 Home。
+
+## 从哪里读代码
+
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
+
+| 文件 | 用途 |
+| --- | --- |
+| [src/sqlite.ts](src/sqlite.ts) | 连接、事务、事件日志和幂等 |
+| [src/schema.ts](src/schema.ts) | schema 辅助与 opaque blob |
+| [src/adapters/local-security-paths.ts](src/adapters/local-security-paths.ts) | Home 作用域 |
+| [src/adapters/file-secret-store.ts](src/adapters/file-secret-store.ts) | 本地凭据适配 |
+
+可对照现有调用方 [apps/local-host/src/project-database.ts](../../apps/local-host/src/project-database.ts) 阅读装配方式。
+
+## 接入与边界
+
+借用连接的 Journal 不负责关闭连接；连接拥有者负责释放。Secret/body 存储跟随创建时的 Home，不能靠切换全局变量混用用户目录。这里没有实现 Outbox 或 Exchange。
+
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-storage typecheck
 pnpm --filter @adeptify/goalboard-storage build
 ```
 
-Migration source: `src/v1/store.ts`. The legacy source has been removed. Host assembly and migrated Feed storage consumers are documented in the [Cutover work plan](../../specs/goalboard-architecture-reorganization/cutover-work-plan.md).
+已有行为示例与回归：[feed-security.test.ts](../../tests/feed-security.test.ts)、[web-home-isolation.test.ts](../../tests/web-home-isolation.test.ts)。完成上述构建后运行：
 
-Migration Goals: `goal-reorg-f2`, `goal-reorg-ap2` and the accepted final Cutover.
+```bash
+node --import tsx --test --test-concurrency=1 tests/feed-security.test.ts tests/web-home-isolation.test.ts
+```
 
-`LocalSqliteJournal` borrows an existing connection for shared events and idempotency. Its caller retains connection ownership; only `LocalSqliteStorage` opens and closes a connection.
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
+
+## 进一步阅读
+
+- [职责与接入说明](../../docs/SSOT-MATRIX.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/storage`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-ap2`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

@@ -15,10 +15,10 @@ import {
   type LeafReadiness,
   type LegacyV3ImportInput,
   type TaskContext,
-} from "../src/index.js";
+} from "../apps/local-host/sdk/index.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
-import { main as runPublicCli } from "../src/cli/main.js";
-import { GoalBoardServer } from "../src/mcp/server.js";
+import { main as runPublicCli } from "../apps/desktop/launchers/cli/main.js";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import {
   ProjectReferenceError,
   readProjectReference,
@@ -634,7 +634,7 @@ test("public CLI exposes install, service, demo, uninstall, and GoalBoard V1 plu
     console.error = originalError;
   }
 
-  const publicApi = await import("../src/index.js");
+  const publicApi = await import("../apps/local-host/sdk/index.js");
   assert.deepEqual(Object.keys(publicApi).sort(), [
     "GoalBoardCoordinator",
     "GoalBoardV1Error",

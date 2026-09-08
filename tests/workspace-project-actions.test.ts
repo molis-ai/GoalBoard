@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const TOKEN = "goalboard-workspace-actions-token-0123456789";
 

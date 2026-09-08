@@ -9,7 +9,7 @@ import {
   type RuntimeIntegrationServiceOptions,
   type SupportedRuntimeId,
 } from "@adeptify/goalboard-app-local-host";
-import { runtimeContextHostFromEnvironment } from "../src/mcp/server.js";
+import { runtimeContextHostFromEnvironment } from "../apps/desktop/launchers/mcp/server.js";
 
 interface Fixture {
   directory: string;

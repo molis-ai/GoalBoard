@@ -6,7 +6,7 @@ import { runPluginCli } from "@adeptify/goalboard-plugin-cli";
 
 export function main(args = process.argv.slice(2)): Promise<number> {
   return runLocalCli(args, {
-    defaultSourceDirectory: () => fileURLToPath(new URL("../../", import.meta.url)),
+    defaultSourceDirectory: () => fileURLToPath(new URL(import.meta.url.endsWith(".ts") ? "../../../../" : "../../", import.meta.url)),
     withCatalog: withGoalBoardProjectCatalog,
     runPlugin: (args) => runPluginCli(args, {
       stdout: value => process.stdout.write(value), stderr: value => process.stderr.write(value),

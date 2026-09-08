@@ -63,7 +63,8 @@ export async function inspectSource(
 
 export async function assertFreshRepositoryBuild(sourceDirectory: string): Promise<void> {
   const srcState = await pathState(path.join(sourceDirectory, "src"));
-  if (!srcState?.isDirectory()) return;
+  const launchersState = await pathState(path.join(sourceDirectory, "apps/desktop/launchers"));
+  if (!srcState?.isDirectory() && !launchersState?.isDirectory()) return;
   const manifestPath = path.join(sourceDirectory, "dist", ".goalboard-build.json");
   const manifest = await readJsonIfPresent<GoalBoardBuildManifest>(manifestPath);
   const currentDigest = await computeBuildSourceDigest(sourceDirectory);

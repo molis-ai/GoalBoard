@@ -1,46 +1,56 @@
-# @adeptify/goalboard-module-private-work-context
+# 私人会话与工作上下文
 
-Status: `partial`  
-Workspace path: `modules/private-work-context`  
-Contract entrypoint: `@adeptify/goalboard-contracts/modules/private-work-context`
+保存 Session 身份、私人内容引用、恢复/handoff 状态及 Runtime 项目绑定语义，使会话能在正确项目中继续。
 
-## Purpose
+包名：`@adeptify/goalboard-module-private-work-context`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Private Session, content reference, association semantics, resume, and handoff facts. Cross-Module association persistence belongs to Context Ledger.
+## 一次典型调用
 
-This package explicitly does **not** own Execution Runs, Goals, Artifacts, or Runtime process handles.
+应用通常通过 Local Host 的 openWorkSessionRegistry 打开 Registry。直接装配 GoalBoardSessionRegistry.open 时必须提供 createLedger，并复用事务连接；跨模块关联交给 Ledger，私人内容仍由本模块维护。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the Contract, `GoalBoardSessionRegistry`, encrypted local content store, Runtime context binding Repository and schema migration helpers. Callers must not deep-import the internal responsibility files.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-Applications open the Registry through `openWorkSessionRegistry` from `@adeptify/goalboard-app-local-host`. Direct composition must supply `GoalBoardSessionRegistry.open({ createLedger, ... })`; the factory is given the same transaction connection. No Module implementation dependency is introduced into this package.
+| 文件 | 用途 |
+| --- | --- |
+| [src/session-registry.ts](src/session-registry.ts) | Registry 与资源生命周期 |
+| [src/content-store.ts](src/content-store.ts) | 加密内容引用 |
+| [src/session-migration.ts](src/session-migration.ts) | 历史会话迁移 |
+| [src/project-binding-commands.ts](src/project-binding-commands.ts) | 项目绑定命令 |
 
-Schema v5 includes the v4 Session association migration and moves Handoff source Goal / target Project / workspace references into Ledger. Old link IDs, actors and timestamps are retained; unknown historical Project IDs or Goal versions stay unknown. Old endpoint columns and `session_goal_links` are cleared after successful migration and no longer queried for product state. Schema upgrade and Ledger transfer commit atomically, as do Handoff create/update operations. Session identity, local workspace path hints, encrypted content and Handoff delivery facts remain here. A private recovery package is not automatically a published Artifact.
+可对照现有调用方 [apps/local-host/src/session-registry.ts](../../apps/local-host/src/session-registry.ts) 阅读装配方式。
 
-## Dependencies
+## 接入与边界
 
-Project-context request/result types are exported through the existing Contract subpath from `runtime-project-context.ts`; the old Catalog types are aliases. `LegacySessionMigrationApi` publishes only the existing `migrateLegacy` operation so compatibility composition need not depend on a concrete Registry class. These type/entry changes do not claim that the remaining Catalog routing algorithms have migrated.
+Session 不是 Execution Run；私人的恢复包不会自动发布为 Artifact 或 Team 内容。历史未知 Project/Goal revision 保持未知。环境变量解析和 Runtime 进程启动由 Host 完成。
 
-`findSessionForHostSignals` consumes `WorkSessionQueryApi` and the public `RuntimeSessionHostSignals`. It owns the existing GoalBoard ID → native ID → surface → stable-context lookup, retaining the conflicting native-ID checks. Runtime/workspace/suggestion-clue types also have one public Contract definition here; environment parsing belongs to Local Host, not this Module.
+由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
-The only declared workspace dependency is `@adeptify/goalboard-contracts`; `better-sqlite3` is the package-local persistence adapter. It does not depend on Projects, Goals, Execution, Runtime Host, Web or Desktop implementations.
+## 本地开发
 
-## Commands
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-module-private-work-context typecheck
 pnpm --filter @adeptify/goalboard-module-private-work-context build
 ```
 
-## Migration Goals
+已有行为示例与回归：[private-work-context-module.test.ts](../../tests/private-work-context-module.test.ts)、[session-ledger-migration.test.ts](../../tests/session-ledger-migration.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-wk1`
+```bash
+node --import tsx --test --test-concurrency=1 tests/private-work-context-module.test.ts tests/session-ledger-migration.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/sessions/`
-- `src/projects/catalog.ts`
+## 进一步阅读
 
-WK1 moved the Session Registry, encrypted content, events, handoff state, legacy migration and Runtime context binding facts into this owner. WK2/WK3 removed the legacy Runtime/UI implementations. AR2 moves cross-Module association persistence to Ledger; Session APIs continue to enforce their own confirmation and identity rules. See [the architecture SSOT](../../docs/SSOT-MATRIX.md), [module boundary](../../docs/modules/private-work-context.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/modules/private-work-context.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/modules/private-work-context`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-wk1`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

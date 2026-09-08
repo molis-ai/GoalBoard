@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createGoalBoardRuntimePayload } from "@adeptify/goalboard-app-local-host";
 
@@ -9,7 +10,9 @@ if (!sourceDirectory || !resourceDirectory || !nodeExecutablePath) {
 }
 const destination = path.resolve(resourceDirectory);
 await fs.mkdir(path.dirname(destination), { recursive: true });
-const temporary = await fs.mkdtemp(path.join(path.dirname(destination), ".goalboard-resource-"));
+// Resources live inside the Desktop workspace, which is itself a payload dependency.
+// Stage outside that package so fs.cp never sees a copy into its own descendant.
+const temporary = await fs.mkdtemp(path.join(tmpdir(), "goalboard-resource-"));
 const staged = path.join(temporary, "payload");
 const previous = path.join(temporary, "previous");
 let movedPrevious = false;

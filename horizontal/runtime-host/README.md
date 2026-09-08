@@ -1,38 +1,56 @@
-# @adeptify/goalboard-service-runtime-host
+# Runtime 与终端进程适配
 
-Status: `partial`  
-Workspace path: `horizontal/runtime-host`  
-Contract entrypoint: `@adeptify/goalboard-contracts/services/runtime-host`
+把 Runtime 的发现、启动、恢复、内容流、中断和停止统一到公开端口，使产品用例不绑定某个进程协议。
 
-## Purpose
+包名：`@adeptify/goalboard-service-runtime-host`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-Runtime provider discovery, start/resume/stream/interrupt/stop, and technical Receipts.
+## 一次典型调用
 
-This package explicitly does **not** own Claims, Runs, Goals, Sessions, workspaces, conversation lineage, or Artifacts.
+RuntimeHostRouter 选择具备所需能力的 Adapter；Codex Session Adapter 通过 app-server transport 交互，GoalBoardPtyHost 管理终端进程。Work Plugin 消费这些端口，把技术结果转成会话体验。
 
-## Public entrypoint
+## 从哪里读代码
 
-`src/index.ts` exports the provider-neutral `RuntimeHostRouter`, Codex app-server transport/Session Adapter, Terminal/PT​Y process host and their Contract types. Callers do not deep-import Adapter files.
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
 
-## Dependencies
+| 文件 | 用途 |
+| --- | --- |
+| [src/runtime-router.ts](src/runtime-router.ts) | 能力选择与 Adapter 路由 |
+| [src/adapters/codex-session.ts](src/adapters/codex-session.ts) | Codex 会话适配 |
+| [src/adapters/codex-app-server.ts](src/adapters/codex-app-server.ts) | app-server 传输 |
+| [src/adapters/terminal-pty.ts](src/adapters/terminal-pty.ts) | PTY 生命周期 |
 
-The only workspace dependency is `@adeptify/goalboard-contracts`; `node-pty` is the Terminal Adapter's local implementation dependency. The package does not depend on Session, Execution, Goal, Web or Store implementations.
+可对照现有调用方 [apps/local-host/src/pty-socket.ts](../../apps/local-host/src/pty-socket.ts) 阅读装配方式。
 
-## Commands
+## 接入与边界
+
+Runtime 进程、GoalBoard Session 和 Execution Run 是不同身份。Adapter 不创建 Goal/Claim，也不负责 Session 关联；原生终端依赖 node-pty 和可用的本机命令。
+
+工作区依赖：`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
 pnpm --filter @adeptify/goalboard-service-runtime-host typecheck
 pnpm --filter @adeptify/goalboard-service-runtime-host build
 ```
 
-## Migration Goals
+已有行为示例与回归：[runtime-host.test.ts](../../tests/runtime-host.test.ts)。完成上述构建后运行：
 
-- `goal-reorg-f2`
-- `goal-reorg-wk2`
+```bash
+node --import tsx --test --test-concurrency=1 tests/runtime-host.test.ts
+```
 
-## Legacy sources
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-- `src/sessions/`
-- `src/web/pty-client.ts`
+## 进一步阅读
 
-WK2 moved the real Contract → implementation → caller → compatibility-test slice. The old Session/Codex/PT​Y files are thin compatibility exports; Work product composition continues in WK3. See [the architecture SSOT](../../docs/SSOT-MATRIX.md) and [migration matrix](../../docs/system/MIGRATION.md).
+- [职责与接入说明](../../docs/horizontal/runtime-host.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
+
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/services/runtime-host`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-wk2`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

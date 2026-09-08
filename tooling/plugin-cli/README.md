@@ -1,35 +1,64 @@
-# @adeptify/goalboard-plugin-cli
+# Plugin 开发与打包命令
 
-Status: `partial`
+给 Plugin 作者提供 validate、create、pack、identity、sign 和 verify 命令，并通过 Host 接入本地开发验证。
 
-Contract entrypoint: `@adeptify/goalboard-contracts/platform/tooling`.
-Migration Goals: `goal-reorg-f2`, `goal-reorg-dv3`.
-DV3 developer-tool entrypoint; not a marketplace or Runtime installer.
+包名：`@adeptify/goalboard-plugin-cli`。工作区内部包，通过仓库构建和 Host 装配使用。
 
-## Available now
+## 一次典型调用
 
-`goalboard-plugin validate <manifest.json>` reads JSON and invokes the public Plugin Contract parser. Exit 0 returns the validated identity/version, exit 1 reports invalid input or I/O failure, exit 2 means unsupported usage. It does not execute the Plugin or write configuration.
+runPluginCli 分发命令；validate 使用 Contracts 的 Manifest parser，pack 生成显式文件列表的 JSON bundle，签名和验证使用 Plugin Runtime 的公开包验证接口。dev 通过注入的 PluginCliHost 使用真实 Local Host。
+
+## 从哪里读代码
+
+公开入口是 [src/index.ts](src/index.ts)。生产调用使用包名或 package.json 声明的子路径；下列链接用于定位实现，不是深层导入示例。
+
+| 文件 | 用途 |
+| --- | --- |
+| [src/cli.ts](src/cli.ts) | 命令与输出 |
+| [src/create.ts](src/create.ts) | 示例项目生成 |
+| [src/package-files.ts](src/package-files.ts) | 文件打包 |
+| [src/package-signing.ts](src/package-signing.ts) | 签名与验证 |
+
+可对照现有调用方 [apps/desktop/launchers/cli/main.ts](../../apps/desktop/launchers/cli/main.ts) 阅读装配方式。
+
+## 接入与边界
+
+构建后再运行 bin。create 要求父目录已存在且目标不存在；pack 不覆盖输出，拒绝 symlink、越界路径、生命周期脚本及超过 64 MiB 的包。verify 依赖调用方提供的受信 Ed25519 公钥，签名不代表官方审核或 marketplace 上架。
+
+工作区依赖：`@adeptify/goalboard-plugin-runtime`、`@adeptify/goalboard-contracts`。其他运行依赖见 [package.json](package.json)。
+
+## 本地开发
+
+以下命令在**仓库根目录**执行，使用 Node.js 24+ 与仓库配置的 pnpm。首次准备运行 `pnpm install --frozen-lockfile` 和 `pnpm build`；之后可单独检查此包。
 
 ```bash
-pnpm --filter @adeptify/goalboard-contracts build
+pnpm --filter @adeptify/goalboard-plugin-cli typecheck
 pnpm --filter @adeptify/goalboard-plugin-cli build
-node tooling/plugin-cli/dist/main.js validate /path/to/manifest.json
 ```
 
-The package exports `runPluginCli`, `validatePluginManifestFile`, `createPluginProject`, packaging and signing adapters. It uses only public Contracts and Plugin Runtime entrypoints; validation and signature rules are not duplicated here. `bin` points to the source-distributed `bin/goalboard-plugin.mjs`, which only imports the compiled entrypoint. This lets a clean workspace install create the command before the first build. Build before invoking it; no CLI implementation is copied into the launcher.
+已有行为示例与回归：[plugin-package.test.ts](../../tests/plugin-package.test.ts)、[plugin-authoring.test.ts](../../tests/plugin-authoring.test.ts)。完成上述构建后运行：
 
-`goalboard-plugin create <directory> <plugin-id> <publisher-id> <binding-signature>` creates a local sample with public SDK imports. The parent directory must exist and the target must not exist; existing projects are never overwritten. The binding is explicitly supplied by the developer, not fabricated proof of official signing. The sample's SDK dependency must be installed from the matching local distribution until actual publishing is approved.
+```bash
+node --import tsx --test --test-concurrency=1 tests/plugin-package.test.ts tests/plugin-authoring.test.ts
+```
 
-## Application development command
+阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。
 
-`goalboard plugin dev <source-directory> <isolated-state-directory> <comma-separated-grants> --allow-unsigned-development` delegates to the application's real Local Host. It installs, starts, polls, renders and uninstalls while retaining private development data and exchanged Artifacts. A second invocation restores the counter. The standalone CLI exports a `PluginCliHost` injection port, but never creates a second application Store itself. See the [developer guide](../../docs/platform/PLUGIN-DEVELOPMENT.md) for reproducible commands, the public fixture and the trusted-code limitation.
+使用仓库自带的 Manifest 做一次只读校验：
 
-## Local package and signing commands
+```bash
+node tooling/plugin-cli/dist/main.js validate examples/plugin-sample/manifest.json
+```
 
-`pack <directory> <output.json>` includes package.json, manifest.json and the explicit files list (no globs, symlinks, directory traversal or lifecycle scripts). The resulting JSON bundle is limited to 64 MiB. Output files are never overwritten.
+成功时退出码为 0，并返回通过校验的 Plugin 身份/版本；它不会启动该 Plugin。开发运行、打包与签名的完整步骤见下方指南。
 
-`identity <public-key.pem>` returns the Ed25519 publisher binding for use when creating a signed Plugin. `sign <input.json> <private-key.pem> <output.json>` reads only the explicitly supplied private key and requires that binding to match the Manifest. `verify <input.json> <trusted-public-key.pem>` requires the caller's trusted key; it does not trust a key supplied by the package. Unsigned local development packages cannot pass verification.
+## 进一步阅读
 
-Signing authenticates the bundled bytes and publisher binding, not official review or marketplace admission. The runtime signing API accepts an external signer adapter so a release environment need not expose its private key to application code. Tests use generated temporary keys; no existing user key or Runtime setting was changed.
+- [职责与接入说明](../../docs/platform/PLUGIN-DEVELOPMENT.md)
+- [架构与当前实现索引](../../docs/SSOT-MATRIX.md)
 
-See [DV3 work plan](../../specs/goalboard-architecture-reorganization/dv3-work-plan.md) and [architecture ownership](../../docs/SSOT-MATRIX.md).
+- Status: `partial`
+- Contract entrypoint: `@adeptify/goalboard-contracts/platform/tooling`
+- Migration Goals: `goal-reorg-f2`, `goal-reorg-dv3`.
+
+上述状态用于追踪架构实现范围；当前行为以本包公开入口、调用方和对应测试为准。

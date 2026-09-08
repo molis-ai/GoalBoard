@@ -10,7 +10,7 @@ import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-wor
 import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-import { createGoalBoardWebServer } from "../src/web/server.js";
+import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
 
 const TOKEN = "goalboard-session-workspace-e2e-token-0123456789";
 
