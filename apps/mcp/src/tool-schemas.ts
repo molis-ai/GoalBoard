@@ -446,7 +446,7 @@ const GOAL_TREE_ITEM_PROPERTIES = {
     reason: V1_STRING,
     explanation: GOAL_TREE_ITEM_EXPLANATION,
     confidence: { type: "number", minimum: 0, maximum: 1 },
-    affected_objects: { type: "array", items: GOAL_TREE_AFFECTED_OBJECT },
+    affected_objects: { type: "array", items: GOAL_TREE_AFFECTED_OBJECT, description: "Goal/Contract 和关系条目可省略，由 payload 中的目标 ID/关系端点推导并记录版本基线；其他类型必须明确提供。" },
     requires_user_confirmation: { type: "boolean" },
     supersedes_item_id: { type: ["string", "null"] },
 };
@@ -458,7 +458,8 @@ export const GOAL_TREE_ITEM = {
       kind: { type: "string", const: kind },
       payload,
     },
-    required: ["kind", "operation", "payload", "source_refs", "reason", "confidence", "affected_objects"],
+    required: ["kind", "operation", "payload", "source_refs", "reason", "confidence",
+      ...(["goal", "contract", "relation", "dependency"].includes(kind) ? [] : ["affected_objects"])],
   })),
 };
 export const GOAL_TREE_ITEM_DECISION = {

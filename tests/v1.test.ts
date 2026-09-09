@@ -4157,7 +4157,7 @@ test("clarifier completes the same Draft only through a user-approved Contract P
     actor_id: "runtime-clarifier",
     discovered_in_run_id: run.run_id,
     proposed_goal: proposedGoal,
-    field_sources: contractFieldSources(run.run_id) as never,
+    field_sources: contractFieldSources(run.run_id).map(({ status, requires_user_confirmation, ...source }) => source) as never,
     review_policy: reviewPolicy,
     proposed_impacts: [
       { surface: "src/onboarding", access: "write", reason: "实现第一次使用闭环" },
@@ -4178,6 +4178,19 @@ test("clarifier completes the same Draft only through a user-approved Contract P
     ],
     idempotency_key: "complete-contract-proposal",
   }).proposal;
+  assert.deepEqual(firstProposal.field_sources.map(source => ({ status: source.status, requires_user_confirmation: source.requires_user_confirmation })),
+    contractFieldSources(run.run_id).map(() => ({ status: "proposed", requires_user_confirmation: true })));
+  assert.deepEqual(store.snapshot("board-1").contract_proposals[0]!.field_sources, firstProposal.field_sources);
+  const beforeConstantReplay = store.snapshot("board-1");
+  const constantReplay = coordinator.legacyProposalSubmission.submitContractProposal({
+    board_id: "board-1", goal_id: "rough-draft", actor_id: "runtime-clarifier", discovered_in_run_id: run.run_id,
+    proposed_goal: proposedGoal, field_sources: contractFieldSources(run.run_id) as never, review_policy: reviewPolicy,
+    proposed_impacts: firstProposal.proposed_impacts, proposed_risks: firstProposal.proposed_risks,
+    idempotency_key: "complete-contract-proposal",
+  });
+  assert.equal(constantReplay.replayed, true, "explicit pending constants and omitted constants are the same request");
+  assert.equal(constantReplay.proposal.proposal_id, firstProposal.proposal_id);
+  assert.deepEqual(store.snapshot("board-1"), beforeConstantReplay);
   assert.equal(firstProposal.state, "pending");
   assert.deepEqual(store.getGoal("rough-draft"), draft);
   assert.equal(store.snapshot("board-1").impacts.length, 0);
@@ -8688,7 +8701,7 @@ test("Goal Tree baselines ignore unrelated Goal runtime state but retain Contrac
         object_type: "relation",
         object_id: "relation:new:semantic-child:semantic-root:part_of",
       }),
-    ],
+    ].map(({ affected_objects, ...item }) => item.kind === "relation" ? { ...item, affected_objects } : item),
     idempotency_key: "semantic-baseline-submit",
   }).proposal;
   assert.ok(proposal.items.flatMap((item) => item.baseline_versions).every((baseline) =>

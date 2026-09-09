@@ -33,6 +33,26 @@ test("native proposal provenance sorts sources and rejects premature confirmatio
   });
 });
 
+test("malformed proposal sources report all missing facts without inventing confidence or provenance", () => {
+  assert.throws(() => provenance.normalizeProposalSource({ reason: "已讨论的方案" } as never, 0), error => {
+    assert.ok(error instanceof GovernanceError);
+    assert.deepEqual((error.details.issues as Array<{ path: string }>).map(issue => issue.path), ["items[0].source_refs", "items[0].confidence"]);
+    return true;
+  });
+});
+
+test("Contract input supplies pending constants without mutating caller facts and aggregates missing facts", () => {
+  const { status, requires_user_confirmation, ...input } = source("title");
+  const before = structuredClone(input);
+  assert.deepEqual(provenance.validateSourceShape([input]), [source("title")]);
+  assert.deepEqual(input, before);
+  assert.throws(() => provenance.validateSourceShape([{ field: "title", source_kind: "user_answer", source_refs: ["conversation://actual"] }]), error => {
+    assert.ok(error instanceof GovernanceError);
+    assert.deepEqual((error.details.issues as Array<{ path: string }>).map(issue => issue.path), ["field_sources[0].rationale", "field_sources[0].confidence"]);
+    return true;
+  });
+});
+
 test("provenance preserves fact versus inference, confirmation and the original dialogue reference", () => {
   const facts = [
     { statement: " User requirement ", source_kind: "user_answer" as const, source_refs: [" message:1 ", "message:1", "", "clarification-turn:turn"], confirmed_by_user: false },

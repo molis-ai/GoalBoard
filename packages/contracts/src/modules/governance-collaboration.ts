@@ -132,6 +132,9 @@ export interface ContractFieldSource {
   requires_user_confirmation: true;
 }
 
+export type ContractFieldSourceInput = Omit<ContractFieldSource, "status" | "requires_user_confirmation"> &
+  Partial<Pick<ContractFieldSource, "status" | "requires_user_confirmation">>;
+
 export interface ClarificationFact {
   statement: string;
   source_kind: "user_answer" | "repository_fact" | "document_fact";
@@ -195,7 +198,7 @@ export interface GovernanceProvenanceApi {
   normalizeProposalSource(input: Pick<GoalTreeProposalItemInput, "source_refs" | "reason" | "confidence" | "requires_user_confirmation">, index: number): Pick<GoalTreeProposalItemRecord, "source_refs" | "reason" | "confidence"> & { requires_user_confirmation: true };
   normalizeFacts(facts: readonly ClarificationFactInput[], turnId: string): ClarificationFact[];
   normalizeAssumptions(assumptions: readonly ClarificationAssumptionInput[], turnId: string): ClarificationAssumption[];
-  validateSourceShape(value: unknown): void;
+  validateSourceShape(value: unknown): ContractFieldSource[];
   validateContractSources(proposedGoal: Pick<CreateGoalInput, "constraints" | "required_inputs" | "promised_outputs">, fieldSources: readonly ContractFieldSource[]): void;
   legacyProposalView(snapshot: LegacyGovernanceSnapshot): GoalTreeProposalRecord[];
 }
@@ -399,7 +402,7 @@ export interface GoalTreeProposalItemInput {
   reason: string;
   explanation?: GoalTreeProposalItemExplanation | null;
   confidence: number;
-  affected_objects: ProposalAffectedObject[];
+  affected_objects?: ProposalAffectedObject[];
   requires_user_confirmation?: boolean;
   supersedes_item_id?: string | null;
 }

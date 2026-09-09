@@ -841,7 +841,7 @@ export const V1_TOOLS: McpToolDefinition[] = [
   ),
   v1PayloadTool(
     "goalboard_v1_contract_propose",
-    "clarifier 为同一个 Draft 提交完整 Contract 补全提案；canonical Goal 在用户确认前保持不变。proposed_goal.goal_id 必须是原 Draft ID；acceptance_criteria 必须是含 criterion_id、statement、decision_method、pass_condition、required_evidence 的对象数组；accepted / closed_leaf 还必须提供 proposed_goal.leaf_readiness，并让 acceptance_criterion_ids 一一对应。",
+    "兼容旧版完整合同提交。新规划优先使用 goalboard_v1_goal_tree_propose，避免为每个字段重复声明来源和完整 policy；不要因参数错误切换接口。clarifier 为同一个 Draft 提交完整 Contract 补全提案；canonical Goal 在用户确认前保持不变。proposed_goal.goal_id 必须是原 Draft ID；acceptance_criteria 必须是含 criterion_id、statement、decision_method、pass_condition、required_evidence 的对象数组；accepted / closed_leaf 还必须提供 proposed_goal.leaf_readiness，并让 acceptance_criterion_ids 一一对应。",
     {
       goal_id: V1_STRING,
       actor_id: V1_STRING,
@@ -868,12 +868,11 @@ export const V1_TOOLS: McpToolDefinition[] = [
             source_refs: V1_STRING_ARRAY,
             confidence: { type: "number", minimum: 0, maximum: 1 },
             rationale: V1_STRING,
-            status: { type: "string", enum: ["proposed"] },
-            requires_user_confirmation: { type: "boolean", enum: [true] },
+            status: { type: "string", enum: ["proposed"], default: "proposed", description: "系统填写，可省略。" },
+            requires_user_confirmation: { type: "boolean", enum: [true], default: true, description: "提案始终待用户确认，可省略。" },
           },
           required: [
-            "field", "source_kind", "source_refs", "confidence", "rationale", "status",
-            "requires_user_confirmation",
+            "field", "source_kind", "source_refs", "confidence", "rationale",
           ],
         },
       },

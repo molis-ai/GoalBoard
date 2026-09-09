@@ -1,5 +1,5 @@
 import type { CreateGoalInput, GoalPolicy, GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import type { ContractFieldSource, ContractProposalImpact, ContractProposalRisk, ContractProposalRecord, CandidateGoalRecord, RewireRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
+import type { ContractFieldSourceInput, ContractProposalImpact, ContractProposalRisk, ContractProposalRecord, CandidateGoalRecord, RewireRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 
 export interface SubmitContractProposalInput {
   board_id: string;
@@ -7,7 +7,7 @@ export interface SubmitContractProposalInput {
   actor_id: string;
   discovered_in_run_id: string;
   proposed_goal: CreateGoalInput;
-  field_sources: ContractFieldSource[];
+  field_sources: ContractFieldSourceInput[];
   review_policy: GoalPolicy;
   proposed_impacts?: ContractProposalImpact[];
   proposed_risks?: ContractProposalRisk[];

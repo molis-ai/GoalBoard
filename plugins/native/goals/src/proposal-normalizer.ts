@@ -46,7 +46,7 @@ const LARGE_GOAL_TREE_PROPOSAL_ITEM_COUNT = 5;
 /** Existing proposal wire normalization; no owner facts or user decisions are written here. */
 export class GoalTreeProposalNormalizer {
   constructor(private readonly provenance: Pick<GovernanceProvenanceApi, "normalizeProposalSource">,
-    private readonly errorFactory: (code: string, message: string) => Error) {}
+    private readonly errorFactory: (code: string, message: string, details?: Record<string, unknown>) => Error) {}
 
   private semanticText(value: unknown, code: string, message: string): string {
     const normalized = typeof value === "string" ? value.trim() : "";
@@ -216,12 +216,12 @@ export class GoalTreeProposalNormalizer {
   normalizeGoalTreeProposalItems(
     items: GoalTreeProposalItemInput[],
   ): NormalizedGoalTreeProposalItem[] {
-    if (items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0) {
       throw this.errorFactory("goal_tree_proposal.items_required", "一份 Goal Tree 提案至少需要一个变更条目");
     }
     const ids = new Set<string>();
     const normalized = items.map((item, index) => {
-      if (!GOAL_TREE_PROPOSAL_KINDS.has(item.kind)) {
+      if (!item || typeof item !== "object" || !GOAL_TREE_PROPOSAL_KINDS.has(item.kind)) {
         throw this.errorFactory("goal_tree_proposal.item_kind_invalid", `第 ${index + 1} 个条目的类型无效`);
       }
       if (!GOAL_TREE_PROPOSAL_OPERATIONS.has(item.operation)) {
@@ -236,29 +236,42 @@ export class GoalTreeProposalNormalizer {
         throw this.errorFactory("goal_tree_proposal.item_id_duplicate", "同一份提案中的 item_id 不能重复");
       }
       ids.add(itemId);
-      const source = this.provenance.normalizeProposalSource(item, index);
+      const issues: Array<{ code: string; path: string; message: string; expected?: string }> = [];
+      let source: ReturnType<GovernanceProvenanceApi["normalizeProposalSource"]> | undefined;
+      try { source = this.provenance.normalizeProposalSource(item, index); }
+      catch (error) {
+        const details = (error as { details?: { issues?: typeof issues } }).details;
+        if (!details?.issues) throw error;
+        issues.push(...details.issues);
+      }
       const seenObjects = new Set<string>();
       const affectedObjects: ProposalAffectedObject[] = [];
       const addAffectedObject = (object: ProposalAffectedObject, objectIndex: number): void => {
-        if (!PROPOSAL_AFFECTED_OBJECT_TYPES.has(object.object_type)) {
-          throw this.errorFactory(
-            "goal_tree_proposal.affected_object_type_invalid",
-            `第 ${index + 1} 个条目的第 ${objectIndex + 1} 个受影响对象类型无效`,
-          );
+        const path = `items[${index}].affected_objects[${objectIndex}]`;
+        if (!object || typeof object !== "object" || !PROPOSAL_AFFECTED_OBJECT_TYPES.has(object.object_type)) {
+          issues.push({ code: "goal_tree_proposal.affected_object_type_invalid", path: `${path}.object_type`,
+            message: `${path}.object_type 必须是 goal、relation、risk、policy、candidate 或 rewire；使用 object_type/object_id，不能使用 kind/id` });
         }
-        const objectId = object.object_id.trim();
-        if (!objectId) {
-          throw this.errorFactory(
-            "goal_tree_proposal.affected_object_required",
-            `第 ${index + 1} 个条目的第 ${objectIndex + 1} 个受影响对象缺少 ID`,
-          );
-        }
+        const objectId = typeof object?.object_id === "string" ? object.object_id.trim() : "";
+        if (!objectId) issues.push({ code: "goal_tree_proposal.affected_object_required", path: `${path}.object_id`,
+          message: `${path}.object_id 必须是非空对象 ID` });
+        if (!objectId || !object || !PROPOSAL_AFFECTED_OBJECT_TYPES.has(object.object_type)) return;
         const key = `${object.object_type}:${objectId}`;
         if (seenObjects.has(key)) return;
         seenObjects.add(key);
         affectedObjects.push({ object_type: object.object_type, object_id: objectId });
       };
-      item.affected_objects.forEach(addAffectedObject);
+      if (item.affected_objects !== undefined && !Array.isArray(item.affected_objects)) {
+        issues.push({ code: "goal_tree_proposal.affected_objects_required", path: `items[${index}].affected_objects`,
+          message: `items[${index}].affected_objects 必须是对象数组；Goal/Contract 和关系条目可省略，让系统从 payload 推导` });
+      } else item.affected_objects?.forEach(addAffectedObject);
+      if (item.kind === "goal" || item.kind === "contract") {
+        const goal = item.payload.goal ?? item.payload.proposed_goal ?? item.payload;
+        if (goal && typeof goal === "object" && !Array.isArray(goal)) {
+          const goalId = (goal as Record<string, unknown>).goal_id;
+          if (typeof goalId === "string" && goalId.trim()) addAffectedObject({ object_type: "goal", object_id: goalId }, affectedObjects.length);
+        }
+      }
       if (item.kind === "relation" || item.kind === "dependency") {
         for (const relation of this.goalTreeProposalRelationPayloads(item, index)) {
           const relationId = String(relation.relation_id ?? "").trim();
@@ -269,15 +282,22 @@ export class GoalTreeProposalNormalizer {
           if (toGoalId) addAffectedObject({ object_type: "goal", object_id: toGoalId }, affectedObjects.length);
         }
       }
-      if (affectedObjects.length === 0) {
-        throw this.errorFactory("goal_tree_proposal.affected_objects_required", `第 ${index + 1} 个条目必须标出受影响对象`);
+      if (affectedObjects.length === 0 && issues.length === 0) {
+        issues.push({ code: "goal_tree_proposal.affected_objects_required", path: `items[${index}].affected_objects`,
+          message: `第 ${index + 1} 个条目必须标出受影响对象；无法从 payload 推导时提供 object_type/object_id` });
+      }
+      if (issues.length) {
+        throw this.errorFactory(issues[0]!.code, issues.map(issue => `${issue.path}: ${issue.message}`).join("\n"), {
+          path: issues[0]!.path, issues,
+          recovery: "修正列出的字段后重试 goalboard_v1_goal_tree_propose；失败调用不会创建提案，无需切换接口。",
+        });
       }
       return {
         item_id: itemId,
         kind: item.kind,
         operation: item.operation,
         payload: canonicalize(item.payload) as Record<string, unknown>,
-        ...source,
+        ...source!,
         explanation: this.normalizeGoalTreeProposalItemExplanation(item.explanation, index),
         affected_objects: affectedObjects,
         supersedes_item_id: item.supersedes_item_id?.trim() || null,

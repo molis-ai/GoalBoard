@@ -45,7 +45,7 @@ export class LegacyContractProposalValidator {
     return value as string[];
   }
   
-  validateShape(input: SubmitContractProposalInput): void {
+  validateShape(input: SubmitContractProposalInput): ContractFieldSource[] {
     const raw = input as unknown as Record<string, unknown>;
     for (const field of ["board_id", "goal_id", "actor_id", "discovered_in_run_id", "idempotency_key"]) {
       this.contractProposalString(raw[field], field);
@@ -85,7 +85,7 @@ export class LegacyContractProposalValidator {
       }
     }
   
-    this.ports.governance.provenance.validateSourceShape(raw.field_sources);
+    const fieldSources = this.ports.governance.provenance.validateSourceShape(raw.field_sources);
   
     const policy = this.contractProposalRecord(raw.review_policy, "review_policy");
     this.contractProposalString(policy.goal_mode, "review_policy.goal_mode");
@@ -108,6 +108,7 @@ export class LegacyContractProposalValidator {
     if (raw.dependency_rewire_ids != null) {
       this.contractProposalStringArray(raw.dependency_rewire_ids, "dependency_rewire_ids");
     }
+    return fieldSources;
   }
 
   validate(

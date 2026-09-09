@@ -14,18 +14,30 @@ export class GovernanceProvenance implements GovernanceProvenanceApi {
 
   normalizeProposalSource(input: Pick<GoalTreeProposalItemInput, "source_refs" | "reason" | "confidence" | "requires_user_confirmation">,
     index: number): Pick<GoalTreeProposalItemRecord, "source_refs" | "reason" | "confidence"> & { requires_user_confirmation: true } {
-    const sourceRefs = [...new Set(input.source_refs.map((reference) => reference.trim()).filter(Boolean))].sort();
-    if (!sourceRefs.length) {
-      throw this.error("goal_tree_proposal.source_required", `第 ${index + 1} 个条目至少需要一个来源引用`);
-    }
-    const reason = input.reason.trim();
-    if (!reason) throw this.error("goal_tree_proposal.reason_required", `第 ${index + 1} 个条目必须说明业务理由`);
+    const path = `items[${index}]`;
+    const issues: Array<{ code: string; path: string; message: string; expected: string }> = [];
+    const add = (field: string, code: string, message: string, expected: string) =>
+      issues.push({ code, path: `${path}.${field}`, message, expected });
+    const references = input.source_refs;
+    const validReferences = Array.isArray(references) && references.every(ref => typeof ref === "string");
+    const sourceRefs = validReferences ? [...new Set(references.map(ref => ref.trim()).filter(Boolean))].sort() : [];
+    if (!sourceRefs.length || !validReferences) add("source_refs", "goal_tree_proposal.source_required",
+      `第 ${index + 1} 个条目至少需要一个来源引用`, "包含真实来源的字符串数组，例如 [\"clarification-turn:实际 turn ID\"]");
+    const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+    if (!reason) add("reason", "goal_tree_proposal.reason_required", `第 ${index + 1} 个条目必须说明业务理由`, "非空字符串");
     if (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1) {
-      throw this.error("goal_tree_proposal.confidence_invalid", `第 ${index + 1} 个条目的置信度必须在 0 到 1 之间`);
+      add("confidence", "goal_tree_proposal.confidence_invalid", `第 ${index + 1} 个条目的置信度必须在 0 到 1 之间`, "0 到 1 的数字");
     }
-    if (input.requires_user_confirmation === false) {
-      throw this.error("goal_tree_proposal.user_confirmation_required",
-        "Goal Tree 提案的每个条目都必须等待用户确认，不能提前物化为正式事实");
+    if (input.requires_user_confirmation !== undefined && input.requires_user_confirmation !== true) {
+      add("requires_user_confirmation", "goal_tree_proposal.user_confirmation_required",
+        "Goal Tree 提案的每个条目都必须等待用户确认，不能提前物化为正式事实", "省略或 true");
+    }
+    if (issues.length) {
+      const first = issues[0]!;
+      throw this.error(first.code, issues.map(issue => issue.message).join("；"), {
+        path: first.path, issues,
+        recovery: "修正列出的字段后重试 goalboard_v1_goal_tree_propose；失败调用不会创建提案，无需切换接口。",
+      });
     }
     return { source_refs: sourceRefs, reason, confidence: input.confidence, requires_user_confirmation: true };
   }
@@ -50,22 +62,38 @@ export class GovernanceProvenance implements GovernanceProvenanceApi {
     }));
   }
 
-  validateSourceShape(value: unknown): void {
+  /** Validate caller facts, and supply the two pending-proposal constants owned by Governance. */
+  validateSourceShape(value: unknown): ContractFieldSource[] {
     if (!Array.isArray(value)) this.invalidField("field_sources", "字段来源对象数组");
-    for (const [index, entry] of value.entries()) {
+    const issues: Array<{ path: string; expected: string }> = [];
+    const sources = value.map((entry, index) => {
       const path = `field_sources[${index}]`;
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) this.invalidField(path, "对象");
-      const source = entry as Record<string, unknown>;
-      for (const field of ["field", "source_kind", "rationale", "status"]) {
-        if (typeof source[field] !== "string" || !source[field].trim()) this.invalidField(`${path}.${field}`, "非空字符串");
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        issues.push({ path, expected: "对象" });
+        return entry;
       }
-      if (!Array.isArray(source.source_refs)) this.invalidField(`${path}.source_refs`, "字符串数组");
-      for (const [refIndex, ref] of source.source_refs.entries()) {
-        if (typeof ref !== "string" || !ref.trim()) this.invalidField(`${path}.source_refs[${refIndex}]`, "非空字符串");
+      const source = { ...entry, status: entry.status === undefined ? "proposed" : entry.status,
+        requires_user_confirmation: entry.requires_user_confirmation === undefined ? true : entry.requires_user_confirmation };
+      for (const field of ["field", "source_kind", "rationale"]) {
+        if (typeof source[field] !== "string" || !source[field].trim()) issues.push({ path: `${path}.${field}`, expected: "非空字符串" });
       }
-      if (typeof source.confidence !== "number" || !Number.isFinite(source.confidence)) this.invalidField(`${path}.confidence`, "0 到 1 的数字");
-      if (source.requires_user_confirmation !== true) this.invalidField(`${path}.requires_user_confirmation`, "true");
+      if (source.status !== "proposed") issues.push({ path: `${path}.status`, expected: "proposed（可省略，由系统填写）" });
+      if (!Array.isArray(source.source_refs)) issues.push({ path: `${path}.source_refs`, expected: "字符串数组" });
+      else for (const [refIndex, ref] of source.source_refs.entries()) {
+        if (typeof ref !== "string" || !ref.trim()) issues.push({ path: `${path}.source_refs[${refIndex}]`, expected: "非空字符串" });
+      }
+      if (typeof source.confidence !== "number" || !Number.isFinite(source.confidence) || source.confidence < 0 || source.confidence > 1)
+        issues.push({ path: `${path}.confidence`, expected: "0 到 1 的数字" });
+      if (source.requires_user_confirmation !== true) issues.push({ path: `${path}.requires_user_confirmation`, expected: "true（可省略，由系统填写）" });
+      return source;
+    });
+    if (issues.length) {
+      throw this.error("contract_proposal.field_invalid", issues.map(issue => `Contract Proposal 字段 ${issue.path} 必须是${issue.expected}。`).join("\n"), {
+        ...issues[0], issues,
+        recovery: "一次修正列出的字段后重试；status 和 requires_user_confirmation 可省略。失败调用不会创建 Proposal。",
+      });
     }
+    return sources as ContractFieldSource[];
   }
 
   validateContractSources(proposedGoal: Pick<CreateGoalInput, "constraints" | "required_inputs" | "promised_outputs">, fieldSources: readonly ContractFieldSource[]): void {

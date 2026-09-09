@@ -55,7 +55,7 @@ test("Runtime public protocol carries one Draft through restart, user decision, 
     assert.equal((await call<{ replayed: boolean }>("draft_dialogue_turn", answer)).replayed, true);
     assert.deepEqual(await snapshot(), beforeReplay);
 
-    const proposed = await call<ReturnType<GoalTreeApplicationApi["submitGoalTreeProposal"]>>("goal_tree_propose", {
+    const proposalInput = {
       board_id, actor_id: actor, root_goal_id: goalId, discovered_in_run_id: resumed.run!.run_id,
       summary: "确认同一个目标的交付与验收", idempotency_key: "proposal", items: [{
         item_id: "accept-goal", kind: "contract", operation: "update",
@@ -70,9 +70,24 @@ test("Runtime public protocol carries one Draft through restart, user decision, 
             split_candidates: [], rationale: "仅一个可验收结果", unresolved_decisions: [], independent_deliverables: [],
             acceptance_criterion_ids: ["skill-result"] } },
         source_refs: ["conversation://skill-session"], reason: "用户已明确范围", confidence: 1,
-        affected_objects: [{ object_type: "goal", object_id: goalId }],
       }],
-    });
+    };
+    const beforeMalformed = await snapshot();
+    const malformed = structuredClone(proposalInput) as { items: Array<Record<string, unknown>> };
+    delete malformed.items[0]!.source_refs;
+    delete malformed.items[0]!.confidence;
+    malformed.items[0]!.affected_objects = [{ kind: "goal", id: goalId }];
+    const denied = await wire("goal_tree_propose", malformed);
+    assert.equal(denied.isError, true);
+    const failure = JSON.parse(denied.content[0]!.text.split("\n").at(-1)!);
+    assert.deepEqual(failure.issues.map((issue: { path: string }) => issue.path), [
+      "items[0].source_refs", "items[0].confidence", "items[0].affected_objects[0].object_type", "items[0].affected_objects[0].object_id",
+    ]);
+    assert.deepEqual(await snapshot(), beforeMalformed, "malformed proposal must not persist a proposal, event, or Goal change");
+    const proposed = await call<ReturnType<GoalTreeApplicationApi["submitGoalTreeProposal"]>>("goal_tree_propose", proposalInput);
+    assert.deepEqual(proposed.proposal.items[0]!.affected_objects, [{ object_type: "goal", object_id: goalId }]);
+    assert.deepEqual(proposed.proposal.items[0]!.baseline_versions.map(({ object_type, object_id, exists }) => ({ object_type, object_id, exists })),
+      [{ object_type: "goal", object_id: goalId, exists: true }]);
     const proposal_id = proposed.proposal.proposal_id;
     await call("goal_tree_read", { board_id, proposal_id });
     const checked = await call<ReturnType<GoalTreeApplicationApi["checkGoalTreeProposal"]>>("goal_tree_check", {

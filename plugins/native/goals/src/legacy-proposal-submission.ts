@@ -20,10 +20,11 @@ export class LegacyProposalSubmissionApplication implements Pick<LegacyProposalA
     replayed: boolean;
     observed_event_cursor: number;
   } {
-    this.ports.validator.validateShape(input);
+    const fieldSources = this.ports.validator.validateShape(input);
     const normalizedDependencyIds = unique(input.dependency_rewire_ids ?? []).sort();
     const normalizedInput = {
       ...input,
+      field_sources: fieldSources,
       proposed_impacts: input.proposed_impacts ?? [],
       proposed_risks: input.proposed_risks ?? [],
       dependency_rewire_ids: normalizedDependencyIds,
@@ -66,7 +67,7 @@ export class LegacyProposalSubmissionApplication implements Pick<LegacyProposalA
         input.board_id,
         input.goal_id,
         input.proposed_goal,
-        input.field_sources,
+        fieldSources,
         input.review_policy,
         input.proposed_impacts ?? [],
         input.proposed_risks ?? [],
@@ -89,7 +90,7 @@ export class LegacyProposalSubmissionApplication implements Pick<LegacyProposalA
         submitted_by: input.actor_id,
         discovered_in_run_id: input.discovered_in_run_id,
         proposed_goal: input.proposed_goal,
-        field_sources: input.field_sources,
+        field_sources: fieldSources,
         review_policy: input.review_policy,
         proposed_impacts: input.proposed_impacts ?? [],
         proposed_risks: input.proposed_risks ?? [],
