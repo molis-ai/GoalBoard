@@ -174,8 +174,8 @@ test("Artifact navigation and export retain the selected catalog Project", async
 
 test("Goal context embeds explicit exact Artifact relations and refreshes owner state without mutating facts", async (t) => {
   const { store, coordinator, get } = await fixture(t);
-  const panelPath = "/api/goals/V1/panels/completion?view=current";
-  const empty = await (await get(panelPath)).text();
+  const documentPath = "/goals/V1";
+  const empty = await (await get(documentPath)).text();
   assert.doesNotMatch(empty, /artifact-embed|关联结果/);
   const first = coordinator.artifacts.commands.registerVersion(registration()).artifact;
   coordinator.artifacts.commands.registerVersion(registration({ version: 2,
@@ -197,18 +197,16 @@ test("Goal context embeds explicit exact Artifact relations and refreshes owner 
   const before = store.snapshot(DEMO_BOARD_ID);
   const beforeEdges = ledger.query.list(access);
   const beforeArtifacts = coordinator.artifacts.query.listArtifacts(DEMO_BOARD_ID);
-  // The ordinary document stays light; the actual context click loads the embedding fragment.
-  assert.doesNotMatch(await (await get("/goals/V1")).text(), /artifact-embed artifact|Original report|Later report/);
-  const panel = await (await get(panelPath)).text();
-  assert.match(panel, /关联结果/);
-  assert.match(panel, /v1 · 输入结果/);
-  assert.match(panel, /v2 · 产出结果/);
-  assert.ok(panel.includes(`href="${exactPath(1)}"`));
-  assert.ok(panel.includes(`href="${exactPath(2)}"`));
-  assert.match(panel, /v99/);
-  assert.match(panel, /关联的版本不可用或不存在/);
-  assert.doesNotMatch(panel, /not-for-V1|Original report|Later report|attack\(\)|foreign-project/);
-  assert.match(await (await get(panelPath, "en")).text(), /Linked results/);
+  const page = await (await get(documentPath)).text();
+  assert.match(page, /关联结果/);
+  assert.match(page, /v1 · 输入结果/);
+  assert.match(page, /v2 · 产出结果/);
+  assert.ok(page.includes(`href="${exactPath(1)}"`));
+  assert.ok(page.includes(`href="${exactPath(2)}"`));
+  assert.match(page, /v99/);
+  assert.match(page, /关联的版本不可用或不存在/);
+  assert.doesNotMatch(page, /not-for-V1|Original report|Later report|attack\(\)|foreign-project/);
+  assert.match(await (await get(documentPath, "en")).text(), /Linked results/);
   const opened = await get(exactPath(1));
   assert.match(await opened.text(), /Original report/);
   assert.deepEqual(coordinator.artifacts.query.getArtifactVersion(DEMO_BOARD_ID, { artifact_id: artifactId, version: 1 }), first);
@@ -220,15 +218,15 @@ test("Goal context embeds explicit exact Artifact relations and refreshes owner 
   coordinator.artifacts.commands.markUnavailable({ board_id: DEMO_BOARD_ID, artifact_id: artifactId, version: 1,
     actor_id: "report-owner", reason: "Source disconnected" });
   coordinator.artifacts.commands.archiveVersion({ board_id: DEMO_BOARD_ID, artifact_id: artifactId, version: 2, actor_id: "report-owner" });
-  const changed = await (await get(panelPath)).text();
+  const changed = await (await get(documentPath)).text();
   assert.match(changed, /这个版本的内容不可用/);
   assert.match(changed, /Source disconnected/);
   assert.match(changed, /这个版本已归档/);
   ledger.commands.remove(access, "input", "Owner removed the input association");
-  const removed = await (await get(panelPath)).text();
+  const removed = await (await get(documentPath)).text();
   assert.doesNotMatch(removed, /v1 · 输入结果|Source disconnected/);
   assert.match(removed, /v2 · 产出结果/);
-  const unknown = await get("/api/goals/missing/panels/completion?view=current");
+  const unknown = await get("/goals/missing");
   assert.equal(unknown.status, 404);
   assert.doesNotMatch(await unknown.text(), /artifact-embed|report/);
 });

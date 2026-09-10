@@ -16,6 +16,8 @@ export { planningMethodResponse, availableResponse, draftDialogueHistoryOptions,
 export type { McpPresentationErrorFactory, DraftDialogueHistoryOptions } from "./query-presentation.js";
 export { createMcpExecutionToolHandlers } from "./execution-commands.js";
 export { createMcpGoalToolHandlers } from "./goal-commands.js";
+export { createMcpGoalEventHandlers } from "./goal-event-commands.js";
+export { EVENT_TOOLS } from "./goal-event-tools.js";
 export { createMcpAvailabilityToolHandlers } from "./availability-queries.js";
 export { mcpBoardPayload } from "./payload.js";
 export { buildMcpResumeView } from "./resume-view.js";

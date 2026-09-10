@@ -10,6 +10,7 @@ import type {
 } from "@adeptify/goalboard-contracts/modules/goals";
 
 import { GoalsCommandContext, requestHash, unique } from "./command-support.js";
+import { goalHasEventStateOwner } from "./event-state-repository.js";
 import { sqliteJson } from "./repository.js";
 import { insertInitialGoalContract } from "./goal-contract-records.js";
 
@@ -154,6 +155,13 @@ export class GoalCommands {
       if (replay) return { ...replay, replayed: true };
 
       const current = this.context.requireGoal(boardId, goalId);
+      if (goalHasEventStateOwner(repository.db, boardId, goalId)) {
+        throw this.context.error(
+          "goal.event_state_owner",
+          "这个 Goal 已由事件状态服务负责约定。请使用事件约定或配置入口，不要再调用旧 Draft 编辑",
+          { goal_id: goalId, entry: "updateDraftGoal", recovery: "goalboard_v1_event_agree / goalboard_v1_event_configure" },
+        );
+      }
       if (current.definition_state !== "draft") {
         throw this.context.error(
           "goal.accepted_contract_immutable",

@@ -337,20 +337,6 @@ export const PERSONAL_WORKBENCH_V2_STYLES = `  /* Personal workbench v2: Codex-d
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 3;
     }
-    body[data-desktop-shell="true"] .goal-workspace-nav {
-      min-height: 34px;
-      margin: 0;
-      padding: 0;
-      border-top: 1px solid var(--line);
-      border-bottom: 0;
-      gap: 16px;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-nav button {
-      flex: 0 0 auto;
-      min-height: 33px;
-      padding: 0 1px;
-      font-size: 9.5px;
-    }
 
     body[data-desktop-shell="true"] .goal-workspace-panels { padding: 14px 22px 42px; }
     body[data-desktop-shell="true"] .goal-focus-layout { gap: 10px; }
@@ -368,7 +354,6 @@ export const PERSONAL_WORKBENCH_V2_STYLES = `  /* Personal workbench v2: Codex-d
     body[data-desktop-shell="true"] .goal-now-body > div > strong { font-size: 14px; line-height: 1.4; }
     body[data-desktop-shell="true"] .goal-now-body p { margin-top: 3px; font-size: 10.5px; }
     body[data-desktop-shell="true"] .goal-now-body small { margin-top: 3px; font-size: 9.5px; }
-    body[data-desktop-shell="true"] .goal-now-body .goal-primary-action { min-height: 30px; margin-top: 10px; padding-inline: 10px; font-size: 10px; }
     body[data-desktop-shell="true"] .goal-focus-criteria > header p,
     body[data-desktop-shell="true"] .goal-focus-context > header p { display: none; }
     body[data-desktop-shell="true"] .goal-focus-criteria > ul { margin-top: 8px; }

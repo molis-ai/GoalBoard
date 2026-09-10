@@ -1,4 +1,4 @@
-import { GOALS_DEPENDENCY_PROPOSAL_STYLES, GOALS_DECISION_COMMON_STYLES, GOALS_LEGACY_CONTRACT_STYLES, GOALS_PROPOSAL_STYLES, GOALS_CANDIDATE_STYLES } from "@adeptify/goalboard-plugin-goals";
+import { GOALS_DEPENDENCY_PROPOSAL_STYLES, GOALS_DECISION_COMMON_STYLES, GOALS_LEGACY_CONTRACT_STYLES, GOALS_PROPOSAL_STYLES, GOALS_CANDIDATE_STYLES, GOALS_EVENT_DOCUMENT_STYLES } from "@adeptify/goalboard-plugin-goals";
 export const MORE_STYLES = `
   .runtime-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line-strong); border-radius: 5px; overflow: hidden; }
   .runtime-grid > section { min-width: 0; min-height: 174px; padding: 13px 15px; border-right: 1px solid var(--line-strong); }
@@ -196,7 +196,7 @@ export const MORE_STYLES = `
 ${GOALS_DEPENDENCY_PROPOSAL_STYLES}
   .contract-list { border-top: 1px solid var(--line); }
   .contract-list section { min-width: 0; padding: 11px 0; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 14px; align-items: start; }
-  .contract-list h3, .safety-workbench h3 { margin: 0; font-size: 13px; }
+  .contract-list h3 { margin: 0; font-size: 13px; }
   .contract-list .doc-list, .contract-list .empty-row { margin-top: 0; }
   .contract-list .doc-list { min-width: 0; overflow-wrap: anywhere; }
   .scope-gaps { margin-top: 10px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--blue-soft) 42%, #fff); }
@@ -209,7 +209,6 @@ ${GOALS_DEPENDENCY_PROPOSAL_STYLES}
   .scope-gaps > summary > svg { flex: 0 0 auto; color: var(--blue); transition: transform .16s ease; }
   .scope-gaps[open] > summary > svg { transform: rotate(180deg); }
   .scope-gaps > .contract-list { padding: 0 12px 6px; border-top: 1px solid var(--line); background: #fff; }
-  .safety-workbench { border-top: 1px solid var(--line-strong); }
   .risk-register, .impact-register { min-width: 0; padding: 14px 0; border-bottom: 1px solid var(--line); }
   .impact-register { border-bottom: 0; }
   .safety-subheading { margin-bottom: 10px; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
@@ -558,6 +557,7 @@ ${GOALS_DECISION_COMMON_STYLES}
 ${GOALS_LEGACY_CONTRACT_STYLES}
 ${GOALS_PROPOSAL_STYLES}
 ${GOALS_CANDIDATE_STYLES}
+${GOALS_EVENT_DOCUMENT_STYLES}
   .decision-reason { padding: 12px 15px; border-top: 1px solid var(--line); background: #fbfcfd; display: grid; grid-template-columns: 170px minmax(0, 1fr); align-items: start; gap: 13px; }
   .decision-reason > span { padding-top: 7px; font-weight: 650; }
   .decision-reason textarea { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: #fff; resize: vertical; }
@@ -667,32 +667,6 @@ ${GOALS_CANDIDATE_STYLES}
   .goal-choice strong, .goal-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .form-error { margin: 0; padding: 9px 11px; border-radius: 4px; color: var(--red); background: var(--red-soft); }
   .create-dialog footer { padding: 13px 20px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
-  .quick-record-dialog { width: min(760px, calc(100vw - 32px)); }
-  .quick-record-dialog .dialog-shell { grid-template-rows: auto minmax(0, 1fr); }
-  .quick-record-body { align-content: start; }
-  .quick-record-choices > p { margin: 0 0 10px; font-weight: 650; }
-  .quick-record-choices > div { border-top: 1px solid var(--line); }
-  .quick-record-choices button { width: 100%; min-height: 58px; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; display: grid; grid-template-columns: 24px minmax(0, 1fr) 16px; align-items: center; gap: 9px; text-align: left; cursor: pointer; }
-  .quick-record-choices button:hover { color: var(--blue-dark); background: color-mix(in srgb, var(--blue-soft) 48%, transparent); }
-  .quick-record-choices button > svg:first-child { color: var(--blue-dark); }
-  .quick-record-choices button > svg:last-child { color: var(--faint); }
-  .quick-record-choices button > span { min-width: 0; display: grid; }
-  .quick-record-choices button strong { font-size: 13px; }
-  .quick-record-choices button small { color: var(--muted); font-size: 11px; }
-  .quick-record-panel { min-width: 0; }
-  .quick-record-back { margin: 0 0 12px; padding: 4px 0; border: 0; background: transparent; color: var(--blue-dark); display: inline-flex; align-items: center; gap: 5px; font-weight: 650; cursor: pointer; }
-  .quick-record-back svg { width: 14px; height: 14px; transform: rotate(180deg); }
-  .quick-record-form { padding: 0 !important; border-top: 0 !important; }
-  .quick-record-dialog .risk-form footer, .quick-record-dialog .impact-form footer, .quick-record-dialog .relation-form footer { padding: 12px 0 0; }
-  .quick-record-form[data-evidence-form] { display: grid; gap: 12px; }
-  .quick-record-form[data-evidence-form] fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-  .quick-record-form[data-evidence-form] .evidence-criteria > div { margin-top: 6px; border: 1px solid var(--line); border-radius: 5px; display: grid; }
-  .quick-record-form[data-evidence-form] .evidence-criteria label { padding: 8px 9px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; }
-  .quick-record-form[data-evidence-form] .evidence-criteria label:last-child { border-bottom: 0; }
-  .quick-record-form[data-evidence-form] .evidence-criteria label > span { display: grid; }
-  .quick-record-form[data-evidence-form] .evidence-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .quick-record-form[data-evidence-form] footer { padding: 12px 0 0; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-  .quick-record-form[data-evidence-form] footer > span { color: var(--muted); font-size: 11px; }
   .toast { position: fixed; left: 50%; bottom: 24px; z-index: 30; padding: 9px 14px; border-radius: 5px; color: #fff; background: #202632; box-shadow: var(--shadow); transform: translate(-50%, 18px); opacity: 0; pointer-events: none; transition: .16s ease; }
   .toast.is-visible { transform: translate(-50%, 0); opacity: 1; }
   .toast.is-error { background: var(--red); }

@@ -6,7 +6,7 @@
 
 ## 一次典型调用
 
-根 apps/desktop/launchers/mcp/server.ts 处理进程入口；Host 管理项目连接和调用身份。本包通过 handleMcpMessage、工具目录及 dispatchMcpProjectTool 把请求交给 Host Client，再组合返回值。
+根 apps/desktop/launchers/mcp/server.ts 处理进程入口；Host 管理项目连接和调用身份。本包通过 handleMcpMessage、工具目录及 dispatchMcpProjectTool 把请求交给 Host Client，再组合返回值。Runtime 事件工具是 `goalboard_v1_goal_intent_create`、`goalboard_v1_goal_state`、`goalboard_v1_event_configure`、`goalboard_v1_event_report`、`goalboard_v1_event_list`、`goalboard_v1_event_read`、`goalboard_v1_event_progress`、`goalboard_v1_event_concern`、`goalboard_v1_event_decision_request`、`goalboard_v1_event_cite_decision`、`goalboard_v1_event_agree`、`goalboard_v1_event_close`、`goalboard_v1_event_resume`。`goalboard_v1_event_decide` 只接受 Host Web/管理入口，不属于 Runtime audience。Runtime 身份由 Host 写入，工具参数不能自填用户或批准。上报返回记录成功，不表示正式完成；显式收尾才可能让 `completion_applied` 为 true。未转交 `legacy_claim_run` Goal 仍暴露 `select_goal` / `claim_renew` / `run_*` / `evidence_*` / `review_submit`。
 
 ## 从哪里读代码
 
@@ -23,7 +23,7 @@
 
 ## 接入与边界
 
-Session 身份来自 Host 上下文，不能把模型提交的参数直接当作身份。工具 schema 与响应适配属于这里；Goal 的可执行性和完成规则属于下游 owner。
+Session 身份来自 Host 上下文，不能把模型提交的参数直接当作身份。工具 schema 与响应适配属于这里；Goal 事件事实和完成效果属于 Goals，可信用户决定属于 Governance，UI 不另算完成。
 
 工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-plugin-goals`。其他运行依赖见 [package.json](package.json)。
 

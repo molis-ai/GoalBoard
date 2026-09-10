@@ -20,14 +20,26 @@ test("Draft editor adds/removes criteria, preserves failed input and saves one s
   await command("Page.navigate", { url: origin + "/goals/RELEASE" }, sessionId);
   await command("Page.bringToFront", {}, sessionId);
   const dom = (selector: string) => "document.querySelector(" + JSON.stringify(selector) + ")";
-  await waitFor("document.readyState === 'complete' && " + dom('[data-open-goal-edit]'));
+  await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
+  await waitFor(dom("[data-open-goal-edit]"));
   await click("[data-open-goal-edit]");
   await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
+  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
   const form = '[data-draft-form][data-goal-id="RELEASE"]';
   const row = form + " [data-criteria-list] > [data-criterion-row]";
+  const summaryStart = await evaluate<{ top: number; bottom: number; client: number; scroll: number }>(
+    "(() => { const r = document.querySelector('[data-current-summary]').getBoundingClientRect(); const c = document.querySelector('[data-reader-content]'); return { top: r.top, bottom: r.bottom, client: c.clientHeight, scroll: c.scrollHeight }; })()");
+  assert.ok(summaryStart.top >= 0 && summaryStart.bottom <= 1100);
+  assert.ok(summaryStart.scroll > summaryStart.client);
   const initialCount = await evaluate<number>("document.querySelectorAll(" + JSON.stringify(row) + ").length");
   assert.ok(initialCount >= 1);
   await click("[data-add-criterion]");
+  const summaryAfterAdd = await evaluate<{ top: number; scrollTop: number }>(
+    "(() => { const r = document.querySelector('[data-current-summary]').getBoundingClientRect(); return { top: r.top, scrollTop: document.querySelector('[data-reader-content]').scrollTop }; })()");
+  assert.ok(Math.abs(summaryAfterAdd.top - summaryStart.top) < 2);
+  assert.ok(summaryAfterAdd.scrollTop > 0);
   assert.equal(await evaluate("document.querySelectorAll(" + JSON.stringify(row) + ").length"), initialCount + 1);
   assert.equal(await evaluate("document.activeElement.dataset.criterionField"), "statement");
   await click(row + ":last-child [data-remove-criterion]");
@@ -89,10 +101,12 @@ test("Draft editor adds/removes criteria, preserves failed input and saves one s
   assert.deepEqual(after.relations, before.relations);
   assert.deepEqual(after.runs, before.runs);
   await reloadPage();
-  await waitFor(dom("#goal-tab-overview-RELEASE"));
-  await click("#goal-tab-overview-RELEASE");
+  await waitFor("document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
   await click("[data-open-goal-edit]");
   await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
+  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
   assert.equal(await evaluate(dom(form + " [name=title]") + ".value"), values.title);
   assert.equal(await evaluate("document.querySelectorAll(" + JSON.stringify(row) + ").length"), 2);
   assert.equal(await evaluate(dom(row + ':last-child [data-criterion-field="target"]') + ".value"), criteria[1].target);

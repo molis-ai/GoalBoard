@@ -1,12 +1,12 @@
 # 目标、关系与生命周期事实
 
-拥有目标合同、完成标准、关系图、策略、风险、项目指导和规划事实，是目标写入及正式生命周期判断的入口。
+拥有目标合同、完成标准、关系图、策略、风险、项目指导、规划事实，以及 Goal 局部事件配置与工作事实上报，是目标写入及正式生命周期判断的入口。
 
 包名：`@adeptify/goalboard-module-goals`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-GoalsModule 公开 commands、query 与 lifecycle；Host 提供跨 owner hooks，Native Goals 用公开接口组合页面和执行验收。createGoalReadServices 给读取场景提供明确服务，schema 与 revision 迁移也由本包提供。
+GoalsModule 公开 commands、query、lifecycle 与 events；Host 提供跨 owner hooks，Native Goals 用公开接口组合页面、执行验收和事件工作入口。createGoalReadServices 给读取场景提供明确服务，schema 与 revision 迁移也由本包提供。新意图和已采用事件配置的 Goal 由 `events` 作为唯一状态 owner，写入进展、Concern、决定效果和显式收尾；旧 lifecycle 完成入口在这些 Goal 上拒绝或跳过。
 
 ## 从哪里读代码
 
@@ -19,12 +19,14 @@ GoalsModule 公开 commands、query 与 lifecycle；Host 提供跨 owner hooks�
 | [src/query.ts](src/query.ts) | 查询与策略解析 |
 | [src/lifecycle-commands.ts](src/lifecycle-commands.ts) | 生命周期入口 |
 | [src/planning](src/planning) | 规划与方法库 |
+| [src/event-facts.ts](src/event-facts.ts) | Goal 局部事件配置、上报与读取 |
+| [src/planning/event-adoption.ts](src/planning/event-adoption.ts) | 规划来源版本解析、等价合并与 Goal 局部要求实例化 |
 
 可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
 ## 接入与边界
 
-执行 Claim/Run、证据、Review/Decision 各有独立 owner。规划事实不等于已确认提案；旧 coverage 兼容逻辑仍服务历史数据。不得以页面推导状态回写替代正式生命周期。
+新意图和已转交 Goal 由 `events` 作为唯一状态 owner。执行 Claim/Run、证据、Review/Decision 各有独立 owner，实际消费者是未转交 `legacy_claim_run` Goal、历史读取和 Host 租约。规划事实不等于已确认提案；旧 coverage 兼容逻辑仍服务历史数据。不得以页面或 MCP 推导状态回写替代正式生命周期。
 
 由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
@@ -37,10 +39,10 @@ pnpm --filter @adeptify/goalboard-module-goals typecheck
 pnpm --filter @adeptify/goalboard-module-goals build
 ```
 
-已有行为示例与回归：[goals-command-module.test.ts](../../tests/goals-command-module.test.ts)、[goals-query-module.test.ts](../../tests/goals-query-module.test.ts)。完成上述构建后运行：
+已有行为示例与回归：[goals-command-module.test.ts](../../tests/goals-command-module.test.ts)、[goals-query-module.test.ts](../../tests/goals-query-module.test.ts)、[goal-events.test.ts](../../tests/goal-events.test.ts)、[goal-events-state.test.ts](../../tests/goal-events-state.test.ts)。完成上述构建后运行：
 
 ```bash
-node --import tsx --test --test-concurrency=1 tests/goals-command-module.test.ts tests/goals-query-module.test.ts
+node --import tsx --test --test-concurrency=1 tests/goals-command-module.test.ts tests/goals-query-module.test.ts tests/goal-events.test.ts tests/goal-events-state.test.ts
 ```
 
 阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。

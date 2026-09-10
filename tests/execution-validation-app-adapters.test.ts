@@ -6,10 +6,7 @@ import test from "node:test";
 
 import { createCliExecutionValidationAdapter } from "@adeptify/goalboard-app-cli";
 import { createMcpExecutionValidationAdapter } from "@adeptify/goalboard-app-mcp";
-import {
-  createWorkbenchExecutionValidationAdapter,
-  createWorkbenchExecutionValidationRenderer,
-} from "@adeptify/goalboard-app-workbench";
+import { createWorkbenchExecutionValidationAdapter } from "@adeptify/goalboard-app-workbench";
 
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
@@ -168,35 +165,10 @@ test("Workbench, MCP, and CLI share one no-loss execution-validation chain", () 
     const snapshot = store.snapshot("board-execution-adapters");
     assert.equal(snapshot.evidence.filter((item) => item.goal_id === "goal-cross-entry").length, 1);
     assert.equal(snapshot.reviews.filter((item) => item.goal_id === "goal-cross-entry").length, 1);
-
-    const renderer = createWorkbenchExecutionValidationRenderer({
-      translate: (value) => value,
-      escapeHtml: (value) => value,
-      formatDate: (value) => value,
-      renderIcon: (name) => `[${name}]`,
-      renderReference: (value) => `<a>${value}</a>`,
-      isProjectReference: () => false,
-      currentLocale: () => "zh-CN",
-    });
-    const view = {
-      goal: snapshot.goals.find((item) => item.goal_id === "goal-cross-entry")!,
-      action_projection: reviewed.transition.projection,
-      active_claim: snapshot.claims.find((item) =>
-        item.goal_id === "goal-cross-entry" && item.state === "active"
-      ) ?? null,
-      claims: snapshot.claims.filter((item) => item.goal_id === "goal-cross-entry"),
-      runs: snapshot.runs.filter((item) => item.goal_id === "goal-cross-entry"),
-      evidence: snapshot.evidence.filter((item) => item.goal_id === "goal-cross-entry"),
-      review_obligations: snapshot.review_obligations.filter((item) => item.goal_id === "goal-cross-entry"),
-      reviews: snapshot.reviews.filter((item) => item.goal_id === "goal-cross-entry"),
-    };
-    const renderedRun = renderer.renderRunCell(view);
-    assert.ok(renderedRun.includes(reviewSelection.run!.run_id));
-    assert.ok(!renderedRun.includes(selected.run!.run_id));
-    assert.match(renderer.renderClaimCell(view), /runtime-reviewer/);
-    assert.equal(view.active_claim, null);
-    assert.match(renderer.renderEvidenceCell(view, false), /test:\/\/cross-entry/);
-    assert.match(renderer.renderReviewCell(view), /执行者自检/);
+    assert.equal(
+      snapshot.claims.find((item) => item.goal_id === "goal-cross-entry" && item.state === "active") ?? null,
+      null,
+    );
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });

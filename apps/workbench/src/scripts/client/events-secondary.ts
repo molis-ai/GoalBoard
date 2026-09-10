@@ -244,11 +244,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
       const goalWorkTabClick = handleGoalWorkTabClick(target);
       if (goalWorkTabClick) { await goalWorkTabClick; return; }
       if (handleTreeSearchFocus(target)) return;
-      const recordEventsClick = handleGoalRecordEventsClick(target);
-      if (recordEventsClick) {
-        await recordEventsClick;
-        return;
-      }
       if (handleTreeDisclosureClick(target)) return;
       if (handleMomentumNavigationClick(target)) return;
       const workbenchViewButton = target.closest("button[data-workbench-view]");
@@ -265,10 +260,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         return;
       }
       if (handleMomentumSelectionClick(target)) return;
-      if (target.closest("[data-companion-runtime-open]")) {
-        setWorkspaceMode("runtime");
-        return;
-      }
       if (handleMomentumZoomClick(target)) return;
       if (handleGoalSelectClick(target)) return;
       if (handleGoalDialogClick(target)) return;
@@ -282,7 +273,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         saveUiState();
         return;
       }
-      if (handleGoalPanelClick(target)) return;
       const focusSectionTrigger = target.closest("[data-focus-section-trigger]");
       if (focusSectionTrigger) {
         const factor = focusSectionTrigger.dataset.goalFactorTab;
@@ -291,39 +281,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         return;
       }
       if (handleGoalFactorClick(target)) return;
-      const openQuickRecord = target.closest("[data-open-quick-record]");
-      if (openQuickRecord) {
-        await loadAndOpenQuickRecord(openQuickRecord);
-        return;
-      }
-      const closeQuickRecord = target.closest("[data-close-quick-record]");
-      if (closeQuickRecord) {
-        const quickDialog = closeQuickRecord.closest("[data-quick-record-dialog]");
-        quickDialog?.close();
-        resetQuickRecordDialog(quickDialog);
-        quickDialog?._opener?.focus();
-        return;
-      }
-      const quickRecordType = target.closest("[data-quick-record-type]");
-      if (quickRecordType) {
-        const quickDialog = quickRecordType.closest("[data-quick-record-dialog]");
-        const choices = quickDialog?.querySelector("[data-quick-record-choices]");
-        const panel = quickDialog?.querySelector('[data-quick-record-panel="' + quickRecordType.dataset.quickRecordType + '"]');
-        if (!quickDialog || !panel) return;
-        if (choices) choices.hidden = true;
-        quickDialog.querySelectorAll("[data-quick-record-panel]").forEach((candidate) => { candidate.hidden = candidate !== panel; });
-        const title = quickDialog.querySelector("[data-quick-record-title]");
-        if (title) title.textContent = quickRecordType.querySelector("strong")?.textContent || L("快速记录");
-        requestAnimationFrame(() => panel.querySelector("input:not([type=hidden]), textarea, select")?.focus());
-        return;
-      }
-      const quickRecordBack = target.closest("[data-quick-record-back]");
-      if (quickRecordBack) {
-        const quickDialog = quickRecordBack.closest("[data-quick-record-dialog]");
-        resetQuickRecordDialog(quickDialog);
-        requestAnimationFrame(() => quickDialog?.querySelector("[data-quick-record-type]")?.focus());
-        return;
-      }
       const draftOpen = handleGoalDraftOpen(target);
       if (draftOpen) { await draftOpen; return; }
       if (target.closest("[data-open-goal-tui]")) {
@@ -336,11 +293,11 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
       if (sectionLink) {
         const targetId = sectionLink.getAttribute("href")?.slice(1);
         const targetElement = targetId ? document.getElementById(targetId) : null;
-        const targetPanel = targetId ? goalPanelFromTargetId(targetId) : "";
+        const targetReader = targetId ? eventReaderFromTargetId(targetId) : "";
         const targetFactor = targetId ? goalFactorFromTargetId(targetId) : "";
-        if (targetId && (targetElement || targetPanel || targetFactor)) {
+        if (targetId && (targetElement || targetReader || targetFactor)) {
           event.preventDefault();
-          if (targetPanel) setGoalPanel(targetPanel, true);
+          if (targetReader) openEventReader(targetReader);
           if (targetFactor) setGoalFactor(targetFactor, true);
           history.replaceState(null, "", "#" + targetId);
           if (targetElement) {

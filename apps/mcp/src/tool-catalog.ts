@@ -1,10 +1,11 @@
 import type { McpToolDefinition } from "./protocol.js";
 import { V1_TOOLS } from "./goal-tools.js";
+import { EVENT_TOOLS } from "./goal-event-tools.js";
 import { CONTEXT_TOOLS } from "./context-tools.js";
 
 const SERVER_INFO = { name: "goalboard-mcp", version: "1.0.0" };
 
-const TOOLS: McpToolDefinition[] = [...V1_TOOLS, ...CONTEXT_TOOLS];
+const TOOLS: McpToolDefinition[] = [...V1_TOOLS, ...EVENT_TOOLS, ...CONTEXT_TOOLS];
 
 const RUNTIME_V1_TOOL_NAMES = new Set([
   "goalboard_v1_snapshot",
@@ -18,6 +19,19 @@ const RUNTIME_V1_TOOL_NAMES = new Set([
   "goalboard_v1_planning_method_save",
   "goalboard_v1_planning_analyze_change",
   "goalboard_v1_planning_graph_check",
+  "goalboard_v1_goal_intent_create",
+  "goalboard_v1_goal_state",
+  "goalboard_v1_event_configure",
+  "goalboard_v1_event_report",
+  "goalboard_v1_event_list",
+  "goalboard_v1_event_read",
+  "goalboard_v1_event_progress",
+  "goalboard_v1_event_concern",
+  "goalboard_v1_event_decision_request",
+  "goalboard_v1_event_cite_decision",
+  "goalboard_v1_event_agree",
+  "goalboard_v1_event_close",
+  "goalboard_v1_event_resume",
   "goalboard_v1_explain",
   "goalboard_v1_claim",
   "goalboard_v1_select_goal",
@@ -63,6 +77,22 @@ function runtimeToolDefinition(tool: McpToolDefinition): McpToolDefinition {
   const inputProperties = clone.inputSchema.properties as Record<string, unknown>;
   delete inputProperties.database_path;
   delete inputProperties.web_base_url;
+  if (
+    tool.name === "goalboard_v1_goal_intent_create"
+    || tool.name === "goalboard_v1_event_configure"
+    || tool.name === "goalboard_v1_event_report"
+    || tool.name === "goalboard_v1_event_progress"
+    || tool.name === "goalboard_v1_event_concern"
+    || tool.name === "goalboard_v1_event_decision_request"
+    || tool.name === "goalboard_v1_event_cite_decision"
+    || tool.name === "goalboard_v1_event_agree"
+    || tool.name === "goalboard_v1_event_close"
+    || tool.name === "goalboard_v1_event_resume"
+  ) {
+    delete inputProperties.actor_id;
+    const required = clone.inputSchema.required as string[];
+    clone.inputSchema.required = required.filter((field) => field !== "actor_id");
+  }
   if (tool.name === "goalboard_v1_goal_tree_decide") {
     delete inputProperties.authority;
     inputProperties.user_confirmed = {

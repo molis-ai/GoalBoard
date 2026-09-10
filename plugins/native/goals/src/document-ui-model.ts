@@ -1,22 +1,28 @@
 import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalActionProjection } from "./execution-validation-contract.js";
 import type { GoalsTreeItem } from "./tree-ui-model.js";
+import type { GoalEventDocumentView } from "./event-document-model.js";
 
 export interface GoalsDocumentItem extends GoalsTreeItem {
-  goal: GoalsTreeItem["goal"] & Pick<GoalRecord, "outcome" | "why" | "business_logic" | "in_scope" | "definition_state" | "updated_at" | "accepted_by" | "archived_at" | "trashed_at" | "trashed_by">;
+  goal: GoalsTreeItem["goal"] & Pick<GoalRecord, "outcome" | "why" | "business_logic" | "in_scope" | "out_of_scope" | "constraints" | "required_inputs" | "promised_outputs" | "definition_state" | "updated_at" | "accepted_by" | "archived_at" | "trashed_at" | "trashed_by" | "acceptance_criteria">;
   active_claim_actor: string | null;
   action_projection: Pick<GoalActionProjection, "primary_action">;
   main_action_label: string;
   action_summary: string;
   evidence: ReadonlyArray<{ evidence_id: string }>;
   events: ReadonlyArray<{ type: string; actor_id: string; reason: string }>;
+  event_work?: boolean;
 }
 export interface GoalsDocumentContext {
   activeGoalId: string | null;
   decisionCount: number;
-  /** Trusted markup from the existing Draft and execution owners, never user HTML. */
+  /** Trusted markup from existing Draft / relation / Artifact owners, never user HTML. */
   draftGapsHtml: string;
-  companionRuntimeHtml: string;
+  draftEditorHtml: string;
+  relatedWorkHtml: string;
+  artifactHtml: string;
+  coverageHtml: string;
+  eventDocument?: GoalEventDocumentView | null;
 }
 export interface GoalsDocumentUiPrimitives {
   translate(text: string, values?: Record<string, string | number>): string;

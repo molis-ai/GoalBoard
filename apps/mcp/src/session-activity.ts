@@ -26,6 +26,26 @@ function runtimeSessionLifecycleEvent(name: string): RuntimeSessionLifecycle | n
       return { actorId: "goalboard:rework", kind: "status", label: "请求返工" };
     case "goalboard_v1_release":
       return { actorId: "goalboard:claim-release", kind: "status", label: "释放 Goal" };
+    case "goalboard_v1_goal_intent_create":
+      return { actorId: "goalboard:goal-intent", kind: "status", label: "保存 Goal 意图" };
+    case "goalboard_v1_event_configure":
+      return { actorId: "goalboard:event-configure", kind: "status", label: "登记 Goal 事件配置" };
+    case "goalboard_v1_event_report":
+      return { actorId: "goalboard:event-report", kind: "status", label: "上报 Goal 工作事实" };
+    case "goalboard_v1_event_progress":
+      return { actorId: "goalboard:event-progress", kind: "status", label: "记录 Goal 进展摘要" };
+    case "goalboard_v1_event_concern":
+      return { actorId: "goalboard:event-concern", kind: "status", label: "更新 Goal Concern" };
+    case "goalboard_v1_event_decision_request":
+      return { actorId: "goalboard:event-decision-request", kind: "approval", label: "请求 Goal 决定" };
+    case "goalboard_v1_event_cite_decision":
+      return { actorId: "goalboard:event-cite-decision", kind: "approval", label: "引用已有 Goal 决定" };
+    case "goalboard_v1_event_agree":
+      return { actorId: "goalboard:event-agree", kind: "status", label: "补充 Goal 结果约定" };
+    case "goalboard_v1_event_close":
+      return { actorId: "goalboard:event-close", kind: "status", label: "提交 Goal 收尾" };
+    case "goalboard_v1_event_resume":
+      return { actorId: "goalboard:event-resume", kind: "status", label: "继续已取消的 Goal" };
     default:
       return null;
   }

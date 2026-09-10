@@ -24,14 +24,14 @@ export interface WorkPanelHttpContext {
   readBody(): Promise<Record<string, unknown>>;
   respond(status: number, value: unknown): void;
   withHost<T>(operation: (host: WorkPanelHost) => Promise<T>): Promise<T>;
-  readGoal(goalId: string): Pick<GoalRecord, "title" | "decomposition_state">;
+  readGoal(goalId: string): Pick<GoalRecord, "title" | "decomposition_state"> & { event_work?: boolean; event_facts?: string };
   readLinkedFeedContext(goalId: string, itemId?: string): { source_context: string } | null;
   projectGuidance(): string;
   isRuntimeKind(kind: string): boolean;
   launchSpec(input: { runtime_kind: string; command?: string; args?: string[]; resume_session_id?: string | null }): {
     runtime_kind: string; command: string; args: string[]; title: string;
   };
-  advancePrompt(input: { goal_id: string; title: string; source_context?: string; project_guidance_prefix?: string; onboarding?: boolean }): string;
+  advancePrompt(input: { goal_id: string; title: string; source_context?: string; project_guidance_prefix?: string; onboarding?: boolean; event_work?: boolean; current_facts?: string }): string;
   kill(panelId: string): void;
   classifyError(error: unknown): number | null;
 }
@@ -51,7 +51,7 @@ export async function handleWorkPanelHttp(context: WorkPanelHttpContext): Promis
       if (method === "GET" && promptMatch) {
         const goalId = decodeURIComponent(promptMatch[1]);
         const contract = context.readGoal(goalId);
-        if (contract.decomposition_state === "closed_compound") {
+        if (contract.decomposition_state === "closed_compound" && !contract.event_work) {
           respond(409, {
             error: L("这条上层 Goal 由子 Goal 共同完成，不能直接推进。请选择一个具体的子 Goal。"),
           });
@@ -77,6 +77,8 @@ export async function handleWorkPanelHttp(context: WorkPanelHttpContext): Promis
             source_context: sourceContext,
             project_guidance_prefix: context.projectGuidance(),
             onboarding: url.searchParams.get("onboarding") === "1",
+            event_work: contract.event_work === true,
+            current_facts: contract.event_facts,
           }),
         });
         return true;
@@ -91,14 +93,14 @@ export async function handleWorkPanelHttp(context: WorkPanelHttpContext): Promis
             ...panel,
             spawn: host.spawn(panel, sessionIds.get(panel.panel_id) ?? null),
           })),
-          read_only: contract.decomposition_state === "closed_compound",
+          read_only: contract.decomposition_state === "closed_compound" && !contract.event_work,
         });
         return true;
       }
       if (method === "POST" && panelsMatch) {
         const goalId = decodeURIComponent(panelsMatch[1]);
         const contract = context.readGoal(goalId);
-        if (contract.decomposition_state === "closed_compound") {
+        if (contract.decomposition_state === "closed_compound" && !contract.event_work) {
           respond(409, {
             error: L("这条上层 Goal 由子 Goal 共同完成，不能直接开终端。请选择一个具体的子 Goal。"),
           });
@@ -173,7 +175,7 @@ export async function handleWorkPanelHttp(context: WorkPanelHttpContext): Promis
           return true;
         }
         const contract = context.readGoal(panel.goal_id);
-        if (contract.decomposition_state === "closed_compound") {
+        if (contract.decomposition_state === "closed_compound" && !contract.event_work) {
           respond(409, {
             error: L("这是上层 Goal 的历史终端，只能查看。请到具体的子 Goal 继续。"),
           });

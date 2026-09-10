@@ -3,9 +3,15 @@ import { basename, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
+  GoalEventTypeDefinitionInput,
   PlanningCoverageRule,
   PlanningDependencyRule,
+  PlanningMethodDefaultRequirement,
   PlanningMethodKind,
+} from "@adeptify/goalboard-contracts/modules/goals";
+import {
+  goalEventFieldFormats,
+  goalEventSemanticFamilies,
 } from "@adeptify/goalboard-contracts/modules/goals";
 
 export interface ParsedPlanningMethodSource {
@@ -24,6 +30,8 @@ export interface ParsedPlanningMethodSource {
   failure_modes: string[];
   source_refs: string[];
   confidence: number;
+  event_types: GoalEventTypeDefinitionInput[];
+  default_requirements: PlanningMethodDefaultRequirement[];
 }
 
 const FRONTMATTER_FIELDS = [
@@ -45,6 +53,12 @@ const SECTION_NAMES = [
   "完成证据",
   "收口检查",
   "常见误拆",
+] as const;
+
+const OPTIONAL_SECTION_NAMES = [
+  "事件类型",
+  "事件字段",
+  "默认要求",
 ] as const;
 
 const KIND_DIRECTORIES: Record<ParsedPlanningMethodSource["kind"], string> = {
@@ -135,7 +149,12 @@ function parseSections(path: string, body: string, expectedName: string): Map<st
     const heading = rawLine.match(/^##\s+(.+?)\s*$/);
     if (heading) {
       const name = heading[1]!;
-      if (!(SECTION_NAMES as readonly string[]).includes(name)) catalogError(path, `未知章节 ${name}`);
+      if (
+        !(SECTION_NAMES as readonly string[]).includes(name)
+        && !(OPTIONAL_SECTION_NAMES as readonly string[]).includes(name)
+      ) {
+        catalogError(path, `未知章节 ${name}`);
+      }
       if (sections.has(name)) catalogError(path, `章节 ${name} 重复`);
       sections.set(name, []);
       current = name;
@@ -233,6 +252,14 @@ export function parsePlanningMethodMarkdown(path: string, source: string, rootDi
   const sections = parseSections(path, body, name);
   const coverageRows = table(path, "必须覆盖", sections.get("必须覆盖")!, ["area", "label", "question"]);
   const dependencyRows = table(path, "依赖规则", sections.get("依赖规则")!, ["rule_id", "statement", "direction_hint"]);
+  const eventTypes = parseEventTypes(path, methodId, version, sections);
+  const defaultRequirements = parseDefaultRequirements(path, sections);
+  const typeIds = new Set(eventTypes.map((type) => type.type_id));
+  for (const requirement of defaultRequirements) {
+    if (requirement.bound_type_id && !typeIds.has(requirement.bound_type_id)) {
+      catalogError(path, `默认要求 ${requirement.requirement_id} 引用了未知类型 ${requirement.bound_type_id}`);
+    }
+  }
   return {
     method_id: methodId,
     version,
@@ -249,7 +276,87 @@ export function parsePlanningMethodMarkdown(path: string, source: string, rootDi
     failure_modes: bulletList(path, "常见误拆", sections.get("常见误拆")!),
     source_refs: stringArrayField(path, fields, "source_refs"),
     confidence,
+    event_types: eventTypes,
+    default_requirements: defaultRequirements,
   };
+}
+
+function parseBooleanCell(path: string, section: string, value: string, label: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return catalogError(path, `${section} 的 ${label} 必须是 true 或 false`);
+}
+
+function parseEventTypes(
+  path: string,
+  methodId: string,
+  methodVersion: number,
+  sections: Map<string, string[]>,
+): GoalEventTypeDefinitionInput[] {
+  const typeLines = sections.get("事件类型");
+  const fieldLines = sections.get("事件字段");
+  if (!typeLines && !fieldLines) return [];
+  if (!typeLines) catalogError(path, "有事件字段时必须同时提供事件类型");
+  const typeRows = table(path, "事件类型", typeLines, ["type_id", "version", "name", "purpose", "semantic_family"]);
+  const types = new Map<string, GoalEventTypeDefinitionInput>();
+  for (const [typeId, versionText, name, purpose, semanticFamily] of typeRows) {
+    if (types.has(typeId!)) catalogError(path, `事件类型 ${typeId} 重复`);
+    const version = Number(versionText);
+    if (!Number.isInteger(version) || version < 1) catalogError(path, `事件类型 ${typeId} 的 version 必须是正整数`);
+    if (!goalEventSemanticFamilies.includes(semanticFamily as (typeof goalEventSemanticFamilies)[number])) {
+      catalogError(path, `事件类型 ${typeId} 的 semantic_family 无效`);
+    }
+    types.set(typeId!, {
+      type_id: typeId!,
+      version,
+      name: name!,
+      purpose: purpose!,
+      semantic_family: semanticFamily as GoalEventTypeDefinitionInput["semantic_family"],
+      source: { kind: "planning", method_id: methodId, method_version: methodVersion, label: name },
+      fields: [],
+    });
+  }
+  if (!fieldLines) catalogError(path, "事件类型至少需要一个字段");
+  const fieldRows = table(path, "事件字段", fieldLines, ["type_id", "field_id", "name", "purpose", "format", "required"]);
+  for (const [typeId, fieldId, name, purpose, format, requiredText] of fieldRows) {
+    const type = types.get(typeId!);
+    if (!type) catalogError(path, `事件字段 ${fieldId} 引用了未知类型 ${typeId}`);
+    if (!goalEventFieldFormats.includes(format as (typeof goalEventFieldFormats)[number])) {
+      catalogError(path, `事件字段 ${fieldId} 的 format 无效`);
+    }
+    if (type.fields.some((field) => field.field_id === fieldId)) {
+      catalogError(path, `事件类型 ${typeId} 的字段 ${fieldId} 重复`);
+    }
+    type.fields.push({
+      field_id: fieldId!,
+      name: name!,
+      purpose: purpose!,
+      format: format as GoalEventTypeDefinitionInput["fields"][number]["format"],
+      required: parseBooleanCell(path, "事件字段", requiredText!, "required"),
+      source: { kind: "planning", method_id: methodId, label: name },
+    });
+  }
+  for (const type of types.values()) {
+    if (!type.fields.length) catalogError(path, `事件类型 ${type.type_id} 至少需要一个字段`);
+  }
+  return [...types.values()];
+}
+
+function parseDefaultRequirements(path: string, sections: Map<string, string[]>): PlanningMethodDefaultRequirement[] {
+  const lines = sections.get("默认要求");
+  if (!lines) return [];
+  const rows = table(path, "默认要求", lines, ["requirement_id", "statement", "bound_type_id", "applies_when"]);
+  const seen = new Set<string>();
+  return rows.map(([requirementId, statement, boundTypeId, appliesWhen]) => {
+    if (seen.has(requirementId!)) catalogError(path, `默认要求 ${requirementId} 重复`);
+    seen.add(requirementId!);
+    return {
+      requirement_id: requirementId!,
+      statement: statement!,
+      bound_type_id: boundTypeId === "-" ? undefined : boundTypeId,
+      applies_when: appliesWhen === "-" ? undefined : appliesWhen,
+    };
+  });
 }
 
 export function loadPlanningMethodSources(directory: string | URL): ParsedPlanningMethodSource[] {

@@ -542,6 +542,13 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
       min-width: 0;
       min-height: 100%;
     }
+    body[data-desktop-shell="true"] .desktop-work-surface:has(> .goal-event-document) {
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
     body[data-desktop-shell="true"] .desktop-work-surface[hidden] { display: none !important; }
     body[data-desktop-shell="true"] .desktop-utility-surface {
       padding: clamp(28px, 5vw, 64px);
@@ -651,79 +658,11 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
     }
     body[data-desktop-shell="true"] .goal-brief-item h2 { margin-bottom: 6px; color: var(--ink); font-size: 11px; font-weight: 720; }
     body[data-desktop-shell="true"] .goal-brief-item p { color: var(--ink-soft); font-size: 10.5px; line-height: 1.55; -webkit-line-clamp: 4; }
-    body[data-desktop-shell="true"] .goal-workspace-nav {
-      width: fit-content;
-      min-height: 34px;
-      margin: 0 0 4px;
-      padding: 3px;
-      border: 0;
-      border-radius: 10px;
-      gap: 2px;
-      background: color-mix(in srgb, var(--paper) 54%, transparent);
-    }
-    body[data-desktop-shell="true"] .goal-workspace-nav button { min-height: 28px; padding: 0 10px; border-radius: 8px; font-size: 9.5px; }
-    body[data-desktop-shell="true"] .goal-workspace-nav button::after { display: none; }
-    body[data-desktop-shell="true"] .goal-workspace-nav button[aria-selected="true"] { color: var(--ink); background: var(--paper); box-shadow: var(--shadow-soft); }
     body[data-desktop-shell="true"] .goal-workspace-panels {
       min-height: max(420px, calc(100dvh - 340px));
       padding: 8px 8px 40px;
       display: grid;
       align-items: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) {
-      width: 100%;
-      min-width: 0;
-      min-height: 100%;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel]:not([data-goal-panel="overview"]):not([hidden]) {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      align-content: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) > .focus-panel,
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) > .goal-factors,
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) > [data-goal-records-content] {
-      width: 100%;
-      min-width: 0;
-      min-height: 100%;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-panel,
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .goal-factors,
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .goal-technical,
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-section-deck {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-      align-content: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-section-stage {
-      min-height: max(280px, calc(100dvh - 510px));
-      align-items: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-section-stage > .focus-section-card-reveal {
-      grid-area: 1 / 1;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-section-card-reveal.is-active {
-      width: 100%;
-      min-height: 100%;
-      align-self: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel:not([hidden]) .focus-section-card-reveal.is-active .focus-section-card-content {
-      width: 100%;
-      min-height: 100%;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel="overview"]:not([hidden]) .goal-focus-layout {
-      min-height: 100%;
-      align-items: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel="overview"]:not([hidden]) .goal-focus-main,
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel="overview"]:not([hidden]) .goal-focus-aside {
-      grid-template-rows: auto minmax(0, 1fr);
-      align-content: stretch;
-    }
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel="overview"]:not([hidden]) .goal-focus-criteria,
-    body[data-desktop-shell="true"] .goal-workspace-panel[data-goal-panel="overview"]:not([hidden]) .companion-runtime {
-      min-height: 100%;
     }
     body[data-desktop-shell="true"] .goal-focus-layout { gap: 10px; }
     body[data-desktop-shell="true"] .goal-focus-main { gap: 10px; }

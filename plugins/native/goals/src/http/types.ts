@@ -1,4 +1,5 @@
 import type { GoalsApplicationApi, GoalsCommandApi } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GoalEventApplication } from "../goal-event-application.js";
 import type { BoardSnapshot } from "../goal-entry-contract.js";
 import type { ActionTransitionReceipt, ExecutionValidationApplicationApi } from "../execution-validation-contract.js";
 import type { GoalReadApplication } from "../goal-query-application.js";
@@ -12,6 +13,7 @@ import type { LegacyRewireDecisionApplication } from "../legacy-rewire-decision.
 export interface GoalsHttpContext {
   method: string | undefined;
   pathname: string;
+  search: URLSearchParams;
   readBody(): Promise<Record<string, unknown>>;
   respond(status: number, body: unknown): void;
   options: { boardId: string; routePrefix: string; projectRoot?: string };
@@ -29,4 +31,24 @@ export interface GoalsHttpContext {
   legacyContractDecision: Pick<LegacyContractDecisionApplication, "decideContractProposal">;
   legacyCandidateDecision: Pick<LegacyCandidateDecisionApplication, "decideCandidate">;
   legacyRewireDecision: Pick<LegacyRewireDecisionApplication, "confirmRewire">;
+  goalEvents: Pick<GoalEventApplication,
+    | "readState"
+    | "configure"
+    | "report"
+    | "listLatestEvents"
+    | "listLatestTimeline"
+    | "readEvent"
+    | "recordProgress"
+    | "applyConcern"
+    | "requestDecision"
+    | "recordTrustedDecision"
+    | "setAgreement"
+    | "submitClosure"
+    | "resumeWork"
+    | "continueWithEventWork"
+    | "isEventStateOwner"
+    | "recordNote"
+    | "reopenCompletedEventWork"
+  >;
+  journalEvents(): import("../decision-view.js").GoalsDecisionEvent[];
 }

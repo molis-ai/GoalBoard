@@ -2,7 +2,7 @@ import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { UiContribution } from "@adeptify/goalboard-contracts/platform/ui";
 
 export interface WorkTerminalUiModel {
-  selected?: Pick<GoalRecord, "goal_id" | "title" | "decomposition_state" | "fulfillment_state"> & { statusHtml: string };
+  selected?: Pick<GoalRecord, "goal_id" | "title" | "decomposition_state" | "fulfillment_state"> & { statusHtml: string; event_work?: boolean };
   children: readonly { goal_id: string; title: string; statusLabel: string; nextAction: string }[];
   cliAvailability: Record<string, boolean>;
   text(value: string, vars?: Record<string, string | number>): string;
@@ -30,7 +30,7 @@ function escapeHtml(value: string): string {
 function renderWorkTerminal(model: WorkTerminalUiModel): string {
   const { selected, children, cliAvailability, text: L, icon } = model;
   const selectedGoalId = selected?.goal_id ?? "";
-  const compoundParent = selected?.decomposition_state === "closed_compound";
+  const compoundParent = selected?.decomposition_state === "closed_compound" && !selected?.event_work;
   const compoundParentComplete = compoundParent && selected?.fulfillment_state === "satisfied";
   const childChoices = children.map((child) => {
     return `<a class="tui-child-choice" href="/goals/${encodeURIComponent(child.goal_id)}">

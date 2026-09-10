@@ -275,30 +275,6 @@ export const FOUNDATION_STYLES = `  :root {
     justify-content: center;
   }
   body[data-desktop-shell="true"] .goal-title-actions .document-action--quick span { display: none; }
-  body[data-desktop-shell="true"] .goal-workspace-nav {
-    position: sticky;
-    top: 0;
-    right: auto;
-    z-index: 6;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--paper) 96%, transparent);
-    gap: 12px;
-  }
-  body[data-desktop-shell="true"] .goal-workspace-nav button {
-    width: auto;
-    min-width: 0;
-    min-height: 34px;
-    padding: 0 4px;
-    border-radius: 0;
-    font-size: 11px;
-  }
-  body[data-desktop-shell="true"] .goal-workspace-nav button svg { display: none; }
-  body[data-desktop-shell="true"] .goal-workspace-nav button span { display: inline; }
-  body[data-desktop-shell="true"] .goal-workspace-nav button::after { left: 2px; right: 2px; display: block; }
-  body[data-desktop-shell="true"] .goal-workspace-nav button[aria-selected="true"] { background: transparent; }
   body[data-desktop-shell="true"] .goal-now { padding: 18px 0; }
   body[data-desktop-shell="true"] .goal-now-body { margin-top: 11px; }
   body[data-desktop-shell="true"] .goal-now-body > div > strong { font-size: 15px; }

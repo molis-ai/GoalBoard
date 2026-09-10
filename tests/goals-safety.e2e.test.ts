@@ -13,8 +13,9 @@ test("Goals risk form validates, retries a failed request, saves, and survives b
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await command("Page.navigate", { url: origin + "/goals/V1" }, sessionId);
   await command("Page.bringToFront", {}, sessionId);
-  await waitFor("document.readyState === 'complete' && document.querySelector('#goal-tab-factors-V1')");
-  await click("#goal-tab-factors-V1");
+  await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]') && document.querySelector('[data-event-panel=\"description\"]').hidden === false");
   await waitFor("document.querySelector('#goal-factor-tab-risks-V1')");
   await click("#goal-factor-tab-risks-V1");
   await click("#goal-factor-panel-risks-V1 .risk-create > summary");
@@ -39,7 +40,7 @@ test("Goals risk form validates, retries a failed request, saves, and survives b
   assert.equal(await evaluate(dom(formSelector) + ".elements.description.value"), description);
   await command("Network.setBlockedURLs", { urls: [] }, sessionId);
   await click(submitSelector);
-  await waitFor("document.querySelector('[data-toast]')?.textContent.includes('风险已记录')");
+  await waitFor("document.querySelector('[data-factor-write-receipt]')?.textContent.includes('风险已记录')");
   const saved = store.snapshot(DEMO_BOARD_ID);
   assert.equal(saved.risks.length, before.risks.length + 1);
   const risk = saved.risks.find(risk => risk.description === description.trim());
@@ -55,8 +56,9 @@ test("Goals risk form validates, retries a failed request, saves, and survives b
   assert.equal(risk.revisit_condition, values.revisit_condition);
   assert.equal(risk.probability, values.probability);
   await reloadPage();
-  await waitFor("document.readyState === 'complete' && document.querySelector('#goal-tab-factors-V1')");
-  await click("#goal-tab-factors-V1");
+  await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]') && document.querySelector('[data-event-panel=\"description\"]').hidden === false");
   await waitFor("document.querySelector('#goal-factor-tab-risks-V1')");
   await click("#goal-factor-tab-risks-V1");
   const record = "#risk-" + risk.risk_id;

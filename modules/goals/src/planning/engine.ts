@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   GoalChangeImpact,
+  GoalEventAdoptedPlanningRequest,
   GoalRecord,
   GoalRelationRecord,
   GoalsPlanningApi,
@@ -13,6 +14,7 @@ import type {
   PlanningMetric,
   PlanningProposalItem,
   PlanningRelationChange,
+  ResolvedPlanningEventAdoption,
   SaveProjectPlanningMethodInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 
@@ -26,6 +28,7 @@ import {
   validatePlanningGraph,
   validatePlanningProposalGraph,
 } from "./goal-graph.js";
+import { resolvePlanningEventAdoption } from "./event-adoption.js";
 import {
   composePlanningMethodPacks,
   normalizePlanningMethodPack,
@@ -100,6 +103,22 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
     return composePlanningMethodPacks(
       this.effectiveMethods(boardId).filter((method) =>
         method.scope === "project" && method.enabled),
+    );
+  }
+
+  resolveEventAdoption(
+    boardId: string,
+    requested: GoalEventAdoptedPlanningRequest[],
+  ): ResolvedPlanningEventAdoption {
+    this.context.requireBoard(boardId);
+    return resolvePlanningEventAdoption(
+      requested,
+      {
+        effective: this.effectiveMethods(boardId),
+        personal: this.personalMethods,
+        project: this.context.repository.listPlanningMethodPacks(boardId),
+      },
+      (code, message, details) => this.context.error(code, message, details),
     );
   }
 

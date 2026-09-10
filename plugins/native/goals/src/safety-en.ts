@@ -1,8 +1,5 @@
 /** Existing Risk/Impact copy; wording and interpolation remain unchanged. */
 export const GOALS_SAFETY_EN: Record<string, string> = {
-  "需要留意的风险": "Risks that need attention",
-  "这里只显示仍可能影响推进或完成的风险。": "Only risks that can still affect progress or completion are shown here.",
-  "当前没有需要处理的开放风险。": "There are no open risks that need action now.",
   "为什么现在记录": "Why record this now?",
   "说明这项风险为什么需要现在进入 Goal 记录": "Explain why this risk needs to be added to the Goal now",
   "保存后会回到当前 Goal，并保留在完整记录中。": "After saving, you will return to the current Goal and the entry will remain in its full record.",

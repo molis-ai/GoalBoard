@@ -16,6 +16,7 @@ import { GovernanceRecordStore } from "./record-store.js";
 import { GovernanceProvenance } from "./provenance.js";
 import { GovernanceClarificationStore } from "./clarification-store.js";
 import { GovernanceDecisionTransactions } from "./decision-transactions.js";
+import { GovernanceEventDecisions } from "./event-decisions.js";
 export { GovernanceClarificationStore } from "./clarification-store.js";
 
 export const packageDescriptor = {
@@ -47,6 +48,7 @@ export class GovernanceCollaborationModule implements GovernanceApplicationApi {
   readonly reviews: GovernanceReviewLifecycle;
   readonly records: GovernanceRecordsApi;
   readonly decisions: GovernanceApplicationApi["decisions"];
+  readonly eventDecisions: GovernanceApplicationApi["eventDecisions"];
   readonly query: GovernanceQueryApi;
 
   constructor(options: GovernanceCollaborationModuleOptions) {
@@ -56,6 +58,11 @@ export class GovernanceCollaborationModule implements GovernanceApplicationApi {
     this.reviews = new GovernanceReviewLifecycle(this.repository, options);
     this.records = new GovernanceRecordStore(options.db, options.errorFactory);
     this.decisions = new GovernanceDecisionTransactions(options.db);
+    this.eventDecisions = new GovernanceEventDecisions(
+      options.db,
+      options.now,
+      options.errorFactory,
+    );
     this.query = governanceQueries(this.repository);
   }
 }
@@ -79,6 +86,11 @@ export {
   createGovernanceSchema,
   type GovernanceSchemaDatabase,
 } from "./schema.js";
+export {
+  GovernanceEventDecisions,
+  GOAL_EVENT_TRUSTED_DECISIONS_SQL,
+  migrateGoalEventTrustedDecisions,
+} from "./event-decisions.js";
 export {
   GovernanceRepository,
   type GovernanceSqliteDatabase,

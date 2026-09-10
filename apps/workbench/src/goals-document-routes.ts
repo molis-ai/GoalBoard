@@ -1,5 +1,5 @@
 import { goalsReadRouteNotFound, resolveGoalsReadRoute, resolveGoalsPageRoute, resolveGoalsPageCollection,
-  type GoalsPageCollections, type GoalsRouteError, type GoalsReadRoute, type GoalDocumentCollection, type LazyGoalPanel } from "@adeptify/goalboard-plugin-goals";
+  type GoalsPageCollections, type GoalsRouteError, type GoalsReadRoute, type GoalDocumentCollection } from "@adeptify/goalboard-plugin-goals";
 
 type HtmlResult = { status: 200; html: string } | GoalsRouteError;
 
@@ -45,22 +45,14 @@ export async function renderWorkbenchGoalsPageRequest<TView extends GoalsPageCol
 export interface GoalsReadRenderers {
   refresh(goalId: string | undefined, collection: GoalDocumentCollection): string;
   momentum(goalId: string, collection: "current" | "archive"): string | null;
-  panel(goalId: string, panel: LazyGoalPanel, collection: GoalDocumentCollection): string | null;
   document(goalId: string, collection: GoalDocumentCollection): string | null;
-  records(goalId: string, collection: GoalDocumentCollection): string | null;
-  recordEvents(goalId: string, collection: GoalDocumentCollection, offset: number): string | null;
-  quickRecord(goalId: string, collection: GoalDocumentCollection): string | null;
 }
 export function renderWorkbenchGoalsReadRoute(route: GoalsReadRoute, renderers: GoalsReadRenderers): { status: 200; html: string } | { status: 404; error: string } {
   let html: string | null;
   switch (route.kind) {
     case "refresh": html = renderers.refresh(route.goal_id, route.collection); break;
     case "momentum": html = renderers.momentum(route.goal_id, route.collection); break;
-    case "panel": html = renderers.panel(route.goal_id, route.panel, route.collection); break;
     case "document": html = renderers.document(route.goal_id, route.collection); break;
-    case "records": html = renderers.records(route.goal_id, route.collection); break;
-    case "record-events": html = renderers.recordEvents(route.goal_id, route.collection, route.offset); break;
-    case "quick-record": html = renderers.quickRecord(route.goal_id, route.collection); break;
   }
   // Refresh historically accepts an empty render result; individual fragments do not.
   return html || route.kind === "refresh" ? { status: 200, html: html ?? "" } : { status: 404, error: goalsReadRouteNotFound(route) };

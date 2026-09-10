@@ -20,7 +20,7 @@ function renderDraftGaps(item: GoalsDraftItem): string {
     !goal.acceptance_criteria.length ? L("验收条件") : "",
   ].filter(Boolean);
   if (!gaps.length) return "";
-  return `<div class="draft-gaps"><div><strong>${L("这条 Goal 还没说清楚")}</strong><p>${L("还需要补全：{gaps}。保存只会更新说明；确认后才能开始。", { gaps: gaps.join(currentLocale() === "en" ? ", " : "、") })}</p></div><a href="#acceptance-${escapeHtml(goal.goal_id)}">${L("查看完成标准")}</a></div>`;
+  return `<div class="draft-gaps"><div><strong>${L("这条 Goal 还没说清楚")}</strong><p>${L("还需要补全：{gaps}。保存只会更新说明；确认后才能开始。", { gaps: gaps.join(currentLocale() === "en" ? ", " : "、") })}</p></div><a href="#goal-requirements-${escapeHtml(goal.goal_id)}">${L("查看完成标准")}</a></div>`;
 }
 
 const DECOMPOSITION_OPTIONS = [

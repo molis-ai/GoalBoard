@@ -5,6 +5,7 @@ import {
 } from "@adeptify/goalboard-storage";
 import {
   GOAL_BOARDS_SCHEMA_SQL,
+  GOAL_EVENT_FACTS_SCHEMA_SQL,
   GOALS_SCHEMA_SQL,
   migrateRiskTreatmentPlan,
   migrateProjectGuidance,
@@ -53,12 +54,19 @@ import {
   migrateGoalTreeProposals,
   migrateReviewContractRevisionColumn,
   migrateRuntimeDialogueAuthority,
+  migrateGoalEventTrustedDecisions,
   type GovernanceSqliteDatabase,
 } from "@adeptify/goalboard-module-governance-collaboration";
 import {
   migrateActiveGoalLifecycle,
   migrateGoalArchiveSchema,
   migrateGoalContractCoverageSchema,
+  migrateGoalEventFactsSchema,
+  migrateGoalEventStateSchema,
+  migrateGoalEventOwnerContinueSource,
+  GOAL_EVENT_STATE_SCHEMA_SQL,
+  ensureGoalEventRequirementSourceColumn,
+  ensureGoalEventDecisionAuthorizationColumns,
   migrateGoalLifecycleState,
   migratePlanningMethodPacksSchema,
   migrateGoalTrashSchema,
@@ -96,6 +104,10 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
         ${CLARIFICATION_SCHEMA_SQL}
 
         ${LOCAL_JOURNAL_SCHEMA_SQL}
+
+        ${GOAL_EVENT_FACTS_SCHEMA_SQL}
+
+        ${GOAL_EVENT_STATE_SCHEMA_SQL}
       `);
       schema.recordMigration(1, new Date().toISOString());
       schema.recordMigration(2, new Date().toISOString());
@@ -130,6 +142,8 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
       schema.recordMigration(29, new Date().toISOString());
       schema.recordMigration(30, new Date().toISOString());
       schema.recordMigration(31, new Date().toISOString());
+      schema.recordMigration(32, new Date().toISOString());
+      schema.recordMigration(33, new Date().toISOString());
       });
       return;
     }
@@ -272,6 +286,23 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
     if (!artifactsApplied || !artifactsTable || !artifactVersionsTable) {
       migrateArtifactsSchema(storage.db as unknown as ArtifactsSqliteDatabase);
     }
+    const goalEventFactsApplied = schema.hasMigration(32);
+    const goalWorkEventsTable = schema.hasTable("goal_work_events");
+    if (!goalEventFactsApplied || !goalWorkEventsTable) {
+      migrateGoalEventFactsSchema(storage.db as unknown as GoalLifecycleMigrationDatabase);
+    }
+    ensureGoalEventRequirementSourceColumn(storage.db);
+    ensureGoalEventDecisionAuthorizationColumns(storage.db);
+    const goalEventStateApplied = schema.hasMigration(33);
+    const eventStateOwnersTable = schema.hasTable("goal_event_state_owners");
+    if (!goalEventStateApplied || !eventStateOwnersTable) {
+      migrateGoalEventStateSchema(storage.db as unknown as GoalLifecycleMigrationDatabase);
+    }
+    const ownerContinueApplied = schema.hasMigration(34);
+    if (!ownerContinueApplied) {
+      migrateGoalEventOwnerContinueSource(storage.db as unknown as GoalLifecycleMigrationDatabase);
+    }
+    migrateGoalEventTrustedDecisions(storage.db as unknown as GovernanceSqliteDatabase);
   }
 
 function migrateContinuousActionModel(storage: LocalSqliteStorage): void {

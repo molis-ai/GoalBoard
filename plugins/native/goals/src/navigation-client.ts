@@ -11,7 +11,6 @@ const GOALS_SELECT_SCRIPT = `    const selectGoal = async (goalId, updateHistory
       }
       const fallbackGoalId = currentView?.dataset.goalView || getSelected();
       if (!applySelection(goalId, true)) return;
-      abortGoalRecordsRequest();
       const loaded = await loadGoalDocument(goalId);
       if (loaded == null) return;
       if (!loaded) {
@@ -51,12 +50,11 @@ const GOALS_HISTORY_SCRIPT = `    const handleGoalPopState = (event) => {
     };
     const handleGoalHashChange = () => {
       const targetId = decodeURIComponent(location.hash.slice(1));
-      const panel = goalPanelFromHash();
-      if (panel) setGoalPanel(panel, true);
+      openEventReaderFromHash();
       const factor = goalFactorFromHash();
       if (factor) setGoalFactor(factor, true);
       const target = targetId ? document.getElementById(targetId) : null;
-      if (target?.matches?.("[data-goal-panel]")) documentPane.scrollTop = 0;
+      if (target?.closest?.("[data-event-panel], [data-goal-factor-panel]")) documentPane.querySelector("[data-event-sheet]")?.scrollTo?.(0, 0);
       if (targetId) void revealDeepLinkFromId(targetId);
     };
 `;
@@ -65,9 +63,9 @@ const GOALS_HISTORY_SCRIPT = `    const handleGoalPopState = (event) => {
 export const GOALS_NAVIGATION_CLIENT_FACTORY_SCRIPT = `(host) => {
     const {
       decisionView, trashView, archiveView, documentPane, getSelected, getActiveGoalId,
-      navigateToGoal, applySelection, abortGoalRecordsRequest, loadGoalDocument,
+      navigateToGoal, applySelection, loadGoalDocument,
       ensureWorkTab, goalPageUrl, setWorkspaceMode, saveUiState, localPathname,
-      visibleGoals, goalPanelFromHash, setGoalPanel, goalFactorFromHash,
+      visibleGoals, openEventReaderFromHash, goalFactorFromHash,
       setGoalFactor, revealDeepLinkFromId,
     } = host;
 ${GOALS_SELECT_SCRIPT}${GOALS_HISTORY_SCRIPT}

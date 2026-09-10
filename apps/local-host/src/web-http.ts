@@ -12,6 +12,10 @@ export function sendLocalWebJson(response: ServerResponse, status: number, value
 
 export type LocalMutationState = "in_flight" | "complete";
 
+function isEventCommandReplayPath(pathname: string): boolean {
+  return /(?:^|\/)api\/goals\/[^/]+\/event-(?:configure|report|progress|concern|decision-request|decision|agree|close|resume|continue|note)$/.test(pathname);
+}
+
 function localHostname(value: string): boolean {
   const hostname = value.toLowerCase();
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]" || hostname === "::1";
@@ -77,7 +81,12 @@ export function authorizeLocalWebRequest(
     sendLocalWebJson(response, 400, { error: L("请求缺少有效的一次性操作键") });
     return false;
   }
-  if (mutationKeys.has(idempotencyKey)) {
+  const prior = mutationKeys.get(idempotencyKey);
+  if (prior === "in_flight") {
+    sendLocalWebJson(response, 409, { error: "这次操作正在提交", code: "request.in_flight" });
+    return false;
+  }
+  if (prior === "complete" && !isEventCommandReplayPath(url.pathname)) {
     sendLocalWebJson(response, 409, { error: "这次操作已经提交，不会重复执行" });
     return false;
   }

@@ -25,6 +25,16 @@ export interface SessionHandoffGoalContext {
   runs: readonly ExecutionRunRecord[];
   evidence: readonly EvidenceRecord[];
   risks: readonly RiskRecord[];
+  event_work?: boolean;
+  event_facts?: {
+    work_status: string;
+    outcome: string;
+    next_step: string | null;
+    pending_decisions: readonly string[];
+    current_decisions: readonly string[];
+    gaps: readonly string[];
+    stale_summary: boolean;
+  };
 }
 
 export interface SessionTimelineEvent {

@@ -13,9 +13,10 @@
 - `reviews`：提交已经完成授权检查的 Review，对账、重开或作废 obligation。
 - `records`：保存已经授权的 Proposal / Candidate / Rewire / Decision，并执行正式状态迁移。
 - `decisions.materializeAtomically`：把“记录决定”和“调用目标 owner 修改正式对象”放在同一事务中；任一步失败都会整体回滚。
-- `provenance`：整理事实与假设，校验 Contract 字段来源和 native Goal Tree 条目的来源、理由、置信度、待确认状态，读取旧提案的统一展示。提交和修订共用此接口；只处理来源与确认规则，不授予决定权限、不保存对象内容、不把 locator 推断成 Artifact。
+- `provenance`：整理事实与假设，校验 Contract 字段来源和 native Goal Tree 条目的来源、理由、置信度、待确认状态，读取旧提案的统一展示。提交和修订共用此接口；只处理来源与确认规则，不授予决定权限、不保存对象内容、不把 locator 推断成 Artifact。`validateEventDecisionAuthority` 只接受 Host Web/管理入口的用户来源，拒绝 Runtime 对话摘要或客户端自填 `actor_kind=user`。
+- `eventDecisions`：记录事件工作协议下的可信用户决定与来源；Goals 在同一事务中应用范围、要求结论和 Concern 授权。不重写旧提案系统。
 
-授权、action token、幂等 Receipt 与跨 owner 用例编排由 EX4 的 `ExecutionValidationApplicationApi` 组合；Web、CLI、MCP 都通过各自 App adapter 进入，不再调用 Coordinator 的 Review/Evidence facade。
+授权、action token、幂等 Receipt 与跨 owner 用例编排由 EX4 的 `ExecutionValidationApplicationApi` 组合，服务未转交 `legacy_claim_run` Goal 的 Claim → Run → Evidence → Review。事件协议下的可信用户决定走 `eventDecisions` 与 `validateEventDecisionAuthority`：只接受 Host Web/管理入口的用户来源，Runtime 不能自填 `actor_kind=user`。Web、CLI、MCP 都通过各自 App adapter 进入，不再调用 Coordinator 的 Review/Evidence facade。
 
 ## 边界
 
@@ -41,4 +42,4 @@ DV1 将澄清记录类型移入 Governance public Contract。DD1 进一步让 `c
 - `provenance.ts` / `legacy-proposal-view.ts`：来源规则与历史展示。用户回答默认确认，资料事实保留确认位，推断保持待确认；旧提案保留原 ID、payload、决定、时间与最低置信度。
 - root Store 的澄清 snapshot 读取委托 `GovernanceClarificationStore`。DD2 首切片已删除 `closeOpenClarificationSessions`，决定 caller 改走 `clarification.closeAccepted`，仅在批准事务内使用。澄清 schema 的既有启动初始化仍留 root；其余 Goal Tree 编排由 DD2 继续清理，不宣称全部旧职责已退出。
 
-**迁移 Goal：** EX3 已迁事实、状态机与公开端口；EX4 已切换 Claim → Run → Evidence → Review 入口并删除对应 Coordinator 编排。Goal Tree Proposal/Draft Dialogue 是另一条规划与决定入口，不被执行验收适配器吸收。
+**迁移 Goal：** EX3 已迁事实、状态机与公开端口；EX4 已切换未转交 Goal 的 Claim → Run → Evidence → Review 入口并删除对应 Coordinator 编排。事件 Goal 的用户决定不走该领取链。Goal Tree Proposal/Draft Dialogue 是另一条规划与决定入口，Draft Dialogue 的实际消费者是未转交历史 Draft，不被执行验收适配器吸收。

@@ -26,19 +26,21 @@ test("V3 imported coverage remains visible and its Goal editable after Host reop
   const query = new GoalsQueryService(new GoalsRepository(store.db));
   const coverage = query.listLegacyCoverage(DEMO_BOARD_ID);
   const dom = (selector: string) => `document.querySelector(${JSON.stringify(selector)})`;
-  const tab = (name: string) => `[id="goal-tab-${name}-${goalId}"]`;
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/" + encodeURIComponent(goalId) }, sessionId));
-  await click(tab("records"));
-  await waitFor(dom("[data-goal-records-content]") + "?.dataset.loaded === 'true'");
-  assert.match(await evaluate<string>(dom("[data-goal-records-content]") + ".textContent"), /迁移后保留需求覆盖[\s\S]*历史确认理由/);
+  await waitFor("document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
+  assert.match(await evaluate<string>("document.querySelector('[data-event-panel=\"description\"]').textContent"), /迁移后保留需求覆盖[\s\S]*历史确认理由/);
   await reloadPage();
-  await waitFor(dom("[data-goal-records-content]") + "?.dataset.loaded === 'true'");
-  assert.match(await evaluate<string>(dom("[data-goal-records-content]") + ".textContent"), /迁移后保留需求覆盖/);
-  await click(tab("overview"));
+  await waitFor("document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
+  assert.match(await evaluate<string>("document.querySelector('[data-event-panel=\"description\"]').textContent"), /迁移后保留需求覆盖/);
   await click("[data-open-goal-edit]");
   await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
+  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
   const form = `[data-draft-form][data-goal-id="${goalId}"]`;
   await evaluate(`(() => { const form = ${dom(form)};
     for (const [name, value] of Object.entries({title:'迁移后继续编辑', reason:'验证原目标可继续使用'})) {
@@ -51,9 +53,12 @@ test("V3 imported coverage remains visible and its Goal editable after Host reop
   assert.deepEqual(query.listLegacyCoverage(DEMO_BOARD_ID), coverage);
   assert.deepEqual(store.snapshot(DEMO_BOARD_ID).relations, before.relations);
   await reloadPage();
-  await click(tab("overview"));
+  await waitFor("document.querySelector('[data-goal-event-document]')");
+  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
   await click("[data-open-goal-edit]");
   await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
+  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
   assert.equal(await evaluate(dom(form + ' [name="title"]') + ".value"), "迁移后继续编辑");
   const reopened = new LocalProjectDatabase(path);
   try {

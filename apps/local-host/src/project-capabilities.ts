@@ -1,7 +1,14 @@
 import { importV3Capability, projectResumeFactsCapability, trashedGoalsCapability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability,
   goalsEntryCapabilities, executionEntryCapabilities, goalEntryCompositionCapabilities,
   draftDialogueCapabilities, goalTreeCapabilities, legacyProposalsCapabilities,
-  readGoalContractCapability, readProjectGuidanceCapability, setActiveGoalCapability } from "@adeptify/goalboard-plugin-goals";
+  readGoalContractCapability, readProjectGuidanceCapability, setActiveGoalCapability,
+  createGoalIntentCapability, readGoalEventStateCapability, configureGoalEventsCapability,
+  reportGoalEventsCapability, listGoalEventsCapability, listLatestGoalEventsCapability,
+  listLatestGoalTimelineCapability, readGoalEventCapability,
+  recordGoalProgressCapability, applyGoalConcernCapability, requestGoalDecisionCapability,
+  citeGoalDecisionCapability, recordGoalUserDecisionCapability, setGoalEventAgreementCapability,
+  submitGoalEventClosureCapability, resumeGoalEventWorkCapability, continueGoalEventWorkCapability,
+  recordGoalNoteCapability, reopenCompletedEventWorkCapability } from "@adeptify/goalboard-plugin-goals";
 import { pluginDevelopmentCapability } from "@adeptify/goalboard-contracts/platform/tooling";
 import { SqlitePluginRuntimeRepository, SqlitePluginPrivateStorage } from "@adeptify/goalboard-plugin-runtime";
 import { UiHost } from "@adeptify/goalboard-ui-host";
@@ -149,4 +156,51 @@ export function registerProjectCapabilities(host: LocalHost<GoalBoardProjectRunt
         reason: input.reason,
       },
     ));
+  host.register(createGoalIntentCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.createIntent(input));
+  host.register(readGoalEventStateCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.readState(input.board_id, input.goal_id));
+  host.register(configureGoalEventsCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.configure(input));
+  host.register(reportGoalEventsCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.report(input));
+  host.register(listGoalEventsCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.listEvents(input.board_id, input.goal_id, {
+      after_cursor: input.after_cursor,
+      limit: input.limit,
+    }));
+  host.register(listLatestGoalEventsCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.listLatestEvents(input.board_id, input.goal_id, {
+      before_cursor: input.before_cursor,
+      limit: input.limit,
+    }));
+  host.register(listLatestGoalTimelineCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.listLatestTimeline(input.board_id, input.goal_id, {
+      before_cursor: input.before_cursor,
+      limit: input.limit,
+    }));
+  host.register(readGoalEventCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.readEvent(input.board_id, input.goal_id, input.event_id));
+  host.register(recordGoalProgressCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.recordProgress(input));
+  host.register(applyGoalConcernCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.applyConcern(input));
+  host.register(requestGoalDecisionCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.requestDecision(input));
+  host.register(citeGoalDecisionCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.citeDecision(input));
+  host.register(recordGoalUserDecisionCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.recordTrustedDecision(input));
+  host.register(setGoalEventAgreementCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.setAgreement(input));
+  host.register(submitGoalEventClosureCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.submitClosure(input));
+  host.register(resumeGoalEventWorkCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.resumeWork(input));
+  host.register(continueGoalEventWorkCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.continueWithEventWork(input));
+  host.register(recordGoalNoteCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.recordNote(input));
+  host.register(reopenCompletedEventWorkCapability, (runtime, input) =>
+    runtime.coordinator.goalEvents.reopenCompletedEventWork(input));
 }

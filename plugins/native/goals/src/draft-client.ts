@@ -109,7 +109,7 @@ const GOALS_DRAFT_CRITERIA_SCRIPT = `      const addCriterion = target.closest("
 `;
 
 const GOALS_DRAFT_OPEN_SCRIPT = `
-        if (!await setGoalPanel("completion", true, true, true)) return;
+        openEventReader?.("description");
         const editor = article?.querySelector(".goal-edit-disclosure");
         if (editor) {
           editor.open = true;
@@ -121,7 +121,7 @@ const GOALS_DRAFT_OPEN_SCRIPT = `
 
 export const GOALS_DRAFT_CLIENT_FACTORY_SCRIPT = `(host) => {
     const { route, controlHeaders: goalboardControlHeaders, splitLines, refreshBoard,
-      showToast, translate: L, setGoalPanel } = host;
+      showToast, translate: L, openEventReader } = host;
 ${GOALS_DRAFT_RENUMBER_SCRIPT}${GOALS_DRAFT_TARGET_SCRIPT}
     const submitDraft = async (draftForm, event) => {
 ${GOALS_DRAFT_SUBMIT_SCRIPT}    };

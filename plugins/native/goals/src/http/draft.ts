@@ -112,8 +112,10 @@ export async function handleGoalDraftHttp(context: GoalsHttpContext): Promise<bo
       );
       context.respond( 200, result);
     } catch (error) {
-      context.respond( 400, {
+      const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : "";
+      context.respond(code === "goal.event_state_owner" ? 409 : 400, {
         error: error instanceof Error ? error.message : String(error),
+        ...(code ? { code } : {}),
       });
     }
     return true;

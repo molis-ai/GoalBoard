@@ -17,45 +17,20 @@ test("Goal document tabs retry lazy loading, restore selection, and open the dra
   await command("Page.navigate", { url: origin + "/goals/V1" }, sessionId);
   await command("Page.bringToFront", {}, sessionId);
   const dom = (selector: string) => "document.querySelector(" + JSON.stringify(selector) + ")";
-  await waitFor("document.readyState === 'complete' && " + dom("#goal-tab-overview-V1"));
-  assert.equal(await evaluate(dom("#goal-panel-completion-V1") + ".dataset.loaded"), "false");
-  await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/V1/panels/completion*"] }, sessionId);
-  await click("#goal-tab-completion-V1");
-  await waitFor(dom('[data-retry-goal-panel="completion"]') + " && !" + dom("#goal-panel-completion-V1") + ".hasAttribute('aria-busy')");
+  await waitFor("document.readyState === 'complete' && " + dom("[data-goal-event-document]"));
+  assert.equal(await evaluate(dom("[data-goal-event-document]") + ".dataset.goalView"), "V1");
+  await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/V1/event-state*"] }, sessionId);
+  await click("[data-event-reader='planning']");
+  await waitFor(dom("[data-event-reader-root]") + " && !" + dom("[data-event-reader-root]") + ".hasAttribute('hidden')");
   assert.deepEqual(store.snapshot(DEMO_BOARD_ID).goals, before.goals);
   await command("Network.setBlockedURLs", { urls: [] }, sessionId);
-  await click('[data-retry-goal-panel="completion"]');
-  await waitFor(dom("#goal-panel-completion-V1") + ".dataset.loaded === 'true'");
-  assert.equal(await evaluate(dom("#goal-tab-completion-V1") + ".getAttribute('aria-selected')"), "true");
-  for (const panel of ["progress", "factors"]) {
-    await click("#goal-tab-" + panel + "-V1");
-    await waitFor(dom("#goal-panel-" + panel + "-V1") + ".dataset.loaded === 'true'");
-    assert.equal(await evaluate(dom("#goal-panel-" + panel + "-V1") + ".hidden"), false);
-    assert.equal(await evaluate(dom("#goal-panel-overview-V1") + ".hidden"), true);
-  }
+  await click("[data-event-back]");
+  await waitFor(dom("[data-event-sheet]") + " && !" + dom("[data-event-sheet]") + ".hasAttribute('hidden')");
   await reloadPage();
-  await waitFor(dom("#goal-panel-factors-V1") + "?.dataset.loaded === 'true'");
-  assert.equal(await evaluate(dom("#goal-tab-factors-V1") + ".getAttribute('aria-selected')"), "true");
-  await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/V1/records*"] }, sessionId);
-  await click("#goal-tab-records-V1");
-  await waitFor(dom('[data-goal-records-content] [role="alert"]'));
-  assert.deepEqual(store.snapshot(DEMO_BOARD_ID).goals, before.goals);
-  await command("Network.setBlockedURLs", { urls: [] }, sessionId);
-  await click("#goal-tab-overview-V1");
-  await click("#goal-tab-records-V1");
-  await waitFor(dom("[data-goal-records-content]") + ".dataset.loaded === 'true'");
-  assert.equal(await evaluate(dom("[data-goal-records-content]") + ".hasAttribute('aria-busy')"), false);
+  await waitFor(dom("[data-goal-event-document]") + "?.dataset.goalView === 'V1'");
   await click('.tree-node[data-select-goal="RELEASE"]');
-  await waitFor(dom("#goal-tab-overview-RELEASE"));
-  await click("#goal-tab-overview-RELEASE");
-  // This Goal's completion panel has not been opened yet.
-  assert.equal(await evaluate(dom("#goal-panel-completion-RELEASE") + ".dataset.loaded"), "false");
-  await click('[data-goal-view="RELEASE"] [data-open-goal-edit]');
-  await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
-  assert.equal(await evaluate(dom("#goal-panel-completion-RELEASE") + ".hidden"), false);
-  // Opening the disclosure schedules focus in the next animation frame; open alone is not its completion.
-  await waitFor("document.activeElement.closest('[data-draft-form]')?.dataset.goalId === 'RELEASE'");
-  assert.equal(await evaluate("document.activeElement.closest('[data-draft-form]')?.dataset.goalId"), "RELEASE");
+  await waitFor(dom("[data-goal-event-document]") + "?.dataset.goalView === 'RELEASE'");
+  assert.equal(await evaluate(dom("[data-current-summary]") + " != null"), true);
   const screenshots = process.env.GOALBOARD_TEST_CAPTURE === "1" ? await mkdtemp(join(tmpdir(), "goalboard-gw5-document-")) : null;
   async function capture(name: string) {
     if (!screenshots) return;
@@ -66,8 +41,8 @@ test("Goal document tabs retry lazy loading, restore selection, and open the dra
   await capture("desktop");
   await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
   await click('[data-mobile-target="document"]');
-  await click('[data-draft-form] input[name="title"]');
-  assert.equal(await evaluate("document.activeElement.name"), "title");
+  await click("[data-event-reader='planning']");
+  await waitFor(dom("[data-event-reader-root]") + " && !" + dom("[data-event-reader-root]") + ".hasAttribute('hidden')");
   assert.equal(await evaluate("document.documentElement.scrollWidth > innerWidth"), false);
   await capture("mobile");
   const after = store.snapshot(DEMO_BOARD_ID);
@@ -83,7 +58,7 @@ test("late completed document response never replaces the newer selected Goal", 
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/V1" }, sessionId));
-  await waitFor("document.querySelector('#goal-tab-overview-V1')");
+  await waitFor("document.querySelector('[data-goal-event-document]')");
   // Delay delivery of a real, fully read HTTP response. No invented document or server state.
   // Aborting after the body completed cannot undo a result already queued for delivery.
   await evaluate(`(() => {
@@ -203,40 +178,36 @@ test("public document clients isolate requests and keep Host callbacks, failure 
   for (const key of ["goals", "relations", "risks", "claims", "runs", "evidence"] as const) assert.deepEqual(after[key], before[key]);
 });
 
-test("switching away from a loading panel leaves it retryable after its old response arrives", { timeout: 60_000 }, async t => {
+test("switching Goals while a document is loading still keeps the later selection after the old response arrives", { timeout: 60_000 }, async t => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, before, origin, sessionId, command, navigate, evaluate, click, waitFor } = browser;
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/V1" }, sessionId));
+  await waitFor("document.querySelector('[data-goal-event-document]')");
   await evaluate(`(() => {
     const originalFetch = globalThis.fetch;
     let held = false;
     globalThis.fetch = async (input, options) => {
       const response = await originalFetch(input, options);
-      if (!held && new URL(String(input), location.href).pathname === '/api/goals/V1/panels/completion') {
+      if (!held && new URL(String(input), location.href).pathname === '/api/goals/RELEASE/document') {
         held = true;
         const body = await response.text();
-        globalThis.__heldPanelResponse = true;
-        await new Promise(resolve => { globalThis.__releasePanelResponse = resolve; });
+        globalThis.__heldDocumentResponse = true;
+        await new Promise(resolve => { globalThis.__releaseDocumentResponse = resolve; });
         return new Response(body, {status:response.status,headers:response.headers});
       }
       return response;
     };
     return true;
   })()`);
-  await click("#goal-tab-completion-V1");
-  await waitFor("globalThis.__heldPanelResponse === true");
-  await click("#goal-tab-progress-V1");
-  await waitFor("document.querySelector('#goal-panel-progress-V1').dataset.loaded === 'true'");
-  await evaluate("__releasePanelResponse(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-  assert.equal(await evaluate("document.querySelector('#goal-panel-completion-V1').dataset.loaded"), "false");
-  assert.equal(await evaluate("document.querySelector('#goal-panel-completion-V1').dataset.loading"), "false");
-  assert.equal(await evaluate("document.querySelector('#goal-panel-completion-V1').hasAttribute('aria-busy')"), false);
-  await click("#goal-tab-completion-V1");
-  await waitFor("document.querySelector('#goal-panel-completion-V1').dataset.loaded === 'true'");
-  assert.equal(await evaluate("document.querySelector('#goal-tab-completion-V1').getAttribute('aria-selected')"), "true");
+  await click('.tree-node[data-select-goal="RELEASE"]');
+  await waitFor("globalThis.__heldDocumentResponse === true");
+  await click('.tree-node[data-select-goal="V1"]');
+  await waitFor("document.querySelector('[data-goal-event-document]')?.dataset.goalView === 'V1'");
+  await evaluate("__releaseDocumentResponse(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  assert.equal(await evaluate("document.querySelector('[data-goal-event-document]').dataset.goalView"), "V1");
   const after = store.snapshot(DEMO_BOARD_ID);
   for (const key of ["goals", "relations", "risks", "claims", "runs", "evidence"] as const) assert.deepEqual(after[key], before[key]);
 });

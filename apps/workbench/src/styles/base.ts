@@ -243,14 +243,6 @@ export const STYLES = `
   .goal-more[open] > summary { color: var(--blue-dark); border-color: #bcd4f2; background: var(--blue-soft); }
   .goal-more > div { position: absolute; z-index: 8; top: calc(100% + 6px); right: 0; min-width: 168px; padding: 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; box-shadow: 0 8px 28px rgba(26, 38, 52, .12); display: grid; }
   .goal-more .document-action { width: 100%; justify-content: flex-start; border: 0; height: 32px; }
-  .goal-workspace-nav { position: sticky; top: 0; z-index: 6; min-width: 0; margin: 0 -10px; padding: 0 10px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: blur(10px); display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
-  .goal-workspace-nav::-webkit-scrollbar { display: none; }
-  .goal-workspace-nav button { position: relative; min-width: 0; min-height: 46px; padding: 0 13px; border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 650; white-space: nowrap; cursor: pointer; }
-  .goal-workspace-nav button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: transparent; }
-  .goal-workspace-nav button:hover { color: var(--ink); background: color-mix(in srgb, var(--blue-soft) 42%, transparent); }
-  .goal-workspace-nav button[aria-selected="true"] { color: var(--blue-dark); }
-  .goal-workspace-nav button[aria-selected="true"]::after { background: var(--blue); }
-  .goal-workspace-nav button svg { width: 15px; height: 15px; flex: 0 0 auto; }
   .goal-factors { padding: 20px 0 26px; }
   .goal-factors-heading { padding: 0 0 16px; border-bottom: 1px solid var(--line-strong); display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 9px; }
   .goal-factors-heading > span { padding-top: 2px; color: var(--blue); }
@@ -279,7 +271,6 @@ export const STYLES = `
   .policy-scope-note small { color: var(--muted); }
   .policy-scope-note a { color: var(--blue-dark); font-weight: 650; text-decoration: none; }
   .goal-workspace-panels { min-width: 0; }
-  .goal-workspace-panel { min-width: 0; }
   .goal-situation { margin: 16px 0 0; border: 1px solid color-mix(in srgb, var(--blue), var(--line) 68%); border-radius: 5px; background: color-mix(in srgb, var(--blue-soft) 48%, #fff); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .goal-situation-cell { min-width: 0; padding: 10px 12px; border-right: 1px solid var(--line); color: inherit; text-decoration: none; display: grid; gap: 2px; }
   .goal-situation-cell:last-child { border-right: 0; }
@@ -301,6 +292,7 @@ export const STYLES = `
   .goal-now-body p { max-width: 68ch; margin: 0; color: #343b46; }
   .goal-now-body small { color: var(--muted); }
   .goal-now-body small b { margin-right: 4px; color: var(--ink); }
+  /* Generic class still styles Native Work Session's primary button, not retired Goal nav. */
   .goal-primary-action { min-height: 40px; padding: 0 15px; border: 1px solid var(--action); border-radius: 5px; background: var(--action); color: var(--action-ink); display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
   .goal-primary-action:hover { border-color: var(--action); background: color-mix(in srgb, var(--action) 90%, var(--action-ink)); color: var(--action-ink); }
   .goal-primary-action:disabled { opacity: .6; cursor: wait; }
@@ -330,20 +322,20 @@ export const STYLES = `
   .supporting-boundaries > summary::-webkit-details-marker { display: none; }
   .supporting-boundaries > div > section { padding: 10px 0; display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; }
   .child-progress { margin: 18px 0 0 31px; padding-top: 16px; border-top: 1px solid var(--line); }
-  .child-progress > header, .risk-summary > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-  .child-progress h3, .dependency-summary h3, .progress-overview h3, .risk-summary h3, .rule-summary h3 { margin: 0; font-size: 14px; }
-  .child-progress header p, .risk-summary header p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+  .child-progress > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+  .child-progress h3, .dependency-summary h3, .progress-overview h3, .rule-summary h3 { margin: 0; font-size: 14px; }
+  .child-progress header p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
   .child-progress-rule { max-width: 720px; display: grid; gap: 2px; }
   .child-progress-rule strong { color: var(--ink); font-size: 12px; }
   .child-progress--needs_confirmation .child-progress-rule strong { color: var(--blue-dark); }
   .child-progress--conflict .child-progress-rule strong { color: var(--red); }
-  .child-progress > header > strong, .risk-summary > header > strong { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .child-progress ul, .dependency-summary ul, .risk-summary ul { list-style: none; margin: 9px 0 0; padding: 0; }
-  .child-progress li, .dependency-summary li, .risk-summary li { border-top: 1px solid var(--line); }
-  .child-progress a, .dependency-summary a, .risk-summary a { min-height: 48px; padding: 8px 2px; color: inherit; display: flex; align-items: center; gap: 10px; text-decoration: none; }
-  .child-progress a:hover strong, .dependency-summary a:hover strong, .risk-summary a:hover strong { color: var(--blue-dark); }
-  .child-progress a > span, .dependency-summary a > span, .risk-summary a > span { min-width: 0; flex: 1; display: grid; }
-  .child-progress a small, .dependency-summary a small, .risk-summary a small { color: var(--muted); }
+  .child-progress > header > strong { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .child-progress ul, .dependency-summary ul { list-style: none; margin: 9px 0 0; padding: 0; }
+  .child-progress li, .dependency-summary li { border-top: 1px solid var(--line); }
+  .child-progress a, .dependency-summary a { min-height: 48px; padding: 8px 2px; color: inherit; display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .child-progress a:hover strong, .dependency-summary a:hover strong { color: var(--blue-dark); }
+  .child-progress a > span, .dependency-summary a > span { min-width: 0; flex: 1; display: grid; }
+  .child-progress a small, .dependency-summary a small { color: var(--muted); }
   .child-progress a em { color: var(--muted); font-size: 11px; font-style: normal; font-weight: 650; }
   .dependency-summary .check-box { flex: 0 0 15px; }
   .progress-overview { margin-left: 31px; display: grid; gap: 18px; }
@@ -354,7 +346,7 @@ export const STYLES = `
   .progress-facts dt { color: var(--muted); font-size: 11px; font-weight: 650; }
   .progress-facts dd { margin: 0; font-weight: 650; }
   .progress-facts dd small { display: block; color: var(--muted); font-weight: 400; }
-  .progress-blockers, .risk-summary, .rule-summary { padding-top: 2px; }
+  .progress-blockers, .rule-summary { padding-top: 2px; }
   .rule-summary ul { margin: 8px 0 0; padding-left: 19px; }
   .rule-summary li + li { margin-top: 3px; }
   .goal-technical { padding: 20px 0 0; }

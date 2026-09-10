@@ -71,7 +71,22 @@ export function createLocalPanelHttp(ports: PanelHttpPorts) {
         sessionIds: (ids) => desktopPanelSessionIds(catalog, ids),
         spawn: (panel, sessionId) => desktopPanelSpawn(catalog, panel, webUrl, sessionId),
       })),
-      readGoal: (goalId) => coordinator.goalQueries.readGoalContract(boardId, goalId).goal,
+      readGoal: (goalId) => {
+        const goal = coordinator.goalQueries.readGoalContract(boardId, goalId).goal;
+        const event_work = coordinator.goalEvents.isEventStateOwner(boardId, goalId);
+        const state = event_work ? coordinator.goalEvents.readState(boardId, goalId) : null;
+        const event_facts = state
+          ? [
+              `工作状态：${state.work_status}`,
+              state.agreement.outcome ? `当前约定：${state.agreement.outcome}` : "",
+              state.progress_summary?.next_step ? `下一步：${state.progress_summary.next_step}` : "",
+              state.pending_decisions.length ? `待决定：${state.pending_decisions.map((item) => item.question).join("；")}` : "",
+              state.current_decisions.length ? `已决定：${state.current_decisions.map((item) => item.conclusion).join("；")}` : "",
+              state.gaps.length ? `未满足：${state.gaps.map((item) => item.statement).join("；")}` : "",
+            ].filter(Boolean).join("\n")
+          : undefined;
+        return { ...goal, event_work, event_facts };
+      },
       readLinkedFeedContext: (goalId, itemId) => {
         const feed = createLocalFeedApplication(coordinator.store.db);
         return readLinkedFeedContext({

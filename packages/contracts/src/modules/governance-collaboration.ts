@@ -2,12 +2,17 @@ import type { ContractDescriptor } from "../platform/package.js";
 import type {
   CreateGoalInput,
   GoalChangeImpact,
+  GoalEventTrustedAuthority,
+  GoalEventTrustedDecisionRecord,
   GoalRecord,
   GoalPolicy,
   PlanningGraphIssue,
+  RecordGoalUserDecisionInput,
   RiskBlockingMode,
   RiskRecord,
 } from "./goals.js";
+
+export type { GoalEventTrustedAuthority, GoalEventTrustedDecisionRecord, RecordGoalUserDecisionInput };
 
 export const modulesGovernanceCollaborationContract = {
   contractId: "io.goalboard.module.governance-collaboration.v1",
@@ -200,6 +205,7 @@ export interface GovernanceProvenanceApi {
   normalizeAssumptions(assumptions: readonly ClarificationAssumptionInput[], turnId: string): ClarificationAssumption[];
   validateSourceShape(value: unknown): ContractFieldSource[];
   validateContractSources(proposedGoal: Pick<CreateGoalInput, "constraints" | "required_inputs" | "promised_outputs">, fieldSources: readonly ContractFieldSource[]): void;
+  validateEventDecisionAuthority(authority: GoalEventTrustedAuthority): GoalEventTrustedAuthority;
   legacyProposalView(snapshot: LegacyGovernanceSnapshot): GoalTreeProposalRecord[];
 }
 
@@ -699,6 +705,11 @@ export interface GoalTreeProposalCheckResult {
   observed_event_cursor: number;
 }
 
+export interface GovernanceEventDecisionApi {
+  record(input: RecordGoalUserDecisionInput & { authority: GoalEventTrustedAuthority }): GoalEventTrustedDecisionRecord;
+  read(boardId: string, decisionId: string): GoalEventTrustedDecisionRecord | null;
+}
+
 export interface GovernanceApplicationApi {
   clarification: GovernanceClarificationApi;
   provenance: GovernanceProvenanceApi;
@@ -706,6 +717,7 @@ export interface GovernanceApplicationApi {
   reviews: GovernanceReviewApi;
   records: GovernanceRecordsApi;
   decisions: GovernanceDecisionApi;
+  eventDecisions: GovernanceEventDecisionApi;
 }
 
 /** Existing dialogue facts; this port never writes Goal or Execution tables. */

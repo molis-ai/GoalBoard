@@ -1,6 +1,6 @@
 ---
 name: goal-advance
-description: Use GoalBoard in the current Runtime conversation to connect a user-selected project, clarify and plan Goal Trees with relevant professional methods, establish evidence-based dependencies, execute available work, and keep decisions and evidence in one shared truth source. Use only when the user explicitly asks to use, open, start, connect, plan, continue, or advance GoalBoard.
+description: Use GoalBoard in the current Runtime conversation to connect a user-selected project, save a new intent as event-owned work, optionally adopt planning types, report facts, and keep decisions in one shared truth source. Untransferred historical Goals still use the previous Claim/Run protocol. Use only when the user explicitly asks to use, open, start, connect, plan, continue, or advance GoalBoard.
 ---
 
 # GoalBoard Runtime
@@ -22,14 +22,12 @@ Before the first GoalBoard write, read [references/protocol.md](references/proto
 
 ## The GoalBoard loop
 
-1. **Connect deliberately.** Resolve the current context, then use only a project the user has explicitly selected or previously bound under the supported rules.
-2. **Recover the real request.** Read the named Goal or start/resume the smallest Draft. Separate user-confirmed facts, traceable project facts, Runtime assumptions, and recommendations.
-3. **Clarify only consequential gaps.** Ask one question at a time. Save each material answer before asking the next question.
-4. **Plan before closing complex work.** Select all relevant professional methods, discover cross-topic result dependencies, check coverage, and split work into reviewable outcomes.
-5. **Ask for a real decision.** Present one readable, complete Goal Tree change set. Nothing proposed becomes canonical until the user confirms, rejects, or revises it. After applied changes, consume `semantic_review`: structural success is not semantic closure, and an affected subgraph must be reviewed before planning is reported complete.
-6. **Execute from the action projection.** Choose the returned `primary_action`, claim it with its `action_id + action_token`, work inside the accepted Contract, and submit evidence or the permitted review. GoalBoard automatically releases complete role work and completes a Goal when the last gate closes.
-7. **Continue from the transition receipt.** Every lifecycle write returns the new projection. State the new short status, specific next action and owner; refresh Available only when choosing another Goal, not to discover whether the just-finished write worked.
-8. **Correct locally.** New requirements and observed failures update the affected Goal or subgraph; they do not silently expand scope or rewrite the whole tree.
+1. **Connect deliberately.** Call read-only `goalboard_v1_context_resolve` first. If it returns `bound`, reuse that connection. If it returns `suggested` or `unbound`, follow an explicit project selection already in the current request or ask, as in [references/project-connection.md](references/project-connection.md). A connection-context refresh is not repeat bind authority.
+2. **Read the current Goal.** Call `goalboard_v1_goal_state` for a named Goal. To start from a recognizable title, call `goalboard_v1_goal_intent_create` without inventing why, inputs, outputs, split checks, or a default template. Creating a Goal is not completion.
+3. **Work inside existing authorization.** Do ordinary work without claiming a role or starting a Run. Adopt planning types only when useful; adopting a method does not enable every default requirement, and having a type does not require submitting that record.
+4. **Report material changes.** Call `goalboard_v1_event_report` with registered types. A successful record is not completion, human acceptance, or proof the Host is connected. Reuse the original `idempotency_key` only for the exact retry. Record a progress summary with `event_progress` when the next step needs to survive a new Session; a later fact makes the summary stale but does not delete it.
+5. **Continue from returned gaps.** Use `requirements`, `gaps`, `concerns`, `pending_decisions`, and `latest_reports` on `goal_state`. Open scoped Concerns with `event_concern`. Request a user decision with `event_decision_request`; cite a saved decision with `event_cite_decision`. Do not set `actor_kind=user`, `user_confirmed`, or `authority`. Explicitly close with `event_close`; `recorded` is not `completion_applied`.
+6. **Untransferred historical Goals keep the previous protocol.** If `protocol.kind` is `legacy_claim_run`, the Goal is readable on the new timeline; new event writes require the explicit “使用事件记录继续” / continue-with-event-records action. Until then, use Available → Contract → `select_goal`, Evidence, and Review as in [references/execution.md](references/execution.md). Reading does not transfer. After transfer, old state writes are rejected. Do not mix Claim/Run into event-work Goals, and do not tell the user every old operation must be transferred. Complex Goal Tree changes still use [references/planning.md](references/planning.md).
 
 ## Keep Goals finite and operations recurring
 
@@ -55,8 +53,9 @@ Read only the references needed for the current route:
 |---|---|
 | Start or open GoalBoard Web | Read [references/service-start.md](references/service-start.md). Treat service management separately from Goal work. |
 | Connect, switch, create, unbind, or delete a project; use a Desktop-opened Goal; trash or restore a Goal | Read [references/project-connection.md](references/project-connection.md). |
-| Start or resume a rough idea, decompose or rewire a Goal, close a complex parent, or respond to a changed requirement | Read [references/planning.md](references/planning.md). |
-| Continue available work, advance an accepted Goal, review, revalidate, complete, or recover from an execution failure | Read [references/execution.md](references/execution.md). |
+| Start a new intent, optionally adopt planning types, decompose or rewire a Goal Tree, or respond to a changed requirement | Read [references/planning.md](references/planning.md). New intents use `goal_intent_create`; planning is optional. |
+| Continue event-work Goals, report facts, record progress, raise a scoped Concern, request a decision, or submit closure | Use `goal_state`, `event_configure`, `event_report`, `event_progress`, `event_concern`, `event_decision_request`, `event_cite_decision`, `event_agree`, `event_close`, `event_resume`, `event_list`, and `event_read`. Do not Claim or start a Run. User approval stays in Web/management (`event_decide` is not a Runtime tool). |
+| Continue available Claim/Run work on an untransferred `legacy_claim_run` Goal, review, revalidate, or recover from an execution failure | Read [references/execution.md](references/execution.md). This is not the default continue path for new or transferred Goals. |
 
 When a request crosses routes, read each relevant reference, but keep one conversation and one current-project connection. Do not load service instructions for ordinary Goal work.
 
@@ -77,7 +76,7 @@ Related themes, chronology, hierarchy, shared files, or shared ownership alone n
 
 ## Conversation and Goal quality
 
-Speak in the user's language about their project and outcome, not MCP plumbing. A useful turn says what you understand, why the remaining uncertainty matters, and the one question or action that moves the Goal forward. Treat a user correction as new authority; persist it and stop defending the old inference.
+Speak in the user's language about their project and outcome, not MCP plumbing. Ask one question at a time. A useful turn says what you understand, why the remaining uncertainty matters, and the one question or action that moves the Goal forward. Treat a user correction as new authority; persist it and stop defending the old inference.
 
 Write Goal content for a person who returns later:
 
@@ -93,7 +92,9 @@ Use a compact checkpoint when resuming, after a material direction change, or be
 
 ## Continue from returned state
 
-Use the public action projection: `contract.action_projection` when reading one Goal, `available.action_projections` when choosing work, and the write response's `transition.projection` immediately after a lifecycle operation. `work_state` is a compatibility view, not a second decision algorithm. Consume the tool's returned fields; do not inspect Coordinator objects, database files, Web routes, or reconstruct eligibility from internal state.
+For event-work Goals, consume `goal_state` and report receipts: `recorded` is not completion. `completion_effect` is true only after an explicit `event_close` whose `completion_applied` is true. A completion report can be saved while remaining unmet. History is bounded; use event IDs or pagination for bodies.
+
+For `legacy_claim_run` Goals, use the public action projection: `contract.action_projection` when reading one Goal, `available.action_projections` when choosing work, and the write response's `transition.projection` immediately after a lifecycle operation. `work_state` is a compatibility view, not a second decision algorithm.
 
 - `可继续`: perform the Runtime-owned `primary_action` and pass its `action_id`, `action_token`, Contract revision and target to the write.
 - `进行中`: continue only the active Claim/Run. Do not create a second Run.
@@ -102,22 +103,23 @@ Use the public action projection: `contract.action_projection` when reading one 
 - `受阻`: report the concrete recovery action and do not retry an unchanged write.
 - `已完成`: report the result and offer the next available item without claiming it automatically.
 
-Always use the transition receipt returned by a write as the immediate new state. A stale action token means the old operation was rejected: show the returned current projection and recover from that action instead of guessing.
+Always use the write's returned state. A stale action token means the old operation was rejected: recover from the returned projection instead of guessing.
 
 ## Runtime MCP map
 
 | Need | MCP operations |
 |---|---|
 | Resolve and manage the current project | `context_list_projects`, `context_resolve`, `context_reject_suggestion`, `context_bind`, `context_create_and_bind`, `context_unbind`, `project_delete` |
+| Event-work Goal facts and state | `goal_intent_create`, `goal_state`, `event_configure`, `event_report`, `event_progress`, `event_concern`, `event_decision_request`, `event_cite_decision`, `event_agree`, `event_close`, `event_resume`, `event_list`, `event_read` |
 | Read work and blockers | `snapshot`, `contract`, `available`, `explain` |
 | Read or confirm project-level guidance | `project_guidance_get`, `project_guidance_add`, `project_guidance_update` |
-| Start or resume Goal clarification | `draft_dialogue_start`, `draft_dialogue_turn`, `draft_dialogue_resume`, `planning_methods`, `planning_analyze_change`, `planning_graph_check` |
+| Optional planning and untransferred Draft clarification | `planning_methods`, `planning_analyze_change`, `planning_graph_check`; `draft_dialogue_start`, `draft_dialogue_turn`, `draft_dialogue_resume` only for untransferred historical Drafts |
 | Propose and decide Goal Tree changes | `goal_tree_propose`, `goal_tree_read`, `goal_tree_check`, `goal_tree_decide` |
-| Atomically start and report work | `select_goal`, `claim_renew`, `run_report`, `evidence_submit`, `evidence_correct`, `review_submit`, `revalidate` (`complete` and `release` are compatibility/repair operations) |
+| Untransferred Claim/Run work and Host leases | `select_goal`, `claim_renew`, `run_report`, `evidence_submit`, `evidence_correct`, `review_submit`, `revalidate` (`complete` and `release` are compatibility/repair operations) |
 | Recoverably trash or restore a Goal | `goal_trash`, `goal_trash_list`, `goal_restore` |
 
 Use the full `goalboard_v1_` tool names. If GoalBoard MCP is unavailable, report that fact and stop; do not create another truth source or silently switch paths.
 
-During active work, inspect Contract's `active_claim_lease` at meaningful checkpoints. When it returns `renew_recommended=true`, call `goalboard_v1_claim_renew` before continuing long implementation or review work. Renewal preserves the current Claim and Run; it cannot revive an expired Claim. Reuse the Claim's exact actor; after compaction, `claim.not_owner` returns a structured owner/retry hint only for the same Runtime continuing the same work, never for taking over another Runtime. Do not create background heartbeat loops.
+For an untransferred `legacy_claim_run` Goal with an active Claim, inspect Contract's `active_claim_lease` at meaningful checkpoints. When it returns `renew_recommended=true`, call `goalboard_v1_claim_renew` before continuing long implementation or review work. Renewal preserves the current Claim and Run; it cannot revive an expired Claim. Reuse the Claim's exact actor; after compaction, `claim.not_owner` returns a structured owner/retry hint only for the same Runtime continuing the same work, never for taking over another Runtime. Do not create background heartbeat loops. Event-work Goals do not Claim a role or renew a lease to record ordinary facts.
 
-When the projection says `等你`, report the exact user-owned action and stop Runtime review work. Do not infer a verdict from “好的”“继续” or treat engineering evidence as user acceptance. For exactly one current Human Review action, an explicit approval or request for changes in the trusted conversation can be written atomically with the returned attention token; multiple items, ambiguous wording or a stale token stay in Decision Center.
+When a `legacy_claim_run` projection says `等你`, report the exact user-owned action and stop Runtime review work. Do not infer a verdict from “好的”“继续” or treat engineering evidence as user acceptance. For exactly one current Human Review action, an explicit approval or request for changes in the trusted conversation can be written atomically with the returned attention token; multiple items, ambiguous wording or a stale token stay in Decision Center. Event-work user decisions are recorded only by Host Web/management; request them with `event_decision_request` and cite a saved decision with `event_cite_decision`.

@@ -5,7 +5,7 @@ export const GOALS_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
     let goalDocumentRequest = null;
 
     const replaceGoalDocument = (html) => {
-      beforeReplace();
+      beforeReplace?.();
       const template = document.createElement("template");
       template.innerHTML = String(html || "").trim();
       const nextView = template.content.querySelector("[data-goal-view]");

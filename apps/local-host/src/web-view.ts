@@ -1,4 +1,5 @@
-import { buildGoalsDocumentCollection } from "@adeptify/goalboard-plugin-goals";
+import { attachEventDocument, buildGoalsDocumentCollection } from "@adeptify/goalboard-plugin-goals";
+import type { PlanningMethodPack } from "@adeptify/goalboard-contracts/modules/goals";
 import type { FeedApplication, FeedSnapshot } from "@adeptify/goalboard-plugin-feed";
 import type { GoalBoardWebView, WebProjectNavigation } from "@adeptify/goalboard-app-workbench";
 import type { LocalProjectDatabase } from "./project-database.js";
@@ -39,6 +40,7 @@ export function buildGoalBoardWebView(store: LocalProjectDatabase, coordinator: 
     snapshot: boardId => store.snapshot(boardId), events: boardId => store.readEventsDescending(boardId),
     goals: coordinator.goalQueries, inputs: coordinator.goalInputs, execution: coordinator.executionValidation.query,
     projectGoalLifecycle: (snapshot, goalId) => coordinator.projectGoalLifecycle(snapshot, goalId),
+    eventWork: coordinator.goalEvents,
   }, options.boardId, L);
   return {
     snapshot: options.project
@@ -80,4 +82,25 @@ export function cachedGoalBoardWebView(
   const view = buildGoalBoardWebView(store, coordinator, options);
   cache.set(options.databasePath, { cursor, optionsFingerprint, view });
   return view;
+}
+
+export function withSelectedEventDocument(
+  view: GoalBoardWebView,
+  boardId: string,
+  goalId: string | undefined,
+  goalEvents: Parameters<typeof attachEventDocument>[2],
+  planningMethods: readonly PlanningMethodPack[] = [],
+): GoalBoardWebView {
+  if (!goalId) return view;
+  const methods = planningMethods.length ? planningMethods : view.snapshot.planning_method_packs ?? [];
+  const decorate = (item: GoalBoardWebView["goals"][number]) =>
+    item.goal.goal_id === goalId
+      ? attachEventDocument(item, boardId, goalEvents, view.snapshot, methods, view.events ?? [])
+      : item;
+  return {
+    ...view,
+    goals: view.goals.map(decorate),
+    archived_goals: view.archived_goals.map(decorate),
+    trashed_goals: view.trashed_goals.map(decorate),
+  };
 }

@@ -55,17 +55,17 @@ test("inactive relation retains reason and direction without writable controls; 
   assert.doesNotMatch(renderer.renderRelations(current, view, false), /<form|data-relation-deactivate-open/);
   current.goal.archived_at = "2026-09-05";
   assert.doesNotMatch(renderer.renderRelations(current, view), /<form|data-relation-deactivate-open/);
-  assert.equal(renderer.renderRelationForm(current, view, "quick"), "");
+  assert.equal(renderer.renderRelationForm(current, view), "");
 });
 
-test("relation quick form preserves selectors and request-local English copy without translating Goal titles", () => {
+test("relation form preserves selectors and request-local English copy without translating Goal titles", () => {
   const current = item("current", "用户标题");
   const view = { goals: [current, item("other", "另一个用户标题")], archived_goals: [] };
-  const english = runWithLocale("en", () => renderer.renderRelationForm(current, view, "quick"));
-  assert.match(english, /quick-record-form/);
-  assert.match(english, /data-live-form="relation-quick-current"/);
+  const english = runWithLocale("en", () => renderer.renderRelationForm(current, view));
+  assert.match(english, /data-relation-form/);
+  assert.match(english, /data-live-form="relation-current"/);
   assert.match(english, /name="reason" rows="3" required/);
   assert.match(english, /另一个用户标题/);
   assert.doesNotMatch(english, /你正在直接修改 Goal 关系/);
-  assert.match(runWithLocale("zh", () => renderer.renderRelationForm(current, view, "full")), /你正在直接修改 Goal 关系/);
+  assert.match(runWithLocale("zh", () => renderer.renderRelationForm(current, view)), /你正在直接修改 Goal 关系/);
 });

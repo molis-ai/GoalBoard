@@ -1010,7 +1010,6 @@ function checkExecutionValidationOwnership(repositoryRoot) {
   }
 
   const renderer = read("apps/workbench/src/renderer.ts");
-  const workbenchUi = read("apps/workbench/src/execution-validation-ui.ts");
   for (const functionName of [
     "renderClaimCell",
     "renderRunCell",
@@ -1021,17 +1020,8 @@ function checkExecutionValidationOwnership(repositoryRoot) {
     "renderReviewCell",
   ]) {
     if (renderer.includes(`function ${functionName}(`)) {
-      errors.push(`apps/workbench/src/renderer.ts: ${functionName} must stay owned by the Workbench execution contribution`);
+      errors.push(`apps/workbench/src/renderer.ts: retired ${functionName} must not return as a Workbench renderer`);
     }
-    if (!workbenchUi.includes(functionName)) {
-      errors.push(`apps/workbench/src/execution-validation-ui.ts: missing ${functionName}`);
-    }
-  }
-  if (
-    !renderer.includes("createWorkbenchExecutionValidationRenderer")
-    || !workbenchUi.includes("WorkbenchExecutionValidationUiDependencies")
-  ) {
-    errors.push("Workbench execution UI must be composed through its public contribution renderer");
   }
 
   const test = read("tests/execution-validation-app-adapters.test.ts");

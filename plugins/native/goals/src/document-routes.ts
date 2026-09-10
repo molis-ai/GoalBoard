@@ -1,24 +1,20 @@
 export type GoalDocumentCollection = "current" | "archive" | "trash";
-export type LazyGoalPanel = "completion" | "progress" | "factors";
 type ParametersReader = { get(name: string): string | null };
 export type GoalsReadRoute =
   | { kind: "refresh"; collection: GoalDocumentCollection; goal_id?: string }
   | { kind: "momentum"; collection: "current" | "archive"; goal_id: string }
-  | { kind: "panel"; collection: GoalDocumentCollection; goal_id: string; panel: LazyGoalPanel }
-  | { kind: "document" | "records" | "quick-record"; collection: GoalDocumentCollection; goal_id: string }
-  | { kind: "record-events"; collection: GoalDocumentCollection; goal_id: string; offset: number };
+  | { kind: "document"; collection: GoalDocumentCollection; goal_id: string };
 export interface GoalsRouteError { status: 400 | 404; error: string }
 
 /** Parse only the existing GET presentation routes, after the host strips Project scope. */
 export function resolveGoalsReadRoute(pathname: string, params: ParametersReader): { route: GoalsReadRoute } | GoalsRouteError | null {
   const refresh = pathname === "/api/board/refresh";
   const momentum = pathname === "/api/board/momentum";
-  const panel = pathname.match(/^\/api\/goals\/([^/]+)\/panels\/(completion|progress|factors)$/);
-  const fragment = pathname.match(/^\/api\/goals\/([^/]+)\/(quick-record|document|records|record-events)$/);
-  if (!refresh && !momentum && !panel && !fragment) return null;
+  const document = pathname.match(/^\/api\/goals\/([^/]+)\/document$/);
+  if (!refresh && !momentum && !document) return null;
   let goalId = "";
-  if (panel || fragment) {
-    try { goalId = decodeURIComponent((panel ?? fragment)![1]!); }
+  if (document) {
+    try { goalId = decodeURIComponent(document[1]!); }
     catch { return { status: 404, error: "Goal 内容不存在" }; }
   }
   const collection = params.get("view") ?? "current";
@@ -28,19 +24,12 @@ export function resolveGoalsReadRoute(pathname: string, params: ParametersReader
   }
   if (collection !== "current" && collection !== "archive" && collection !== "trash") return { status: 400, error: "Goal 正文集合无效" };
   if (refresh) return { route: { kind: "refresh", collection, goal_id: params.get("goal_id")?.trim() || undefined } };
-  if (panel) return { route: { kind: "panel", collection, goal_id: goalId, panel: panel[2] as LazyGoalPanel } };
-  const kind = fragment![2] as "document" | "records" | "quick-record" | "record-events";
-  if (kind !== "record-events") return { route: { kind, collection, goal_id: goalId } };
-  const offset = params.get("offset") ?? "0";
-  if (!/^(0|[1-9]\d*)$/.test(offset) || !Number.isSafeInteger(Number(offset))) return { status: 400, error: "Goal 事件偏移量无效" };
-  return { route: { kind, collection, goal_id: goalId, offset: Number(offset) } };
+  return { route: { kind: "document", collection, goal_id: goalId } };
 }
 
 export function goalsReadRouteNotFound(route: GoalsReadRoute): string {
   switch (route.kind) {
     case "momentum": return "Goal 推进态势不存在";
-    case "panel": return `找不到这个 Goal 面板: ${route.goal_id}`;
-    case "quick-record": return `无法为这个 Goal 打开快速记录: ${route.goal_id}`;
     default: return `找不到这个 Goal: ${route.goal_id}`;
   }
 }
@@ -62,13 +51,9 @@ export function goalsReadCollection<TItem extends { goal: { goal_id: string } }>
 }
 export function findGoalsFragmentItem<TItem extends GoalsFragmentItem>(
   view: GoalsPageCollections<TItem>, goalId: string, collection: GoalDocumentCollection,
-  kind: "document" | "panel" | "records" | "record-events" | "quick-record",
 ): TItem | null {
-  if (kind !== "document" && collection === "trash") return null;
-  if (kind === "quick-record" && collection !== "current") return null;
   const item = goalsReadCollection(view, collection).find(candidate => candidate.goal.goal_id === goalId);
-  if (!item || (kind === "quick-record" && (item.goal.archived_at || item.goal.trashed_at))) return null;
-  return item;
+  return item ?? null;
 }
 
 /** Keep a direct Goal URL readable after archive/trash; this is presentation selection, not authority. */

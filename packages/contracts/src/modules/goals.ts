@@ -1,5 +1,11 @@
 import type { ContractDescriptor } from "../platform/package.js";
 import type { StoredModuleEvent } from "../platform/storage.js";
+import type {
+  GoalEventAdoptedPlanningRequest,
+  GoalEventTypeDefinitionInput,
+  PlanningMethodDefaultRequirement,
+  ResolvedPlanningEventAdoption,
+} from "./goal-events.js";
 
 export const modulesGoalsContract = {
   contractId: "io.goalboard.module.goals.v1",
@@ -240,12 +246,19 @@ export interface PlanningMethodPack {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  event_types: GoalEventTypeDefinitionInput[];
+  default_requirements: PlanningMethodDefaultRequirement[];
 }
 
 export type PlanningMethodPackInput = Omit<
   PlanningMethodPack,
-  "scope" | "version" | "created_at" | "updated_at" | "instructions"
-> & { version?: number; instructions?: string };
+  "scope" | "version" | "created_at" | "updated_at" | "instructions" | "event_types" | "default_requirements"
+> & {
+  version?: number;
+  instructions?: string;
+  event_types?: GoalEventTypeDefinitionInput[];
+  default_requirements?: PlanningMethodDefaultRequirement[];
+};
 
 export interface ResolvedPlanningMethodPack extends PlanningMethodPack {
   overridden_scopes: PlanningMethodScope[];
@@ -363,6 +376,10 @@ export interface GoalsPlanningApi {
     method: PlanningMethodPack;
     observed_event_cursor: number;
   };
+  resolveEventAdoption(
+    boardId: string,
+    requested: GoalEventAdoptedPlanningRequest[],
+  ): ResolvedPlanningEventAdoption;
   analyzeChange(boardId: string, changedGoalIds: readonly string[]): GoalChangeImpact;
   validateBoardGraph(boardId: string): {
     issues: PlanningGraphIssue[];
@@ -926,6 +943,116 @@ export interface GoalsApplicationApi<TTransition = unknown> {
   planning: GoalsPlanningApi;
 }
 export type { GoalInputBindingRecord, GoalInputBindingsApi } from "./goal-inputs.js";
+export type {
+  ApplyGoalConcernInput,
+  CiteGoalDecisionInput,
+  ContinueGoalEventWorkInput,
+  ContinueGoalEventWorkResult,
+  ConfigureGoalEventsApplicationInput,
+  ConfigureGoalEventsInput,
+  ConfigureGoalEventsResult,
+  CreateGoalIntentInput,
+  CreateGoalIntentResult,
+  GoalConfigurationWorkEventRecord,
+  GoalEventAdoptedPlanningRef,
+  GoalEventAdoptedPlanningRequest,
+  GoalEventAgreementResult,
+  GoalEventAgreementView,
+  GoalEventAppliedDecisionView,
+  GoalEventClosureKind,
+  GoalEventClosureResult,
+  GoalEventClosureView,
+  GoalEventConcernAction,
+  GoalEventConcernResult,
+  GoalEventConcernStatus,
+  GoalEventDecisionCommitment,
+  GoalEventDecisionEffect,
+  GoalEventDecisionEffectKind,
+  GoalEventConcernView,
+  GoalEventConfigView,
+  GoalEventConfigurationPayload,
+  GoalEventDecisionOption,
+  GoalEventDecisionRequestResult,
+  GoalEventDecisionRequestView,
+  GoalEventDecisionResult,
+  GoalEventExtraRequirement,
+  GoalEventExtraRequirementInput,
+  GoalEventFactsApi,
+  GoalEventFieldDefinition,
+  GoalEventFieldFormat,
+  GoalEventFieldSource,
+  GoalEventJudgmentInput,
+  GoalEventJudgmentVerdict,
+  GoalEventLatestReports,
+  GoalEventLatestReportsQuery,
+  GoalEventHistoryPage,
+  GoalEventHistoryQuery,
+  GoalEventListPage,
+  GoalEventListQuery,
+  GoalEventMutationResult,
+  GoalEventPlanningMethodRef,
+  GoalEventProgressResult,
+  GoalEventProgressSummaryView,
+  GoalEventProtocolBoundary,
+  GoalEventReportSummary,
+  GoalEventRequirementBinding,
+  GoalEventRequirementCommitment,
+  GoalEventRequirementSource,
+  GoalEventRequirementReport,
+  GoalEventRequirementStatus,
+  GoalEventResumeResult,
+  GoalEventScope,
+  GoalEventSemanticFamily,
+  GoalEventStateOwnerView,
+  GoalEventStateView,
+  GoalEventSystemPayload,
+  GoalEventTimelineItem,
+  GoalEventTimelinePage,
+  GoalHistoryLane,
+  GoalEventTrustedAuthority,
+  GoalEventTrustedAuthoritySource,
+  GoalEventTrustedDecisionRecord,
+  GoalEventTypeDefinition,
+  GoalEventTypeDefinitionInput,
+  GoalEventTypeSource,
+  GoalEventTypeSourceKind,
+  GoalEventUnmetReason,
+  GoalEventUserConclusion,
+  GoalEventWorkGap,
+  GoalEventWorkStateView,
+  GoalEventWorkStatus,
+  GoalReportWorkEventRecord,
+  GoalSystemWorkEventRecord,
+  GoalWorkEventJudgment,
+  GoalWorkEventRecord,
+  PlanningMethodDefaultRequirement,
+  RecordGoalNoteInput,
+  RecordGoalProgressSummaryInput,
+  RecordGoalUserDecisionInput,
+  ReopenCompletedEventWorkInput,
+  ReportGoalEventsInput,
+  ReportGoalEventsResult,
+  ReportGoalWorkEventInput,
+  RequestGoalDecisionInput,
+  ResolvedPlanningEventAdoption,
+  ResumeGoalEventWorkInput,
+  SetGoalEventAgreementInput,
+  SubmitGoalEventClosureInput,
+} from "./goal-events.js";
+export {
+  goalEventClosureKinds,
+  goalEventConcernActions,
+  goalEventConcernStatuses,
+  goalEventDecisionEffectKinds,
+  goalEventFieldFormats,
+  goalEventJudgmentVerdicts,
+  goalEventSemanticFamilies,
+  goalEventSystemOperations,
+  goalEventTrustedAuthoritySources,
+  goalEventTypeSourceKinds,
+  goalEventUserConclusionVerdicts,
+  goalEventWorkStatuses,
+} from "./goal-events.js";
 export interface GoalContractRevisionRecord {
   goal_id: string;
   board_id: string;

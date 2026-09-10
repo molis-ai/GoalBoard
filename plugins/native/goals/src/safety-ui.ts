@@ -229,38 +229,7 @@ function renderImpactWorkbench(item: GoalsSafetyItem, editable = true, showHeadi
     </section>`;
 }
 
-function renderSafety(item: GoalsSafetyItem, view: GoalsSafetyView, editable = true): string {
-  return `<div class="safety-workbench" id="risk-workbench-${escapeHtml(item.goal.goal_id)}">
-    ${renderRiskWorkbench(item, view, editable)}
-    ${renderImpactWorkbench(item, editable)}
-  </div>`;
-}
-
-
-function renderQuickRiskForm(item: GoalsSafetyItem, view: GoalsSafetyView): string {
-  if (item.goal.archived_at || item.goal.trashed_at) return "";
-  return `<form class="risk-form quick-record-form" data-risk-create-form data-live-form="risk-quick-${escapeHtml(item.goal.goal_id)}" data-goal-id="${escapeHtml(item.goal.goal_id)}" novalidate>
-    ${renderRiskFactsForm(null, item.goal.goal_id, view)}
-    <label class="risk-form-wide"><span>${L("为什么现在记录")}</span><textarea name="reason" rows="2" required placeholder="${L("说明这项风险为什么需要现在进入 Goal 记录")}"></textarea></label>
-    <p class="form-error risk-form-wide" data-risk-error role="alert" hidden></p>
-    <footer class="risk-form-wide"><span>${L("保存后会回到当前 Goal，并保留在完整记录中。")}</span><button class="button-primary" type="submit">${L("记录风险")}</button></footer>
-  </form>`;
-}
-
-function renderQuickImpactForm(item: GoalsSafetyItem): string {
-  if (item.goal.archived_at || item.goal.trashed_at) return "";
-  return `<form class="impact-form quick-record-form" data-impact-create-form data-live-form="impact-quick-${escapeHtml(item.goal.goal_id)}" data-goal-id="${escapeHtml(item.goal.goal_id)}" novalidate>
-    ${renderImpactFactsForm(null, item.goal.goal_id)}
-    <p class="form-error impact-form-wide" data-impact-error role="alert" hidden></p>
-    <footer class="impact-form-wide"><span>${L("保存后会参与并行工作冲突判断。")}</span><button class="button-primary" type="submit">${L("记录影响范围")}</button></footer>
-  </form>`;
-}
-
-  function renderProgressRiskSummary(risks: readonly Pick<GoalsSafetyRisk, "risk_id" | "description" | "state" | "blocking_mode">[]): string {
-    const activeRisks = risks.filter(risk => risk.state === "open" || risk.state === "triggered");
-    return `<div class="risk-summary"><header><div><h3>${L("需要留意的风险")}</h3><p>${L("这里只显示仍可能影响推进或完成的风险。")}</p></div><strong>${activeRisks.length}</strong></header>${activeRisks.length ? `<ul>${activeRisks.map((risk) => `<li><a href="#risk-${encodeURIComponent(risk.risk_id)}"><span><strong>${escapeHtml(risk.description)}</strong><small>${escapeHtml(riskStateEffect(risk.blocking_mode, risk.state))}</small></span>${icon("chevron-right")}</a></li>`).join("")}</ul>` : `<p class="clear-row">${icon("check")}${L("当前没有需要处理的开放风险。")}</p>`}</div>`;
-  }
-  return { renderRiskDecision: createRiskDecisionRenderer(primitives), renderRiskWorkbench, renderImpactWorkbench, renderSafety, renderQuickRiskForm, renderQuickImpactForm, renderProgressRiskSummary };
+  return { renderRiskDecision: createRiskDecisionRenderer(primitives), renderRiskWorkbench, renderImpactWorkbench };
 }
 
 export type GoalsSafetyRenderer = ReturnType<typeof createSafetyRenderer>;
@@ -268,15 +237,11 @@ export type GoalsSafetyUiModel = { primitives: GoalsSafetyUiPrimitives } & (
   | { kind: "risk-decision"; args: Parameters<GoalsSafetyRenderer["renderRiskDecision"]> }
   | { kind: "risk"; args: Parameters<GoalsSafetyRenderer["renderRiskWorkbench"]> }
   | { kind: "impact"; args: Parameters<GoalsSafetyRenderer["renderImpactWorkbench"]> }
-  | { kind: "safety"; args: Parameters<GoalsSafetyRenderer["renderSafety"]> }
-  | { kind: "quick-risk"; args: Parameters<GoalsSafetyRenderer["renderQuickRiskForm"]> }
-  | { kind: "quick-impact"; args: Parameters<GoalsSafetyRenderer["renderQuickImpactForm"]> }
-  | { kind: "risk-summary"; args: Parameters<GoalsSafetyRenderer["renderProgressRiskSummary"]> }
 );
 
 export const goalsSafetyUiContribution: UiContribution<GoalsSafetyUiModel> = {
   descriptor: { contribution_id: GOALS_SAFETY_UI_CONTRIBUTION_ID, plugin_id: "io.goalboard.native.goals", kind: "embedded", label: "Goal risks and impact",
-    surfaces: ["risk-decision","risk","impact","safety","quick-risk","quick-impact","risk-summary"].map(surface_id => ({ surface_id, target_slot_id: "workbench.main", format: "declarative-html" })), slots: [] },
+    surfaces: ["risk-decision","risk","impact"].map(surface_id => ({ surface_id, target_slot_id: "workbench.main", format: "declarative-html" })), slots: [] },
   render({ surface, model }) {
     if (surface !== model.kind) throw new Error("Goals safety surface does not match its model");
     const renderer = createSafetyRenderer(model.primitives);
@@ -284,10 +249,6 @@ export const goalsSafetyUiContribution: UiContribution<GoalsSafetyUiModel> = {
       case "risk-decision": return renderer.renderRiskDecision(...model.args);
       case "risk": return renderer.renderRiskWorkbench(...model.args);
       case "impact": return renderer.renderImpactWorkbench(...model.args);
-      case "safety": return renderer.renderSafety(...model.args);
-      case "quick-risk": return renderer.renderQuickRiskForm(...model.args);
-      case "quick-impact": return renderer.renderQuickImpactForm(...model.args);
-      case "risk-summary": return renderer.renderProgressRiskSummary(...model.args);
     }
   },
 };

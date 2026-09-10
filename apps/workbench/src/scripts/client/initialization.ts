@@ -61,7 +61,6 @@ export const CLIENT_INITIALIZATION_SCRIPT = `      const reviewForm = submittedF
     addEventListener("pagehide", saveUiState);
     addEventListener("keydown", (event) => {
       if (handleGoalWorkTabKeyboard(event)) return;
-      if (handleGoalPanelKeyboard(event)) return;
       const currentFocusSection = event.target?.closest?.("[data-focus-section-trigger]:not([data-goal-factor-tab])");
       if (currentFocusSection && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
         const triggers = [...currentFocusSection.closest("[data-focus-section-deck]").querySelectorAll("[data-focus-section-card-row] > [data-focus-section-card] > [data-focus-section-trigger]")];
@@ -84,14 +83,6 @@ export const CLIENT_INITIALIZATION_SCRIPT = `      const reviewForm = submittedF
         event.preventDefault();
         setFeedFilterOpen(false);
         feedFilterTrigger?.focus();
-        return;
-      }
-      const quickDialog = document.querySelector("[data-quick-record-dialog][open]");
-      if (event.key === "Escape" && quickDialog) {
-        event.preventDefault();
-        quickDialog.close();
-        resetQuickRecordDialog(quickDialog);
-        quickDialog._opener?.focus();
         return;
       }
       handleGoalDialogEscape(event);
@@ -124,7 +115,10 @@ export const CLIENT_INITIALIZATION_SCRIPT = `      const reviewForm = submittedF
     } catch {}
     if (!restoredUi) {
       setWorkspaceMode("focus", false);
-      setGoalPanel(goalPanelFromHash() || "overview", false);
+      bindGoalEventDocument();
+      openEventReaderFromHash();
+      const initialFactor = goalFactorFromHash();
+      if (initialFactor) setGoalFactor(initialFactor, false);
       if (feedDirectory) setFeedPreset("inbox_message", false);
       if (desktopDirectoryPanels.length) {
         setDesktopDirectory(decisionView ? "feed" : treePane?.dataset.desktopDirectory || "root", false, false);

@@ -52,4 +52,11 @@ export const GOALS_DOCUMENT_EN: Record<string, string> = {
   "Goal 区域响应不完整": "The Goal section response is incomplete",
   "无法载入这个 Goal 区域": "Could not load this Goal section",
   "{message}，点击重试": "{message}. Select Retry to try again.",
+  "原 Goal 标准": "Original Goal standard",
+  "这里保留目标已保存的原验收标准；当前结果以上方状态为准。": "This keeps the Goal’s saved original acceptance criteria. Current results follow the status above.",
+  "标准编号": "Criterion ID",
+  "判断方式": "Decision method",
+  "目标值": "Target",
+  "所需证据": "Required evidence",
+  "未指定": "Not specified",
 };

@@ -196,9 +196,16 @@ export function hydratePlanningMethodPack(pack: PlanningMethodPack): PlanningMet
   const storedInstructions = typeof (pack as { instructions?: unknown }).instructions === "string"
     ? (pack as { instructions: string }).instructions.trim()
     : "";
+  const baseline = pack.method_id
+    ? BUILTIN_PLANNING_METHOD_PACKS.find((candidate) => candidate.method_id === pack.method_id)
+    : undefined;
   return {
     ...pack,
     instructions: storedInstructions || compilePlanningMethodInstructions(legacyInstructionSource(pack)),
+    event_types: Array.isArray(pack.event_types) ? pack.event_types : (baseline?.event_types ?? []),
+    default_requirements: Array.isArray(pack.default_requirements)
+      ? pack.default_requirements
+      : (baseline?.default_requirements ?? []),
   };
 }
 
@@ -242,6 +249,11 @@ export function normalizePlanningMethodPack(
   };
   const normalized: PlanningMethodPack = {
     ...normalizedFields,
+    event_types: (input.event_types ?? []).map((type) => ({
+      ...type,
+      fields: type.fields.map((field) => ({ ...field })),
+    })),
+    default_requirements: (input.default_requirements ?? []).map((requirement) => ({ ...requirement })),
     instructions: input.instructions?.trim()
       || compilePlanningMethodInstructions(legacyInstructionSource(normalizedFields)),
   };

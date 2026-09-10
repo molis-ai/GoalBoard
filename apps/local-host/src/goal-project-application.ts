@@ -36,6 +36,7 @@ import {
   transitionGoalRevisionDependents,
   GoalTreeDecisionNormalizer,
   LifecycleReconciliationApplication,
+  GoalEventApplication,
   contractRevisionIsCompatible,
   deriveGoalActionProjection,
   type ExecutionValidationApplicationApi,
@@ -89,6 +90,7 @@ export class GoalProjectApplication {
   readonly execution: ExecutionApplicationApi;
   readonly governance: GovernanceApplicationApi;
   readonly goals: GoalsApplicationApi<ActionTransitionReceipt>;
+  readonly goalEvents: GoalEventApplication;
   readonly goalInputs: GoalInputBindingsApi;
   readonly goalQueries: GoalReadApplication;
   private readonly workStateQueries: GoalWorkStateQueries;
@@ -164,6 +166,7 @@ export class GoalProjectApplication {
       reviews: governanceModule.reviews,
       records: governanceModule.records,
       decisions: governanceModule.decisions,
+      eventDecisions: governanceModule.eventDecisions,
     };
     this.goalInputs = new GoalInputBindings(this.store.db, createContextLedger(this.store.db, {
       authorize: (access) => access.scope.kind === "personal",
@@ -263,6 +266,13 @@ export class GoalProjectApplication {
       lifecycle: goalsModule.lifecycle,
       planning: goalsModule.planning,
     };
+    this.goalEvents = new GoalEventApplication({
+      query: goalsModule.query,
+      commands: goalsModule.commands,
+      events: goalsModule.events,
+      planning: goalsModule.planning,
+      recordTrustedDecision: (input) => this.governance.eventDecisions.record(input),
+    });
     this.goalQueries = new GoalReadApplication(goalsModule.query, {
       now: () => this.clock(),
       snapshot: (boardId) => this.store.snapshot(boardId),
@@ -275,6 +285,7 @@ export class GoalProjectApplication {
     });
     this.eligibility = new GoalEligibility({
       goals: this.goalsModule.query, execution: this.execution.query, governance: this.governance.query,
+      events: this.goalsModule.events,
       snapshot: boardId => this.store.snapshot(boardId),
     });
     this.workStateQueries = new GoalWorkStateQueries({

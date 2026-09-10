@@ -7,6 +7,7 @@ import type { GoalPresentationState } from "./tree-order.js";
 import type { createGoalActionPresenter } from "./action-presentation.js";
 import type { GoalsDocumentReadPorts } from "./document-read-ports.js";
 import type { createGoalDocumentIndex } from "./document-index.js";
+import { eventDirectoryPresentation } from "./event-document-model.js";
 
 const REVIEW_LABELS: Record<string, string> = {
   self_verifier: "自检",
@@ -39,13 +40,18 @@ export function projectGoalDocument(goal: GoalRecord, input: {
   const actionProjection = actionProjections.get(goal.goal_id);
   if (!actionProjection) throw new Error(`Goal 动作投影不存在: ${goal.goal_id}`);
   const actionPresentation = presentGoalAction(goal, actionProjection);
-  const visibleStatusLabel = status === "replaced"
-    ? "已替代"
-    : status === "archived"
-      ? "已归档"
-      : status === "trashed"
-        ? "回收站"
-        : actionPresentation.status_label;
+  const eventOwned = input.ports.eventWork?.isEventStateOwner(boardId, goal.goal_id) === true;
+  const eventPresentation = input.ports.eventWork
+    ? eventDirectoryPresentation(input.ports.eventWork.readState(boardId, goal.goal_id), goal)
+    : null;
+  const visibleStatusLabel = eventPresentation?.status_label
+    ?? (status === "replaced"
+      ? "已替代"
+      : status === "archived"
+        ? "已归档"
+        : status === "trashed"
+          ? "回收站"
+          : actionPresentation.status_label);
   const { claims, runs } = ports.projectGoalLifecycle(snapshot, goal.goal_id);
   const evidence = evidenceByGoal.get(goal.goal_id) ?? [];
   const reviewObligations = reviewObligationsByGoal.get(goal.goal_id) ?? [];
@@ -112,13 +118,14 @@ export function projectGoalDocument(goal: GoalRecord, input: {
     .sort((left, right) => right.seq - left.seq);
   return {
     goal,
-    status,
+    status: eventPresentation?.status ?? status,
     action_projection: actionProjection,
-    display_status: actionPresentation.status,
+    display_status: eventPresentation?.display_status ?? actionPresentation.status,
     work_state: workState.work_state,
     status_label: visibleStatusLabel,
-    main_action_label: actionPresentation.action_label,
-    action_summary: actionPresentation.summary,
+    main_action_label: eventPresentation?.main_action_label ?? actionPresentation.action_label,
+    action_summary: eventPresentation?.action_summary ?? actionPresentation.summary,
+    event_work: eventOwned,
     reasons: workState.reasons,
     active_claim_actor: activeClaim?.actor_id ?? null,
     active_claim: activeClaim ?? null,

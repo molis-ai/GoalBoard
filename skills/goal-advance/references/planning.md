@@ -2,17 +2,19 @@
 
 Read this reference when starting or resuming a rough idea, decomposing or rewiring complex work, closing a compound parent, or applying a changed requirement. Its outcome is a user-readable, professionally grounded Goal Tree Proposal—not a mechanical checklist.
 
-## Start or resume the same Goal clarification
+## Start or resume the same Goal
 
-For a new rough idea, call `goalboard_v1_draft_dialogue_start` with the user's words. It creates only the smallest `draft / abstract` Goal plus the clarifier Claim and Run. Runtime interpretations are not canonical facts.
+For a new rough idea, call `goalboard_v1_goal_intent_create` with a recognizable title. It saves the original intent as a Draft and makes the event service the state owner. Do not invent why, inputs, outputs, split checks, or a default template. Creating a Goal is not completion. Planning is optional: `event_configure` may adopt types and selected default requirements at the saved source version, or register local types with no template. Template edits later do not change this Goal’s adopted meaning.
 
-For a named existing Goal returned by Available with `role=clarifier`, read `goalboard_v1_contract`. This includes a Draft and an accepted Goal whose decomposition is still `abstract` or `frontier_open`:
+Do not start a new idea with `draft_dialogue_start`. That path remains only for an untransferred `legacy_claim_run` Draft that still uses a clarifier Claim/Run.
 
-- resume an open clarification session with `goalboard_v1_draft_dialogue_resume`;
-- otherwise start clarification on that same `goal_id` with `draft_dialogue_start` rather than creating a duplicate; after `available → select_goal`, start reuses that same Runtime's active clarifier Run;
+For a named existing Goal:
+
+- if `goal_state.protocol.kind` is `event_work`, continue with `goal_state` / `event_configure` / `event_report`;
+- if it is `legacy_claim_run` and returned by Available with `role=clarifier`, read `goalboard_v1_contract`. Resume an open clarification session with `goalboard_v1_draft_dialogue_resume`; otherwise start clarification on that same `goal_id` with `draft_dialogue_start` rather than creating a duplicate. After `available → select_goal`, start reuses that same Runtime's active clarifier Run;
 - if another Runtime owns an active dialogue, report the conflict instead of taking it over.
 
-Starting or resuming clarification never downgrades an accepted Contract to Draft. For an accepted open frontier, dialogue facts support a Goal Tree Proposal that adds or closes decomposition; they do not rewrite the accepted Contract directly.
+Starting or resuming untransferred clarification never downgrades an accepted Contract to Draft. For an accepted open frontier, dialogue facts support a Goal Tree Proposal that adds or closes decomposition; they do not rewrite the accepted Contract directly. An event-work parent may record its own integration or acceptance; child count does not prove the parent complete.
 
 Tell the user that the idea was saved and ask the single question most likely to change the outcome, boundary, acceptance direction, relationship, or decomposition.
 
@@ -67,7 +69,7 @@ Call `goalboard_v1_planning_methods` with `include_instructions=false` first. Th
 - Compare selected coverage with all available method summaries. An unselected method that contributes a material uncovered check must be added.
 - If no domain method fits, use `meta-domain-pack-builder` to research domain objects, lifecycle, professional artifacts, evidence, dependencies, and failures. Save a user-confirmed project method before using it to split the real Goal.
 
-After selection, call `goalboard_v1_planning_methods` with exactly those `method_ids`. Verify the response has the same `catalog_id` and that `returned_method_ids` contains every selected ID, then read every returned `methods[].instructions` body completely. If the catalog changed, restart selection from the new lightweight catalog. Treat bodies as complementary planning Skills, not serial phases and not one Goal per method. The legacy no-argument call still returns the whole library for compatibility, but do not use it for normal planning because large catalogs can exceed the tool output budget.
+After selection, call `goalboard_v1_planning_methods` with exactly those `method_ids`. Verify the response has the same `catalog_id` and that `returned_method_ids` contains every selected ID, then read every returned `methods[].instructions` body completely. Optional `event_types` and `default_requirements` are starting points for `event_configure`, not automatic completion rules: adopting a method saves that version and may register its types, but default requirements become current only when explicitly selected. A Goal created without a template must not receive a hidden engineering pack. If the catalog changed, restart selection from the new lightweight catalog. Treat bodies as complementary planning Skills, not serial phases and not one Goal per method. The legacy no-argument call still returns the whole library for compatibility, but do not use it for normal planning because large catalogs can exceed the tool output budget.
 
 ### 3. Recall connected themes through their outputs
 

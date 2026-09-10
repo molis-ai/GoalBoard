@@ -1,9 +1,6 @@
 import { GOALS_PROPOSAL_MOBILE_STYLES, GOALS_LEGACY_PROPOSAL_MOBILE_STYLES } from "@adeptify/goalboard-plugin-goals";
 export const RESPONSIVE_STYLES = `
   @container (max-width: 660px) {
-    .goal-workspace-nav { margin-inline: -4px; padding-inline: 4px; }
-    .goal-workspace-nav button { flex: 1 0 auto; min-height: 42px; padding-inline: 8px; font-size: 12px; }
-    .goal-workspace-nav button svg { display: none; }
     .goal-factor-nav, .goal-factor-panels { margin-left: 0; }
     .goal-factor-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .goal-factor-nav button:nth-child(2) { border-right: 0; }
@@ -19,9 +16,6 @@ export const RESPONSIVE_STYLES = `
     .evidence-form-row { grid-template-columns: 1fr; }
     .evidence-submit footer { align-items: stretch; flex-direction: column; }
     .evidence-submit footer button { align-self: flex-end; }
-    .quick-record-form[data-evidence-form] .evidence-form-row { grid-template-columns: 1fr; }
-    .quick-record-form[data-evidence-form] footer { align-items: stretch; flex-direction: column; }
-    .quick-record-form[data-evidence-form] footer button { align-self: flex-end; }
     .event-ledger details > summary { grid-template-columns: 1fr; gap: 3px; }
     .event-ledger dl div { grid-template-columns: 1fr; gap: 2px; }
     .goal-situation { grid-template-columns: 1fr 1fr; }

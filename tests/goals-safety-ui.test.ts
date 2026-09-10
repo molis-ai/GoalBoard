@@ -22,24 +22,6 @@ function fixture() {
   return { risk, item, archived, view: { goals: [item], archived_goals: [archived] } };
 }
 
-test("progress risk summary lists only open or triggered risks with encoded links and escaped descriptions", () => {
-  const risks = [
-    { risk_id: 'open/id', description: 'Open "<risk>', state: "open" as const, blocking_mode: "claim" as const },
-    { risk_id: 'triggered#id', description: "Triggered risk", state: "triggered" as const, blocking_mode: "completion" as const },
-    ...(["resolved", "accepted", "expired"] as const).map(state => ({ risk_id: state, description: "Hidden " + state, state, blocking_mode: "completion" as const })),
-  ];
-  const before = structuredClone(risks), html = renderer.renderProgressRiskSummary(risks);
-  assert.match(html, /<strong>2<\/strong>/);
-  assert.match(html, /href="#risk-open%2Fid"/);
-  assert.match(html, /href="#risk-triggered%23id"/);
-  assert.match(html, /Open &quot;&lt;risk&gt;/);
-  assert.doesNotMatch(html, /Hidden resolved|Hidden accepted|Hidden expired|<form/);
-  assert.deepEqual(risks, before);
-  const empty = runWithLocale("en", () => renderer.renderProgressRiskSummary(risks.slice(2)));
-  assert.match(empty, /There are no open risks that need action now/);
-  assert.doesNotMatch(empty, /<ul>/);
-});
-
 test("Goals safety contribution preserves editable facts, linked archived Goals and escaped content", () => {
   assert.ok(createWorkbenchUiHost().list().some(entry => entry.contribution_id === GOALS_SAFETY_UI_CONTRIBUTION_ID));
   const { item, view } = fixture();
@@ -56,10 +38,6 @@ test("Goals safety contribution preserves editable facts, linked archived Goals 
   assert.match(html, /&lt;script&gt;alert\(&quot;risk&quot;\)&lt;\/script&gt;/);
   assert.doesNotMatch(html, /<script>|risk-decision-link/);
   assert.match(html, /当前会阻止所有关联 Goal 被标记为完成/);
-  assert.match(renderer.renderQuickRiskForm(item, view), /data-live-form="risk-quick-goal-one"/);
-  assert.match(renderer.renderQuickRiskForm(item, view), /name="reason" rows="2" required/);
-  assert.match(renderer.renderQuickImpactForm(item), /data-live-form="impact-quick-goal-one"/);
-  assert.match(renderer.renderQuickImpactForm(item), /name="goal_id" value="goal-one"/);
 });
 
 test("risk decision links consume explicit user actions, while archive and record views stay read-only", () => {
@@ -74,13 +52,8 @@ test("risk decision links consume explicit user actions, while archive and recor
   assert.match(records, /id="record-risk-risk-one"/);
   assert.doesNotMatch(records, /<form|risk-decision-link/);
   item.goal.archived_at = "2026-09-05";
-  assert.doesNotMatch(renderer.renderSafety(item, view), /<form|<input|<textarea/);
-  assert.equal(renderer.renderQuickRiskForm(item, view), "");
-  assert.equal(renderer.renderQuickImpactForm(item), "");
-  item.goal.archived_at = null;
-  item.goal.trashed_at = "2026-09-05";
-  assert.equal(renderer.renderQuickRiskForm(item, view), "");
-  assert.equal(renderer.renderQuickImpactForm(item), "");
+  assert.doesNotMatch(renderer.renderRiskWorkbench(item, view), /<form|<input|<textarea/);
+  assert.doesNotMatch(renderer.renderImpactWorkbench(item), /<form|<input|<textarea/);
 });
 
 test("resolved risk evidence and missing historical basis are displayed without rewriting state", () => {
@@ -112,10 +85,10 @@ test("impact edit and deactivation history preserve state-specific controls and 
   const history = html.slice(html.indexOf('id="impact-old-impact"'));
   assert.doesNotMatch(history, /<form/);
   assert.match(html, /name="input_snapshot" value="commit:\/\/release"/);
-  const english = runWithLocale("en", () => renderer.renderSafety(item, view));
+  const english = runWithLocale("en", () => renderer.renderRiskWorkbench(item, view) + renderer.renderImpactWorkbench(item));
   assert.match(english, /Replaced scope/);
   assert.doesNotMatch(english, /当前会阻止所有关联 Goal 被标记为完成/);
-  assert.match(runWithLocale("zh", () => renderer.renderSafety(item, view)), /当前会阻止所有关联 Goal 被标记为完成/);
+  assert.match(runWithLocale("zh", () => renderer.renderRiskWorkbench(item, view)), /当前会阻止所有关联 Goal 被标记为完成/);
   item.risks = [];
   assert.match(renderer.renderRiskWorkbench(item, view, false), /当前没有已记录的风险/);
 });

@@ -1,6 +1,7 @@
 import type {
   ClarificationAssumption, ClarificationAssumptionInput, ClarificationFact, ClarificationFactInput,
   ContractFieldSource, GovernanceProvenanceApi,
+  GoalEventTrustedAuthority,
   GoalTreeProposalItemInput, GoalTreeProposalItemRecord,
 } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
@@ -120,6 +121,34 @@ export class GovernanceProvenance implements GovernanceProvenanceApi {
     }
     const missingSources = [...requiredFields].filter((field) => !seenFields.has(field));
     if (missingSources.length) throw this.error("contract_proposal.source_missing", `Contract Proposal 缺少字段来源: ${missingSources.join("、")}`);
+  }
+
+  validateEventDecisionAuthority(authority: GoalEventTrustedAuthority): GoalEventTrustedAuthority {
+    if (!authority || typeof authority !== "object") {
+      throw this.error("event_decision.untrusted_actor", "用户决定必须来自 Host 受保护入口，不能由客户端自填身份");
+    }
+    if (authority.actor_kind !== "user") {
+      throw this.error("event_decision.untrusted_actor", "用户决定必须来自可信用户入口，Runtime 不能声明自己是用户");
+    }
+    if (authority.authority_source !== "web" && authority.authority_source !== "management") {
+      throw this.error(
+        "event_decision.runtime_dialogue_not_user",
+        "Runtime 对话摘要引用不是系统读取到的用户消息，不能当作用户批准",
+      );
+    }
+    const actorId = authority.actor_id?.trim();
+    const conversationRef = authority.conversation_ref?.trim();
+    const messageRef = authority.message_ref?.trim();
+    if (!actorId || !conversationRef || !messageRef) {
+      throw this.error("event_decision.untrusted_actor", "可信用户决定需要 Host 注入的 actor、会话与消息来源");
+    }
+    return {
+      actor_id: actorId,
+      actor_kind: "user",
+      authority_source: authority.authority_source,
+      conversation_ref: conversationRef,
+      message_ref: messageRef,
+    };
   }
 
   private text(value: string, code: string, message: string): string {

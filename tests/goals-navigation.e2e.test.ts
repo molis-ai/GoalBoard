@@ -35,18 +35,12 @@ test("Goal navigation preserves history, keyboard focus, failed selection recove
   assert.equal(await evaluate("document.querySelector('#goal-document-pane').getAttribute('aria-labelledby')"),
     await evaluate("document.querySelector('[data-work-tab=" + JSON.stringify("RELEASE") + "]').id"));
 
-  await click("#goal-tab-overview-RELEASE");
-  await key("End", 35);
-  await waitFor("document.querySelector('[data-goal-records-content]')?.dataset.loaded === 'true'");
-  assert.equal(await evaluate("document.activeElement.dataset.goalTab"), "records");
-  await key("Home", 36);
-  assert.equal(await evaluate("document.activeElement.dataset.goalTab"), "overview");
-  await click("#goal-tab-factors-RELEASE");
-  await waitFor("document.querySelector('#goal-panel-factors-RELEASE').dataset.loaded === 'true'");
-  await click('[data-goal-factor-tab="relations"]');
-  await key("End", 35);
-  assert.equal(await evaluate("document.activeElement.dataset.goalFactorTab"), "rules");
-  assert.equal(await evaluate("document.querySelector('[data-goal-factor-tab=" + JSON.stringify("rules") + "]').getAttribute('aria-selected')"), "true");
+  await waitFor("document.querySelector('[data-goal-event-document]')?.dataset.goalView === 'RELEASE'");
+  const timelineItem = "document.querySelector('[data-timeline-item]')";
+  if (await evaluate(timelineItem + " != null")) {
+    await click("[data-timeline-item]");
+    assert.equal(await evaluate("document.querySelector('[data-timeline-item][aria-current=\"true\"]') != null"), true);
+  }
 
   await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/CORE/document*"] }, sessionId);
   await click('.tree-node[data-select-goal="CORE"]');
@@ -104,6 +98,8 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   assert.equal(await evaluate("Boolean(document.querySelector('[data-set-active-goal]'))"), false);
 
   await click('.tree-node[data-select-goal="CORE"]');
+  await waitFor("document.querySelector('[data-goal-view=" + JSON.stringify("CORE") + "]')");
+  await click('.goal-more > summary');
   await waitFor("document.querySelector('[data-goal-archive=" + JSON.stringify("true") + "]')");
   await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/CORE/archive"] }, sessionId);
   await click('[data-goal-archive="true"]');

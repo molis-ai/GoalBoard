@@ -1,6 +1,8 @@
 # Execute, review, complete, and recover Goal work
 
-Read this reference when the user asks to continue available work, advance an accepted Goal, review or revalidate evidence, complete work, or recover from an execution failure.
+Read this reference only when `goal_state.protocol.kind` is `legacy_claim_run`, or when the user asks to continue available Claim/Run work, review or revalidate evidence, or recover a Host lease on an untransferred Goal. This is not the default continue path for new or transferred Goals.
+
+If `protocol.kind` is `event_work`, stay on `goal_state` / `event_configure` / `event_report`. Do not Claim a role or start a Run to record ordinary facts. Reporting is not completion. Untransferred Goals are readable on the new timeline; new event writes require the explicit “使用事件记录继续” action. After transfer, old state writes are rejected. Original Run/Evidence/Review/Decision records stay readable by original ID and source; they are not rewritten as fake approvals.
 
 ## Choose work through Available
 

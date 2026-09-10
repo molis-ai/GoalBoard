@@ -169,7 +169,7 @@ function recentDecisionResults(view: GoalsDecisionView): RecentDecisionResult[] 
         effects: [event.type.endsWith("approved")
           ? L("目标、范围和完成标准已成为正式依据；满足其他条件后可以开始。")
           : L("这份修改没有写入正式目标；修改意见已保留。")],
-        links: goal ? [{ href: goalResultHref(goal, `goal-panel-overview-${goal.goal.goal_id}`), label: L("查看「{title}」的目标说明", { title: goal.goal.title }) }] : [],
+        links: goal ? [{ href: goalResultHref(goal, `goal-description-${goal.goal.goal_id}`), label: L("查看「{title}」的目标说明", { title: goal.goal.title }) }] : [],
       });
       continue;
     }
@@ -188,7 +188,7 @@ function recentDecisionResults(view: GoalsDecisionView): RecentDecisionResult[] 
         effects: [event.type.endsWith("approved")
           ? L("这项工作已经成为独立 Goal；如果还要调整关系，会继续出现在待决定中。")
           : L("这项工作没有加入 Goal Tree；你的意见已保留。")],
-        links: goal ? [{ href: goalResultHref(goal, `goal-panel-overview-${goal.goal.goal_id}`), label: L("查看新 Goal「{title}」", { title: goal.goal.title }) }] : [],
+        links: goal ? [{ href: goalResultHref(goal, `goal-description-${goal.goal.goal_id}`), label: L("查看新 Goal「{title}」", { title: goal.goal.title }) }] : [],
       });
       continue;
     }
@@ -217,7 +217,7 @@ function recentDecisionResults(view: GoalsDecisionView): RecentDecisionResult[] 
           : review.verdict === "pass"
             ? L("本次用户确认已通过；Goal 是否完成仍由全部完成条件共同决定。")
             : L("本次结果没有确认通过；后续工作会保留你的判断和依据。")],
-        links: goal ? [{ href: goalResultHref(goal, `goal-panel-completion-${goal.goal.goal_id}`), label: L("查看「{title}」的完成情况", { title: goal.goal.title }) }] : [],
+        links: goal ? [{ href: goalResultHref(goal, `goal-requirements-${goal.goal.goal_id}`), label: L("查看「{title}」的完成情况", { title: goal.goal.title }) }] : [],
         reasonLabel: runtimeReview ? L("复核理由") : undefined,
       });
       continue;
@@ -253,7 +253,7 @@ function recentDecisionResults(view: GoalsDecisionView): RecentDecisionResult[] 
         state: stateLabels[proposal.state] ?? L("已处理"),
         title: proposal.summary,
         effects: effects.length ? effects : [L("决定已经记录，当前 Goal Tree 没有产生新的变化。")],
-        links: root ? [{ href: goalResultHref(root, `goal-panel-overview-${root.goal.goal_id}`), label: L("查看「{title}」", { title: root.goal.title }) }] : [],
+        links: root ? [{ href: goalResultHref(root, `goal-description-${root.goal.goal_id}`), label: L("查看「{title}」", { title: root.goal.title }) }] : [],
         reason: reasons.join("；") || event.reason,
       });
     }

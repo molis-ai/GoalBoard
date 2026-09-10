@@ -57,7 +57,7 @@ test("momentum loads on demand, retries failure, selects topology and queue, fil
   assert.equal(await evaluate(dom('[data-momentum-period-panel="30"]') + ".hidden"), false);
   assert.equal(await evaluate(dom('[data-momentum-detail="DESKTOP"]') + ".hidden"), false);
   await click('[data-momentum-detail="DESKTOP"] a[href$="/goals/DESKTOP"]');
-  await waitFor(dom("#goal-tab-overview-DESKTOP"));
+  await waitFor(dom('[data-goal-event-document][data-goal-view="DESKTOP"]'));
   assert.equal(await evaluate("location.pathname"), "/goals/DESKTOP");
   const after = store.snapshot(DEMO_BOARD_ID);
   assert.deepEqual(after.goals, before.goals);

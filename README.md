@@ -27,7 +27,7 @@ A native macOS window: focus one Goal, then open a terminal that stays bound to 
 </p>
 
 <p align="center">
-  <sub><b>Goal focus</b> · outcome, next action, and blockers &nbsp;·&nbsp; <b>Goal-bound TUI</b> · the terminal belongs to this Goal &nbsp;·&nbsp; <b>Work Capsule</b> · a quick check-in from the macOS status item</sub>
+  <sub><b>Goal workspace</b> · historical Goal-around-the-tree surface, not the current event document &nbsp;·&nbsp; <b>Goal-bound TUI</b> · the terminal belongs to this Goal &nbsp;·&nbsp; <b>Work Capsule</b> · a quick check-in from the macOS status item</sub>
 </p>
 
 ### Inside a Harness
@@ -47,7 +47,9 @@ Open GoalBoard in the Harness side browser and keep working in the same window. 
 
 The same local project in a browser. Desktop and Web share data under `~/.goalboard`.
 
-![GoalBoard Web: Goal Tree and Goal Focus](docs/screenshots/showcase/web-workspace-en-dark.jpg)
+![GoalBoard Web: Goal Tree (historical workspace surface)](docs/screenshots/showcase/web-workspace-en-dark.jpg)
+
+These images show the workspace, Goal list, Goal-bound terminal, and macOS status item. They are historical product surfaces, not the current Goal event document. The current Goal page keeps the live judgment, what is already done, the next step, and risks at the top; a time index on the left; and the selected event body on the right.
 
 Built-in Runtime recipes cover Codex, Claude Code, OpenCode, Pi Agent, and Grok Build. Other Harnesses can use the same project through GoalBoard's MCP server and shared Skill.
 
@@ -55,9 +57,9 @@ Built-in Runtime recipes cover Codex, Claude Code, OpenCode, Pi Agent, and Grok 
 
 Plain use, and the problem each one is for.
 
-### See the Goal, the next action, and why it is stuck
+### See the Goal, what is done, and what to do next
 
-Open a Goal. The page should answer three questions without reading the chat: what we are trying to get, what to do now, and why it cannot finish yet. Parent Goals organize a larger result; only a concrete leaf is executable.
+Open a Goal. The page should answer three questions without reading the chat: what we are trying to get, what is already done, and what to do next. A parent Goal can record its own integration or acceptance. The number of child Goals does not prove the parent is complete.
 
 ### See who depends on whom
 
@@ -65,23 +67,23 @@ The Graph is for when the list is no longer enough. Parent/child is structure. A
 
 ### You confirm material changes
 
-A Runtime may discover new work, a new dependency, or a risk. It can propose. It cannot quietly rewrite an accepted Goal. The Decision Center puts the question, why it matters now, the evidence or the gap, and what each choice changes in one place.
+A Runtime may discover new work, a new dependency, or a risk. It can propose. It cannot quietly rewrite an accepted Goal, and it cannot fill in a user identity. Trusted user decisions are recorded in Host Web or the management entry. The Decision Center puts the question, why it matters now, the evidence or the gap, and what each choice changes in one place.
 
 ### Keep the terminal on the Goal
 
-Open Codex, Claude Code, or a custom command from an executable leaf. That terminal stays owned by that Goal — switching Focus later does not silently reassign it. A parent Goal does not pretend to be executable; it sends you to a child.
+Open Codex, Claude Code, or a custom command from a Goal. That terminal stays owned by that Goal — switching Focus later does not silently reassign it, and GoalBoard does not auto-send. A parent Goal can still record integration work; it does not become “done” just because its children exist.
 
 On macOS, the same current Goal is also on the **top menu bar**. Click the GoalBoard status icon for the project, the focused Goal, its state, and the next action; click away and the panel disappears.
 
 ### Treat “done” as something you can check
 
-Completion is not a sentence in chat. Each Goal has criteria. Evidence maps to those criteria. The required review has to pass. The record keeps who worked it, what was produced, and why it counts as complete.
+Completion is not a sentence in chat. Ordinary reports save partial results and sources. Support, counter-evidence, or unknown only update the related requirements; ordinary support does not complete the Goal. An explicit close-out checks the current agreement, real support, and applicable blockers. Recorded is not the same as completion applied. Work can continue with no requirements yet; it cannot claim done.
 
-If something new shows up while you work — proof, a risk, an affected area, a relation — attach it to the current Goal with **Quick add**. It stays on the Goal instead of disappearing into the thread.
+If something new shows up while you work, attach an ordinary note with **Add a note**. Changes to promises, authorization, or completion requirements go through the event form or a trusted user decision, not a silent rewrite.
 
 ### Tell the Runtime how this project should be split
 
-Planning methods are not a task template and they do not auto-build the tree. They are the questions a Runtime must work through before it proposes a split: what to cover, what depends on what, what “done” must show. A project can combine a work-type method and a domain method. The result is still a proposal you confirm.
+A new intent can be saved without a plan, starting from local event types. Planning methods are optional: they offer types and default requirements you may adopt. The adopted version and this Goal’s local changes stay; later template edits do not change old meaning. Methods are not a task template and they do not auto-build the tree. A project can combine a work-type method and a domain method. Tree changes are still a proposal you confirm.
 
 ### Connect a Runtime on purpose
 
@@ -121,7 +123,7 @@ pnpm install:local
 
 Open `http://127.0.0.1:4173` and enter the demo project. In “Settings → Runtime,” preview and confirm an integration, then **open a new Runtime Session**:
 
-> Use GoalBoard to connect to the demo project, choose one currently executable Goal, and tell me its outcome, next action, and completion requirements.
+> Use GoalBoard to connect to the demo project, open a Goal, and tell me the current judgment, what is already done, the next step, and the completion requirements.
 
 Runtimes read MCP and Skill manifests at Session startup, so a newly connected Runtime needs a new Session.
 
@@ -148,7 +150,9 @@ Each architecture ships separately because GoalBoard's SQLite and PTY native add
 - The authoritative project state is stored in local SQLite; GoalBoard does not bundle a model.
 - Opening a page does not bind a Session, start a Runtime, or claim work.
 - Runtime integration, terminal launch, and accepted Goal changes require explicit action or confirmation.
+- New Goals and transferred Goals use event records. Untransferred historical Goals keep their Draft and Claim/Run entries until you explicitly continue with event records.
 - GoalBoard manages Goal facts and the execution loop; it does not replace a Harness or Agent Orchestration.
+- The event workflow is currently used for local internal trial and has not been published as a new release.
 
 ## Further reading
 

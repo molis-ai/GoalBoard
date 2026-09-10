@@ -2,6 +2,7 @@ import { isRuntimeMcpTool, isRuntimeContextMcpTool, type McpToolCallContext } fr
 import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 import type { GoalBoardRuntimeConnection, GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { RuntimeProjectConnection } from "./runtime-project-connection.js";
+import { assertRuntimeGoalEventToolInput } from "./mcp-event-identity.js";
 
 type GoalBoardMcpToolCallContext = McpToolCallContext;
 export interface McpAuthorityState {
@@ -40,6 +41,7 @@ export function assertMcpToolAllowed(
       "MCP 连接拒绝：Runtime 不能覆盖宿主固定的 SQLite 或 goal_url",
     );
   }
+  assertRuntimeGoalEventToolInput(name, arguments_);
   if (isRuntimeContextMcpTool(name)) {
     requireMcpRuntimeContextHost(state, callContext);
     return;

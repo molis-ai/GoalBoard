@@ -44,30 +44,34 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
       return true;
     };
 
+    let documentReplaceGeneration = 0;
     const { loadGoalDocument } = (${GOALS_DOCUMENT_CLIENT_FACTORY_SCRIPT})({
       documentPane, documentCollection, route, translate: L, isAbortError,
       showError: (message) => showToast(message, true),
-      beforeReplace: () => {
-        abortGoalPanelRequest();
-        quickRecordRequest?.abort();
-      },
       afterReplace: () => {
+        documentReplaceGeneration += 1;
         updateAllRelationFormPreviews();
         document.querySelectorAll("[data-risk-state-form]").forEach(updateRiskStatePreview);
         document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
-        setGoalPanel(goalPanelFromHash() || "overview", false);
+        bindGoalEventDocument(pendingEventRestore);
+        pendingEventRestore = null;
+        openEventReaderFromHash();
         setGoalFactor(goalFactorFromHash() || "relations", false);
       },
     });
+    reloadGoalEventDocument = async (goalId, restore) => {
+      pendingEventRestore = restore || null;
+      return loadGoalDocument(goalId);
+    };
 
     const { selectGoal, handleGoalSelectClick, handleGoalPopState, handleGoalHashChange } =
       (${GOALS_NAVIGATION_CLIENT_FACTORY_SCRIPT})({
         decisionView, trashView, archiveView, documentPane,
         getSelected: () => selected, getActiveGoalId: () => state.active_goal_id,
         navigateToGoal: (goalId) => location.assign(globalThis.goalboardNavigationUrl(route("/goals/" + encodeURIComponent(goalId)))),
-        applySelection, abortGoalRecordsRequest, loadGoalDocument, ensureWorkTab,
+        applySelection, loadGoalDocument, ensureWorkTab,
         goalPageUrl, setWorkspaceMode, saveUiState, localPathname, visibleGoals,
-        goalPanelFromHash, setGoalPanel, goalFactorFromHash, setGoalFactor, revealDeepLinkFromId,
+        openEventReaderFromHash, goalFactorFromHash, setGoalFactor, revealDeepLinkFromId,
       });
     const { selectTreeGoal, getCollapsedTreeGoals, restoreTreeCollapsed, setSelectedStatuses, getSelectedStatuses, isTreeSearchComposing,
       setTreeFilterOpen, filterTree, bindTreeSearchEvents, bindTreeFilterTrigger,
@@ -84,8 +88,8 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
 
     const liveUiInteractionActive = () => {
       const active = document.activeElement;
-      if (active?.closest?.("[data-live-form]")) return true;
-      const dirtyVisibleForm = [...document.querySelectorAll('[data-live-form][data-live-dirty="true"]')]
+      if (active?.closest?.("[data-live-form], [data-event-form]")) return true;
+      const dirtyVisibleForm = [...document.querySelectorAll('[data-live-form][data-live-dirty="true"], [data-event-form][data-live-dirty="true"]')]
         .some((form) => form.getClientRects().length > 0);
       if (dirtyVisibleForm) return true;
       return active?.matches?.('input, textarea, select, [contenteditable="true"]') && Boolean(
@@ -94,13 +98,13 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
     };
 
     document.addEventListener("input", (event) => {
-      event.target?.closest?.("[data-live-form]")?.setAttribute("data-live-dirty", "true");
+      event.target?.closest?.("[data-live-form], [data-event-form]")?.setAttribute("data-live-dirty", "true");
     });
     document.addEventListener("change", (event) => {
-      event.target?.closest?.("[data-live-form]")?.setAttribute("data-live-dirty", "true");
+      event.target?.closest?.("[data-live-form], [data-event-form]")?.setAttribute("data-live-dirty", "true");
     });
     document.addEventListener("reset", (event) => {
-      const form = event.target?.closest?.("[data-live-form]");
+      const form = event.target?.closest?.("[data-live-form], [data-event-form]");
       if (form) requestAnimationFrame(() => form.removeAttribute("data-live-dirty"));
     });
 
@@ -147,6 +151,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
             : route(collectionPath);
         const compactRefreshPath = route("/api/board/refresh?view=" + documentCollection +
           (refreshGoalId ? "&goal_id=" + encodeURIComponent(refreshGoalId) : ""));
+        const refreshGeneration = documentReplaceGeneration;
         let pageResponse = await fetch(decisionView ? pagePath : compactRefreshPath, { cache: "no-store" });
         if (!pageResponse.ok && !decisionView) {
           pageResponse = await fetch(pagePath, { cache: "no-store" });
@@ -163,6 +168,10 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
         const nextStateNode = parsed.querySelector("#goalboard-data");
         if (!nextStateNode) throw new Error("页面状态不完整");
         const nextState = JSON.parse(nextStateNode.textContent);
+        if (!decisionView && refreshGeneration !== documentReplaceGeneration) {
+          scheduleDeferredRefresh();
+          return;
+        }
         if (decisionView) {
           const nextFeedList = parsed.querySelector("[data-feed-list]");
           const nextFeedWorkbench = parsed.querySelector("[data-feed-workbench]");
@@ -237,6 +246,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
         if (!decisionView && selected) applySelection(selected, false);
         applyUiState(ui);
         updateAllRelationFormPreviews();
+        bindGoalEventDocument();
         const refreshedGraph = graphElement();
         if (refreshedGraph?.dataset.loaded === "true") {
           if (workspace.dataset.workspaceMode === "graph") void loadGoalGraph(true);
@@ -303,7 +313,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
     };
 
     const showFactorReceipt = (factor, titleText, detailText) => {
-      setGoalPanel("factors", false);
+      openEventReader("description");
       setGoalFactor(factor, false, true);
       documentPane.querySelector("[data-factor-write-receipt]")?.remove();
       const panel = documentPane.querySelector('[data-goal-factor-panel="' + factor + '"]');

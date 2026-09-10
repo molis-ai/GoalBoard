@@ -46,8 +46,9 @@ test("every static renderer label has an English translation", () => {
   const source = ["../apps/workbench/src/renderer.ts", "../apps/workbench/src/goals-page-renderer.ts",
     "../apps/workbench/src/onboarding-renderer.ts", "../apps/workbench/src/project-directory-renderer.ts",
     "../apps/workbench/src/settings-navigation.ts", "../apps/workbench/src/settings-renderer.ts",
-    "../apps/workbench/src/human-review-renderer.ts", "../apps/workbench/src/goal-records-renderer.ts",
-    "../apps/workbench/src/goal-document-panels.ts", "../apps/workbench/src/focus-sections.ts", "../apps/workbench/src/project-settings-pages.ts",
+    "../apps/workbench/src/human-review-renderer.ts",
+    "../apps/workbench/src/focus-sections.ts", "../apps/workbench/src/project-settings-pages.ts",
+    "../plugins/native/goals/src/event-document-ui.ts",
     "../plugins/native/goals/src/risk-decision-ui.ts", "../plugins/native/goals/src/decision-common-ui.ts",
     "../plugins/native/goals/src/tree-ui.ts", "../plugins/native/goals/src/policy-ui.ts",
     "../plugins/native/goals/src/project-policy-client.ts"]

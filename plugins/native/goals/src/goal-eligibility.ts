@@ -5,6 +5,7 @@ import type {
   GoalPolicy,
   GoalPolicyBindingRecord,
   GoalsQueryApi,
+  GoalEventFactsApi,
   ImpactBindingRecord,
   GoalLifecycleReason as DecisionReason,
 } from "@adeptify/goalboard-contracts/modules/goals";
@@ -43,6 +44,7 @@ export interface GoalEligibilityPorts {
   goals: GoalsQueryApi;
   execution: ExecutionQueryApi;
   governance: GovernanceApplicationApi["query"];
+  events?: Pick<GoalEventFactsApi, "isEventStateOwner">;
   snapshot(boardId: string): BoardSnapshot;
 }
 /** Shared qualification rules for reads and atomic Claim acquisition. */
@@ -55,6 +57,13 @@ export class GoalEligibility {
     }
     if (goal.trashed_at) {
       throw new GoalBoardV1Error("goal.trashed", "回收站中的 Goal 不能开始 Run");
+    }
+    if (this.ports.events?.isEventStateOwner(boardId, goalId)) {
+      throw new GoalBoardV1Error(
+        "goal.event_state_owner",
+        "这个 Goal 已由事件状态服务负责。请使用事件上报和显式收尾，不要再领取角色或开始 Run",
+        { recovery: "goalboard_v1_event_report / goalboard_v1_event_close" },
+      );
     }
   }
 
@@ -78,6 +87,15 @@ export class GoalEligibility {
     if (!goal || goal.board_id !== input.boardId) {
       reasons.push(reason("goal.not_found", "goal", input.goalId, "找不到这个 Goal"));
       return { goal: null, reasons, policy, surfaces };
+    }
+    if (this.ports.events?.isEventStateOwner(input.boardId, input.goalId)) {
+      reasons.push(reason(
+        "goal.event_state_owner",
+        "goal",
+        goal.goal_id,
+        "这个 Goal 已由事件状态服务负责，不能再用领取角色或 Run 推进",
+        { recovery: "goalboard_v1_event_report / goalboard_v1_event_close" },
+      ));
     }
     if (goal.trashed_at) {
       reasons.push(

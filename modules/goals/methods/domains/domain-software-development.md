@@ -1,6 +1,6 @@
 ---
 method_id: domain-software-development
-version: 2
+version: 3
 kind: domain
 name: "软件开发"
 summary: "先用项目与模块 SSOT 固定边界，再按横纵模块、实现、集成和交付组织软件工作。"
@@ -69,3 +69,39 @@ confidence: 0.96
 - 让消费者实现无条件等待提供者实现，而不是先稳定契约并评估并行
 - 单元测试通过就宣称产品可用
 - 无异常和迁移路径
+
+## 事件类型
+
+| type_id | version | name | purpose | semantic_family |
+| --- | --- | --- | --- | --- |
+| engineering-delivery | 1 | 交付 | 说明这次可以实际使用的结果、入口和已知缺口。 | delivery |
+| engineering-behavior-verification | 1 | 行为验证 | 记录对行为变化的检查对象、方法和观察结论。 | verification |
+| engineering-ui-inspection | 1 | 界面检查 | 记录可见界面的检查范围和观察。 | verification |
+| engineering-concern | 1 | Concern | 记录问题或风险及其影响对象。 | concern |
+
+## 事件字段
+
+| type_id | field_id | name | purpose | format | required |
+| --- | --- | --- | --- | --- | --- |
+| engineering-delivery | result | 交付了什么 | 这次可以使用的结果 | text | true |
+| engineering-delivery | entry | 怎样使用 | 后来的人从哪里开始 | text | false |
+| engineering-delivery | limits | 已知缺口 | 尚未完成或未验证的部分 | longtext | false |
+| engineering-behavior-verification | target | 检查对象 | 验证了哪段行为 | text | true |
+| engineering-behavior-verification | method | 方法 | 怎样检查 | text | true |
+| engineering-behavior-verification | observation | 实际观察 | 看到了什么 | longtext | true |
+| engineering-behavior-verification | conclusion | 结论 | 当前判断 | text | true |
+| engineering-ui-inspection | surface | 检查了哪段界面 | 可见范围 | text | true |
+| engineering-ui-inspection | observation | 看到了什么 | 实际观感或问题 | longtext | true |
+| engineering-ui-inspection | conclusion | 结论 | 当前判断 | text | true |
+| engineering-concern | problem | 问题或风险 | 发生了什么 | longtext | true |
+| engineering-concern | impact | 影响对象 | 影响哪个结果或路径 | text | true |
+| engineering-concern | status | 当前处理 | 仍开放、已接受还是待后续事件 | text | true |
+
+## 默认要求
+
+| requirement_id | statement | bound_type_id | applies_when |
+| --- | --- | --- | --- |
+| engineering-delivery | 这次工作有可使用的交付结果 | engineering-delivery | 作为完成要求需明确采用；不是每个 Goal 都必须提交交付记录 |
+| engineering-behavior-verification | 行为变化有相应验证 | engineering-behavior-verification | 涉及行为变化时才采用 |
+| engineering-ui-inspection | 界面有可见检查 | engineering-ui-inspection | 涉及界面时才采用 |
+| engineering-concern | 未解决问题被记录 | engineering-concern | 出现问题或风险时才采用，不是每个 Goal 的强制记录 |

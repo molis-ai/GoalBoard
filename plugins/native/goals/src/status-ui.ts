@@ -56,11 +56,15 @@ function createStatusRenderer(primitives: GoalsStatusPrimitives) {
         const label = goalDisplayStatusLabel(status);
         return `<span class="goal-status goal-status--${status}"${attributes ? ` ${attributes}` : ""} title="${escapeHtml(label)}">${icon(DISPLAY_STATUS_ICONS[status])}<span${labelAttributes ? ` ${labelAttributes}` : ""}>${escapeHtml(label)}</span></span>`;
     }
-    function renderVisibleGoalStatus(item: Pick<GoalsTreeItem, "status" | "display_status">, attributes = "", labelAttributes = ""): string {
+    function renderVisibleGoalStatus(item: Pick<GoalsTreeItem, "status" | "display_status"> & { status_label?: string }, attributes = "", labelAttributes = ""): string {
         const status = visibleGoalStatus(item);
-        return status === "replaced" || status === "archived" || status === "trashed"
-            ? renderStatus(status, attributes, labelAttributes)
-            : renderActionStatus(status, attributes, labelAttributes);
+        if (status === "replaced" || status === "archived" || status === "trashed") {
+            return renderStatus(status, attributes, labelAttributes);
+        }
+        if (item.status_label) {
+            return `<span class="goal-status goal-status--${status}"${attributes ? ` ${attributes}` : ""} title="${escapeHtml(item.status_label)}">${icon(DISPLAY_STATUS_ICONS[status as GoalDisplayStatus])}<span${labelAttributes ? ` ${labelAttributes}` : ""}>${escapeHtml(item.status_label)}</span></span>`;
+        }
+        return renderActionStatus(status as GoalDisplayStatus, attributes, labelAttributes);
     }
     function visibleGoalStatusIcon(item: Pick<GoalsTreeItem, "status" | "display_status">): string {
         const status = visibleGoalStatus(item);

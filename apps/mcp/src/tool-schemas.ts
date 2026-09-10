@@ -472,6 +472,151 @@ export const GOAL_TREE_ITEM_DECISION = {
   },
   required: ["item_id", "decision"],
 };
+export const GOAL_EVENT_FIELD_DEFINITION = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    field_id: V1_STRING,
+    name: V1_STRING,
+    purpose: V1_STRING,
+    format: { type: "string", enum: ["text", "longtext"] },
+    required: { type: "boolean" },
+    source: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        kind: { type: "string", enum: ["local", "planning"] },
+        method_id: V1_STRING,
+        label: V1_STRING,
+      },
+      required: ["kind"],
+    },
+  },
+  required: ["field_id", "name", "purpose", "format", "required"],
+};
+
+export const GOAL_EVENT_TYPE_DEFINITION = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    type_id: V1_STRING,
+    version: { type: "integer", minimum: 1 },
+    name: V1_STRING,
+    purpose: V1_STRING,
+    semantic_family: {
+      type: "string",
+      enum: ["progress", "delivery", "verification", "concern", "observation", "decision", "closure", "custom"],
+    },
+    source: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        kind: { type: "string", enum: ["local", "planning", "runtime"] },
+        method_id: V1_STRING,
+        method_version: { type: "integer", minimum: 1 },
+        label: V1_STRING,
+      },
+      required: ["kind"],
+    },
+    fields: { type: "array", minItems: 1, items: GOAL_EVENT_FIELD_DEFINITION },
+  },
+  required: ["type_id", "version", "name", "purpose", "fields"],
+};
+
+export const GOAL_EVENT_DEFAULT_REQUIREMENT = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    requirement_id: V1_STRING,
+    statement: V1_STRING,
+    bound_type_id: V1_STRING,
+    applies_when: V1_STRING,
+  },
+  required: ["requirement_id", "statement"],
+};
+
+export const GOAL_EVENT_ADOPTED_PLANNING = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    method_id: V1_STRING,
+    version: { type: "integer", minimum: 1 },
+    source: { type: "string", enum: ["built_in", "personal", "project"] },
+  },
+  required: ["method_id"],
+};
+
+export const GOAL_EVENT_NEW_REQUIREMENT = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    requirement_id: V1_STRING,
+    statement: V1_STRING,
+    bound_type_id: V1_STRING,
+  },
+  required: ["requirement_id", "statement"],
+};
+
+export const GOAL_EVENT_REQUIREMENT_BINDING = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    type_id: V1_STRING,
+    requirement_id: V1_STRING,
+  },
+  required: ["type_id", "requirement_id"],
+};
+
+export const GOAL_EVENT_REPORT_ITEM = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    type_id: V1_STRING,
+    type_version: { type: "integer", minimum: 1 },
+    title: V1_STRING,
+    fields: {
+      type: "object",
+      additionalProperties: { type: "string" },
+      description: "已登记字段 ID 到文本值的映射；领域模块校验允许字段。",
+    },
+    judgments: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          requirement_id: V1_STRING,
+          verdict: { type: "string", enum: ["supports", "contradicts", "unknown"] },
+        },
+        required: ["requirement_id", "verdict"],
+      },
+    },
+  },
+  required: ["type_id", "type_version", "title", "fields"],
+};
+
+export const GOAL_EVENT_SCOPE = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    requirement_ids: V1_STRING_ARRAY,
+    event_ids: V1_STRING_ARRAY,
+    concern_ids: V1_STRING_ARRAY,
+    action: V1_STRING,
+  },
+};
+
+export const GOAL_EVENT_DECISION_OPTION = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    option_id: V1_STRING,
+    label: V1_STRING,
+    impact: V1_STRING,
+  },
+  required: ["option_id", "label", "impact"],
+};
+
 export const PLANNING_METHOD_PACK = {
   type: "object",
   properties: {
@@ -505,6 +650,16 @@ export const PLANNING_METHOD_PACK = {
     source_refs: V1_STRING_ARRAY,
     confidence: { type: "number", minimum: 0, maximum: 1 },
     enabled: { type: "boolean" },
+    event_types: {
+      type: "array",
+      items: GOAL_EVENT_TYPE_DEFINITION,
+      description: "可选；该方法提供的事件类型定义。保存时不自动成为某个 Goal 的当前完成要求。",
+    },
+    default_requirements: {
+      type: "array",
+      items: GOAL_EVENT_DEFAULT_REQUIREMENT,
+      description: "可选；采用该方法后仍需明确选择才会成为当前完成要求。",
+    },
   },
   required: [
     "method_id", "kind", "name", "summary", "applies_to", "domain_tags", "steps",

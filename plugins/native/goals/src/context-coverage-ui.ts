@@ -1,23 +1,9 @@
 import type { GoalsContextItem, GoalsContextView, GoalsContextUiPrimitives } from "./context-ui-model.js";
-import { activeOutgoingDependsOn, findGoalTreeItem as findGoalView, goalWorkSatisfied, partOfChildViews } from "./tree-presentation.js";
+import { findGoalTreeItem as findGoalView, goalWorkSatisfied, partOfChildViews } from "./tree-presentation.js";
 import { sortGoalTreeItems as sortGoals } from "./tree-order.js";
 
 export function createGoalContextCoverageRenderer(primitives: GoalsContextUiPrimitives) {
-  const { translate: L, escapeHtml, icon, renderList, subsectionHeading, explainWorkState, explainParentCompletion } = primitives;
-function renderCompletionBoundaries(item: GoalsContextItem): string {
-  const visible = [
-    [L("这次会做"), item.goal.in_scope, L("还没有写清这次会做什么。")],
-    [L("这次不做"), item.goal.out_of_scope, L("还没有写清这次不做什么。")],
-    [L("完成后会交付"), item.goal.promised_outputs, L("还没有写清完成后会交付什么。")],
-  ] as const;
-  const supporting = [
-    [L("开始前需要"), item.goal.required_inputs, L("没有额外输入要求。")],
-    [L("必须遵守"), item.goal.constraints, L("没有额外约束。")],
-  ] as const;
-  return `<div class="completion-boundaries">${visible.map(([title, values, empty]) => `<section><h3>${escapeHtml(title)}</h3>${renderList(values, empty)}</section>`).join("")}</div>
-    <details class="supporting-boundaries"><summary>${L("查看开始前需要的内容和必须遵守的限制")}${icon("chevron-down")}</summary><div>${supporting.map(([title, values, empty]) => `<section><h3>${escapeHtml(title)}</h3>${renderList(values, empty)}</section>`).join("")}</div></details>`;
-}
-
+  const { translate: L, escapeHtml, icon, subsectionHeading, explainWorkState, explainParentCompletion } = primitives;
 function renderChildProgress(item: GoalsContextItem, view: GoalsContextView): string {
   const children = sortGoals(partOfChildViews(item.goal.goal_id, view));
   if (!children.length) return "";
@@ -26,18 +12,6 @@ function renderChildProgress(item: GoalsContextItem, view: GoalsContextView): st
   return `<div class="child-progress child-progress--${completion.tone}"><header><div><h3>${L("父 Goal 如何完成")}</h3><p class="child-progress-rule"><strong>${escapeHtml(completion.label)}</strong><span>${escapeHtml(completion.meaning)}</span></p></div><strong>${done}/${children.length}</strong></header><ul>${children.map((child) => {
     const explanation = explainWorkState(child.status);
     return `<li><a href="/goals/${encodeURIComponent(child.goal.goal_id)}"><span><strong>${escapeHtml(child.goal.title)}</strong><small>${escapeHtml(explanation.nextAction)}</small></span><em>${escapeHtml(explanation.label)}</em>${icon("chevron-right")}</a></li>`;
-  }).join("")}</ul></div>`;
-}
-
-function renderDependencySummary(item: GoalsContextItem, view: GoalsContextView): string {
-  const dependencies = activeOutgoingDependsOn(item).map((relation) => ({
-    relation,
-    target: findGoalView(view, relation.to_goal_id),
-  }));
-  if (!dependencies.length) return `<p class="clear-row">${icon("check")}${L("开始前不需要等待其他 Goal。")}</p>`;
-  return `<div class="dependency-summary"><h3>${L("开始前要先完成")}</h3><ul>${dependencies.map(({ relation, target }) => {
-    const done = target ? goalWorkSatisfied(target) : false;
-    return `<li><a href="/goals/${encodeURIComponent(relation.to_goal_id)}"><span class="check-box${done ? " is-checked" : ""}">${done ? icon("check") : ""}</span><span><strong>${escapeHtml(target?.goal.title ?? relation.to_goal_id)}</strong><small>${escapeHtml(done ? L("已经完成，不再挡住这条 Goal。") : relation.reason)}</small></span>${icon("chevron-right")}</a></li>`;
   }).join("")}</ul></div>`;
 }
 
@@ -85,5 +59,5 @@ function renderContractCoverage(item: GoalsContextItem, view: GoalsContextView):
 }
 
 
-  return { renderCompletionBoundaries, renderChildProgress, renderDependencySummary, renderContractCoverage };
+  return { renderChildProgress, renderContractCoverage };
 }

@@ -135,7 +135,9 @@ test("visual foundation defines one wide workbench and one narrow companion", ()
   assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\] \.topbar \{[\s\S]*padding-left: 88px/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\] \.brand svg \{[^}]*display: block/);
   assert.match(VISUAL_FOUNDATION_STYLES, /grid-template-columns: var\(--tree-width, clamp\(360px, 30vw, 480px\)\) 5px minmax\(430px, 1fr\) 5px var\(--tui-width, clamp\(440px, 37vw, 620px\)\)/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\] \.goal-workspace-nav \{ display: none; \}/);
+  assert.doesNotMatch(VISUAL_FOUNDATION_STYLES, /\.goal-workspace-nav/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-primary-action,\s*\n\s*\.button-primary/);
+  assert.doesNotMatch(VISUAL_FOUNDATION_STYLES, /\.goal-now-body \.goal-primary-action/);
   assert.equal(VISUAL_FOUNDATION_STYLES.match(/linear-gradient/g)?.length, 2);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.momentum-map\.graph-stage \{[\s\S]*linear-gradient\(to right,[\s\S]*linear-gradient\(to bottom,/);
 });
@@ -168,7 +170,6 @@ test("Light desktop navigation and directory selections stay flat", () => {
   assert.match(VISUAL_FOUNDATION_STYLES, /Light location states stay embedded in their rail/);
   assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-resolved-theme="light"\] body\[data-desktop-shell="true"\] \.desktop-goal-directory \.tree-entry\.is-selected,[\s\S]*\.feed-list-item\.is-selected \{[\s\S]*background: color-mix\(in srgb, var\(--blue\) 8%, transparent\) !important;[\s\S]*box-shadow: none;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-resolved-theme="light"\] body\[data-desktop-shell="true"\] \.goal-mode-switch button\.is-active \{[\s\S]*background: color-mix\(in srgb, var\(--blue\) 10%, transparent\);[\s\S]*box-shadow: none;/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-resolved-theme="light"\] body\[data-desktop-shell="true"\] \.goal-workspace-nav button\[aria-selected="true"\] \{[\s\S]*border-bottom-color: var\(--blue\);[\s\S]*background: transparent;[\s\S]*box-shadow: none;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /html\[data-resolved-theme="light"\] body\.settings-page\[data-desktop-shell="true"\] \.settings-navigation \.settings-nav-group > a\[aria-current="page"\] \{[\s\S]*background: color-mix\(in srgb, var\(--ink\) 8%, transparent\);[\s\S]*box-shadow: none;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.navigator-project-settings\[aria-current="page"\],[\s\S]*\.navigator-directory-toggle \{[\s\S]*background: color-mix\(in srgb, var\(--ink\) 7%, transparent\);[\s\S]*box-shadow: none;/);
 });
@@ -257,10 +258,8 @@ test("desktop shell uses one project directory, project tabs, and soft work surf
   assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-title-kicker \.goal-status \{[\s\S]*min-height: 26px;[\s\S]*padding: 2px 9px;[\s\S]*gap: 6px;[\s\S]*border-radius: 8px;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-title-status--narrow \.goal-status \{[\s\S]*min-height: 0;[\s\S]*padding: 0;[\s\S]*border: 0;[\s\S]*background: transparent;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-title-status--narrow \.goal-status::before \{[^}]*width: 5px;[^}]*background: var\(--goal-status-tone\)/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-workspace-panel:not\(\[hidden\]\) \.focus-section-stage \{[\s\S]*min-height: max\(280px, calc\(100dvh - 510px\)\);[\s\S]*align-items: stretch;/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.focus-section-stage > \.focus-section-card-reveal \{[\s\S]*grid-area: 1 \/ 1;/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-workspace-panel\[data-goal-panel="overview"\]:not\(\[hidden\]\) \.goal-focus-main,[\s\S]*\.goal-focus-aside \{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);[\s\S]*align-content: stretch;/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-workspace-panel:not\(\[hidden\]\) \.focus-section-deck \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.doesNotMatch(VISUAL_FOUNDATION_STYLES, /\.goal-workspace-panel(?:[^\w-]|$)/);
+  assert.doesNotMatch(VISUAL_FOUNDATION_STYLES, /\[data-goal-panel\]/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.tui-pane\[data-tui-read-only\] \.tui-tabs,[\s\S]*\.tui-menu \{[\s\S]*display: none !important;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.settings-page\[data-desktop-shell="true"\]:has\(\.settings-navigation\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /> \.topbar \{[\s\S]*height: var\(--desktop-titlebar-height\);[\s\S]*min-height: var\(--desktop-titlebar-height\);/);
@@ -356,7 +355,6 @@ test("visual foundation makes the default Goal view an action-led Focus", () => 
   assert.match(VISUAL_FOUNDATION_STYLES, /data-resolved-theme="dark"\] \.risk-state-preview/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-focus-layout \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /@container \(min-width: 720px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(220px, 250px\)/);
-  assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-now-body \.goal-primary-action \{[\s\S]*max-width: 11rem/);
   assert.match(VISUAL_FOUNDATION_STYLES, /@media \(min-width: 761px\) \{[\s\S]*data-density="compact"[\s\S]*\.goal-now,[\s\S]*\.goal-focus-criteria,[\s\S]*\.goal-focus-context \{[\s\S]*padding: 14px 18px 16px;/);
   assert.doesNotMatch(VISUAL_FOUNDATION_STYLES, /\.goal-now-mark/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.goal-focus-aside \{[\s\S]*border-top: 1px solid var\(--line\)/);

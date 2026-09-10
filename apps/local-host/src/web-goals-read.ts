@@ -4,7 +4,7 @@ import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 import type { GoalProjectApplication } from "./goal-project-application.js";
 import type { LocalProjectDatabase } from "./project-database.js";
 import { renderGoalArtifactContext } from "./artifact-native-plugin-http.js";
-import type { WebViewOptions } from "./web-view.js";
+import { withSelectedEventDocument, type WebViewOptions } from "./web-view.js";
 import type { LocalWebCatalogRunner } from "./web-project-settings.js";
 import type { createLocalHostWorkbenchRenderer } from "./workbench-renderer.js";
 import type { SessionRuntimeResources, createSessionProjectOperations } from "./web-session.js";
@@ -12,13 +12,13 @@ import { sendLocalWebJson as sendJson } from "./web-http.js";
 
 export function createLocalGoalsReadHttp(ports: {
   withCatalog: LocalWebCatalogRunner;
-  renderer: Pick<ReturnType<typeof createLocalHostWorkbenchRenderer>, "renderGoalBoardMomentumFragment" | "renderGoalBoardProjectGuidanceSettings" | "renderGoalBoardProjectSettings" | "renderGoalBoardRefreshFragment" | "renderGoalBoardWeb" | "renderGoalDocumentFragment" | "renderGoalPanelFragment" | "renderGoalQuickRecordFragment" | "renderGoalRecordEventsFragment" | "renderGoalRecordsFragment">;
+  renderer: Pick<ReturnType<typeof createLocalHostWorkbenchRenderer>, "renderGoalBoardMomentumFragment" | "renderGoalBoardProjectGuidanceSettings" | "renderGoalBoardProjectSettings" | "renderGoalBoardRefreshFragment" | "renderGoalBoardWeb" | "renderGoalDocumentFragment">;
   isDesktopShellRequest(request: IncomingMessage, url: URL): boolean;
   pageCsp: string;
   sessionProjectOperationsData: ReturnType<typeof createSessionProjectOperations>;
 }) {
   const { withCatalog: withGoalBoardProjectCatalog, isDesktopShellRequest, pageCsp: PAGE_CSP, sessionProjectOperationsData } = ports;
-  const { renderGoalBoardMomentumFragment, renderGoalBoardProjectGuidanceSettings, renderGoalBoardProjectSettings, renderGoalBoardRefreshFragment, renderGoalBoardWeb, renderGoalDocumentFragment, renderGoalPanelFragment, renderGoalQuickRecordFragment, renderGoalRecordEventsFragment, renderGoalRecordsFragment } = ports.renderer;
+  const { renderGoalBoardMomentumFragment, renderGoalBoardProjectGuidanceSettings, renderGoalBoardProjectSettings, renderGoalBoardRefreshFragment, renderGoalBoardWeb, renderGoalDocumentFragment } = ports.renderer;
   function settings(request: IncomingMessage, response: ServerResponse, url: URL, boardId: string,
     readWebView: () => GoalBoardWebView, coordinator: GoalProjectApplication, controlToken: string,
   ): boolean {
@@ -56,23 +56,18 @@ export function createLocalGoalsReadHttp(ports: {
   ): boolean {
     const renderedGoalsRead = renderWorkbenchGoalsReadRequest(request.method, url.pathname, url.searchParams, () => {
       const view = readWebView();
+      const eventView = (goalId?: string, collection: "current" | "archive" | "trash" = "current") => withSelectedGoalDocument(
+        view, boardId, goalId, coordinator, store, collection,
+      );
       return {
-        refresh: (goalId, collection) => renderGoalBoardRefreshFragment(view, goalId, collection === "archive", collection === "trash"),
+        refresh: (goalId, collection) => renderGoalBoardRefreshFragment(
+          eventView(goalId, collection),
+          goalId,
+          collection === "archive",
+          collection === "trash",
+        ),
         momentum: (goalId, collection) => renderGoalBoardMomentumFragment(view, goalId, collection),
-        document: (goalId, collection) => renderGoalDocumentFragment(view, goalId, collection),
-        records: (goalId, collection) => renderGoalRecordsFragment(view, goalId, collection),
-        recordEvents: (goalId, collection, offset) => renderGoalRecordEventsFragment(view, goalId, collection, offset),
-        quickRecord: (goalId, collection) => renderGoalQuickRecordFragment(view, goalId, collection),
-        panel: (goalId, panel, collection) => {
-          const visibleGoals = collection === "archive" ? view.archived_goals : view.goals;
-          const artifactContext = panel === "completion" && collection !== "trash"
-            && visibleGoals.some((item) => item.goal.goal_id === goalId)
-            ? renderGoalArtifactContext({ boardId: boardId, goalId, artifacts: coordinator.artifacts.query,
-                ledger: createContextLedger(store.db, {
-                  authorize: (access, operation) => operation === "read" && access.scope.kind === "personal" && access.scope.id === boardId,
-                }).query }) : "";
-          return renderGoalPanelFragment(view, goalId, panel, collection, artifactContext);
-        },
+        document: (goalId, collection) => renderGoalDocumentFragment(eventView(goalId, collection), goalId, collection),
       };
     });
     if (renderedGoalsRead) {
@@ -92,6 +87,7 @@ export function createLocalGoalsReadHttp(ports: {
   }
   async function page(request: IncomingMessage, response: ServerResponse, url: URL, options: WebViewOptions,
     homeDirectory: string | undefined, readWebView: () => GoalBoardWebView, sessionResources: Promise<SessionRuntimeResources>, controlToken: string,
+    coordinator?: GoalProjectApplication, store?: LocalProjectDatabase,
   ): Promise<boolean> {
     const renderedGoalsPage = await renderWorkbenchGoalsPageRequest(
       request.method, url.pathname, readWebView,
@@ -110,7 +106,18 @@ export function createLocalGoalsReadHttp(ports: {
             )
           : { sessions: [], workspaces: [] };
         return renderGoalBoardWeb(
-          view,
+          coordinator && store
+            ? withSelectedGoalDocument(
+                view,
+                options.boardId,
+                requestedGoalId ?? view.active_goal_id ?? undefined,
+                coordinator,
+                store,
+                trashView ? "trash" : archiveView ? "archive" : "current",
+              )
+            : coordinator
+              ? withSelectedEventDocument(view, options.boardId, requestedGoalId ?? view.active_goal_id ?? undefined, coordinator.goalEvents, coordinator.goals.planning.effectiveMethods(options.boardId))
+            : view,
           requestedGoalId,
           archiveView,
           decisionView,
@@ -138,4 +145,40 @@ export function createLocalGoalsReadHttp(ports: {
     return false;
   }
   return { settings, fragments, page };
+}
+
+function withSelectedGoalDocument(
+  view: GoalBoardWebView,
+  boardId: string,
+  goalId: string | undefined,
+  coordinator: GoalProjectApplication,
+  store: LocalProjectDatabase,
+  collection: "current" | "archive" | "trash" = "current",
+): GoalBoardWebView {
+  const eventView = withSelectedEventDocument(
+    view,
+    boardId,
+    goalId,
+    coordinator.goalEvents,
+    coordinator.goals.planning.effectiveMethods(boardId),
+  );
+  if (!goalId || collection === "trash") return eventView;
+  const visible = collection === "archive" ? eventView.archived_goals : eventView.goals;
+  if (!visible.some((item) => item.goal.goal_id === goalId)) return eventView;
+  const html = renderGoalArtifactContext({
+    boardId,
+    goalId,
+    artifacts: coordinator.artifacts.query,
+    ledger: createContextLedger(store.db, {
+      authorize: (access, operation) => operation === "read" && access.scope.kind === "personal" && access.scope.id === boardId,
+    }).query,
+  });
+  const decorate = (item: GoalBoardWebView["goals"][number]) =>
+    item.goal.goal_id === goalId ? { ...item, artifact_embed_html: html } : item;
+  return {
+    ...eventView,
+    goals: eventView.goals.map(decorate),
+    archived_goals: eventView.archived_goals.map(decorate),
+    trashed_goals: eventView.trashed_goals.map(decorate),
+  };
 }

@@ -82,7 +82,7 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       (${GOALS_DRAFT_CLIENT_FACTORY_SCRIPT})({
         route, controlHeaders: goalboardControlHeaders, splitLines,
         refreshBoard: (...args) => refreshBoard(...args), showToast, translate: L,
-        setGoalPanel: (...args) => setGoalPanel(...args),
+        openEventReader: (...args) => openEventReader(...args),
       });
 
     const { updateRiskGoalCount, handleRiskPickerChange, handleRiskPickerFilter, handleRiskFactsSubmit } =

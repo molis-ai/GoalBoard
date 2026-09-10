@@ -294,41 +294,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
     box-shadow: none;
     overflow: auto;
   }
-  body[data-desktop-shell="true"] .goal-workspace-nav,
-  .goal-workspace-nav {
-    position: sticky;
-    top: 0;
-    z-index: 7;
-    width: 100%;
-    min-height: 48px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-bottom: 1px solid var(--line);
-    border-radius: 0;
-    background: color-mix(in srgb, var(--paper) 96%, transparent);
-    backdrop-filter: blur(12px);
-    gap: 22px;
-    justify-content: flex-start;
-  }
-  body[data-desktop-shell="true"] .goal-workspace-nav button,
-  .goal-workspace-nav button {
-    min-height: 48px;
-    padding: 0;
-    border-radius: 0;
-    color: var(--muted);
-    background: transparent;
-    box-shadow: none;
-    font-size: 12px;
-    font-weight: 610;
-  }
-  body[data-desktop-shell="true"] .goal-workspace-nav button[aria-selected="true"],
-  .goal-workspace-nav button[aria-selected="true"] {
-    color: var(--ink);
-    background: transparent;
-    box-shadow: inset 0 -2px 0 var(--ink);
-  }
-  .goal-workspace-nav button:hover { color: var(--ink); background: transparent; }
 
   body[data-desktop-shell="true"] .goal-document,
   .goal-document {
@@ -415,12 +380,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
   .goal-now-body > div > strong { font-size: 17px; line-height: 1.35; letter-spacing: -.015em; }
   .goal-now-body p { max-width: 62ch; color: var(--ink-soft); }
   .goal-now-body small { max-width: 68ch; color: var(--muted); line-height: 1.55; }
-  .goal-now-body .goal-primary-action {
-    grid-column: 1;
-    width: fit-content;
-    margin-top: 17px;
-    justify-self: start;
-  }
   .goal-primary-action,
   .button-primary,
   .planning-primary-action,
@@ -630,7 +589,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
     background: #232327;
     box-shadow: inset 0 0 0 1px var(--line-strong);
   }
-  html[data-resolved-theme="dark"] .goal-workspace-nav { background: color-mix(in srgb, var(--paper) 96%, transparent); }
 
   @media (min-width: 761px) and (max-width: 1080px) {
     body[data-desktop-shell="true"] .goal-document { padding-inline: 36px; }
@@ -701,10 +659,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
     body[data-desktop-shell="true"] .tree-chrome { align-content: start; }
     .mobile-switch { border-bottom: 1px solid var(--line); background: var(--paper); }
     .mobile-switch button.is-active::after { background: var(--ink); }
-    body[data-desktop-shell="true"] .goal-workspace-nav,
-    .goal-workspace-nav { min-height: 44px; padding-inline: 16px; gap: 18px; }
-    body[data-desktop-shell="true"] .goal-workspace-nav button,
-    .goal-workspace-nav button { min-height: 44px; }
     body[data-desktop-shell="true"] .goal-document,
     .goal-document { width: 100%; padding: 24px 20px 60px; }
     body[data-desktop-shell="true"] .goal-title-row h1,
@@ -792,16 +746,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
   .goal-now-body > div > strong { font-size: 16px; }
   .goal-now-body p { margin-top: 4px; }
   .goal-now-body small { margin-top: 5px; }
-  .goal-now-body .goal-primary-action {
-    grid-column: 1;
-    width: fit-content;
-    max-width: 11rem;
-    min-height: 34px;
-    margin-top: 14px;
-    padding-inline: 12px;
-    justify-self: start;
-    white-space: nowrap;
-  }
   .goal-now-blockers {
     grid-column: auto;
     margin: 18px 0 0;
@@ -972,13 +916,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
   .goal-workspace-panels { padding: 26px clamp(30px, 4vw, 52px) 70px; }
   body[data-desktop-shell="true"] .goal-header,
   .goal-header { padding-bottom: 22px; }
-  body[data-desktop-shell="true"] .goal-workspace-nav,
-  .goal-workspace-nav {
-    position: static;
-    top: auto;
-    backdrop-filter: none;
-  }
-  .goal-workspace-panel { scroll-margin-top: calc(var(--focus-canvas-inset) + 58px); }
 
   @media (min-width: 761px) {
     html[data-density="compact"] body[data-board-view]:not([data-board-view="decisions"]) .goal-document {
@@ -1531,8 +1468,6 @@ export const CALM_DESKTOP_STYLES = `  /* Calm Desktop visual replacement. The fr
     .goal-document { padding: 0; border-radius: 0; gap: 12px; }
     .goal-hero { padding: 25px 18px 0; border-radius: 12px; }
     .goal-workspace-panels { padding: 20px 18px 56px; border-radius: 12px; }
-    body[data-desktop-shell="true"] .goal-workspace-nav,
-    .goal-workspace-nav { padding-inline: 0; }
   }
 
 `;

@@ -10,7 +10,7 @@ adaptive
 
 主要用户是同时使用 Codex、Claude Code、Cursor 等 AI Runtime 推进真实项目的个人开发者、产品负责人和小团队。他们需要在多个 Session 或 Runtime 之间持续工作，但不希望靠聊天记录猜测当前目标、下一步、风险和完成标准。
 
-V1 首先服务单设备、单 Workspace 的本地使用场景。用户在正在对话的 Runtime 中调用统一 Skill；Runtime 通过 MCP 主动选择和领取工作，并在同一对话中澄清与承接用户决定。CLI 是管理和调试入口，Web 是可选查看与确认界面，不是 Runtime 的必经步骤。macOS App 与浏览器打开同一套 loopback Web 工作台；Goal 详情右侧可以托管用户显式打开的本地 TUI 视口。终端栏会持续显示它属于哪条 Goal，切换 Goal 不会改绑已有终端。由子 Goal 共同完成的复合父 Goal 始终不直接开工，而是引导用户进入具体子 Goal；父 Goal 自动完成后也不会重新开放终端。打开页面不会自动绑定 Session，Board 仍不派单。
+V1 首先服务单设备、单 Workspace 的本地使用场景。用户在正在对话的 Runtime 中调用统一 Skill。新 Goal 和已转交 Goal 经 MCP 保存意图、可选配置事件类型、上报工作事实并读取当前状态；不必先领取角色或启动 Run。CLI 是管理和调试入口。Web 是可选查看与确认界面，也是可信用户决定的入口，不是 Runtime 的必经步骤。macOS App 与浏览器打开同一套 loopback Web 工作台；Goal 页可以托管用户显式打开的本地 TUI 视口。终端栏会持续显示它属于哪条 Goal，切换 Goal 不会改绑已有终端，也不会自动发送。父 Goal 可以记录自己的整合或验收结果；子 Goal 数量不自动证明完成。未转交的历史 Goal 仍保留旧草稿和 Claim/Run 入口。打开页面不会自动绑定 Session，Board 仍不派单。
 
 ## Product Purpose
 
@@ -18,10 +18,10 @@ GoalBoard 是 Goal 的权威真相源。它把用户意图逐步整理成可理�
 
 - 最终想实现什么；
 - 当前为什么做这一步；
-- 哪些叶子 Goal 已经可以执行；
+- 哪些 Goal 现在可以继续（新 Goal / 已转交 Goal 走事件入口；未转交历史 Goal 仍走领取协议）；
 - 哪些依赖、风险或决策正在阻塞；
-- 谁正在尝试、提交了什么证据；
-- 什么条件满足后才算真正完成。
+- 最近做成了什么、依据是什么、还差什么；
+- 当前约定、真实支持和适用阻塞满足后，才由显式收尾写入完成。
 
 成功意味着用户不读技术协议也能在几秒内回答“现在目标是什么、接下来做什么、为什么还不能完成”。
 
@@ -31,9 +31,9 @@ GoalBoard 不是另一个 Kanban，也不是 Agent 调度器。它的差异机�
 
 - 叶子 Goal 和 Task 是同一真相节点；
 - Plan 和 TaskBoard 都是 Goal Spine 的派生视图；
-- Runtime 自己查询、选择和领取，Board 不派单；
+- Runtime 自己读取和上报，Board 不派单；未转交历史 Goal 仍可领取；
 - 接受后的业务 Goal 不被静默改写；
-- 依赖、风险、影响范围、Evidence 和 Review 决定工作是否安全、是否完成；
+- 依赖、风险、影响范围和有效决定仍是授权与完成边界。普通事件支持不自动完成；显式收尾才写入完成。未转交 Goal 仍用 Evidence/Review 门禁；
 - 执行发现的新需求先作为 Candidate Goal，由用户确认后进入 Spine。
 
 ## Operating Context
@@ -42,7 +42,7 @@ V1 在本地 Workspace 中运行，共享 SQLite 保存权威状态。CLI、MCP 
 
 安装默认只把自包含程序、共享 Skill 和稳定启动器写入 `~/.goalboard`，不会修改项目或 Runtime 配置，也不会创建项目、关联 Session 或启动服务。Runtime 接入、项目管理和 Session 关联是安装后的独立显式流程，不能再用一个“安装后启用/启动项目”的总动作混在一起。Runtime 接入统一使用 adapter 的 `detect → plan → confirm → apply → validate → remove` 链路；当前配置 adapter 支持 Codex、Claude Code、OpenCode、Pi Agent 和 Grok Build；MCP 会话协议本身仍支持其他 Runtime。Pi 的 MCP 写入 `~/.pi/agent/mcp.json`，供官方推荐的 pi-mcp-adapter 读取。预览不返回用户配置全文，写入同时管理 MCP 与 Skill，失败自动回滚，移除只撤销 GoalBoard ownership receipt 证明仍属于自己的字段和链接。macOS 常驻 Web 同样先预览再确认，使用 LaunchAgent 的 RunAtLoad/KeepAlive 和可诊断日志，并显式提供安装时 Node 的 PATH；“已加载”和“进程正在运行”必须分别判断。用户在当前对话调用 Skill 后，GoalBoard 优先读取单次 MCP 调用元数据中的 Session ID，其次使用 Claude Code 等 adapter 的稳定 Session 信号；工作目录作为独立 workspace 用于查找用户以前明确关联过的项目，不伪装成 Session ID，也不是项目身份。普通选择只记录 workspace 历史；每个新 Session 仍须确认 Project，即使只有一个候选，GoalBoard 不保存 workspace default。用户明确拒绝一个建议时，只在能识别该 Session 时记录本 Session 的拒绝；选择、切换、解绑和删除仍各自需要明确确认。每个 GoalBoard 项目有自己的 SQLite DB，并按 `user`、`migrated_user`、`regenerable_demo` 分类；Web、CLI 和开发脚本共用同一 demo 生命周期。普通卸载先预览，只撤销 ownership receipt 仍能证明属于 GoalBoard 的接入和程序，清理可再生 demo，保留用户项目、catalog、备份与日志；永久清除用户数据必须再确认精确 home 和用户项目数量。Web 可选；Runtime 不因为 Web 未打开而停止澄清或执行。服务或项目连接不可用时，Runtime 报告事实，不自行创建另一个真相源、猜测项目或改写配置。
 
-典型流程：用户在当前 Runtime 提出粗略想法或要求继续工作 → Skill 解析经用户确认的项目 → Runtime 对新想法开启 Draft 对话，或从 Available 自主选择一项并原子领取 → Runtime 回传 Run 和 Evidence，并在当前对话引导用户确认提案 → Board 派生一个工作状态并计算 Goal 是否满足 → 新发现通过 Candidate/Proposal 流程进入 Spine。Web 中，用户先在 Goal 详情的“概览”看到下一步、状态和唯一主操作；需要本人判断时，进入“等待你的决定”，逐项查看问题、现在为什么要决定、是否有可靠建议，以及每个选择会带来什么结果。
+典型流程：用户在当前 Runtime 提出粗略想法或要求继续工作 → Skill 解析经用户确认的项目 → 新意图直接保存并自动归事件 owner，可以不选规划、从局部类型开始 → 工作规划只提供可选择采用的类型与默认要求；采用版本和 Goal 局部修改持久保留，模板变化不改旧含义 → 普通报告保存部分结果和来源，支持/反证/未知只更新相关要求，普通支持不自动完成 → 读取当前约定、差距与历史 → 需要用户决定时由 Host Web/管理入口记录；Runtime 可以请求和引用已有有效决定，不能自填 user 身份；已有有效同范围授权不重复问 → 显式收尾检查当前约定、真实支持和适用阻塞；已记录与完成生效分开。无要求时可以工作，但不能宣称完成。未转交的 `legacy_claim_run` Goal 可读新时间线；要开始新版事件写入须显式「使用事件记录继续」。转交前旧草稿和 Claim/Run 仍有真实入口，不能说所有旧操作必须转交；转交后旧状态写入拒绝。Web 中，选中 Goal 顶部显示当前判断、已做成、下一步和风险，左侧是时间索引，右侧是事件正文；工作规划、目标说明、完成要求使用同一阅读器，并提供返回所选事件。目标说明/完成要求打开时与转交表单互斥；返回所选事件后，未转交 Goal 的转交入口仍可用。需要本人判断时，进入决定中心查看问题、现在为什么要决定、是否有可靠建议，以及每个选择会带来什么结果。
 
 Project 是内容范围，不与 Sessions 构成全局 switch。用户先选择项目，再在项目根目录中使用平级的 Goals、Sessions 与工作目录；全局 `/sessions` 与 `/workspaces` 不提供管理页面。GoalBoard `session_id` 是目录、关系和 Handoff 的业务主键；`runtime_id + native_runtime_session_id` 只负责在原 Runtime 中读取、恢复和继续执行。每条 Session 最多关联一个 Project、零或一个当前 Goal，并保留 Goal 历史。Runtime adapter 明确声明原生可读、GoalBoard 兜底记录或不可读取，不支持时不得猜测对话内容或伪装成可恢复。工作目录管理路径健康、显式 Project 关系和新 Session 启动；它不是 Project 身份，也不建立 Project 默认目录或目录默认 Project。跨 Runtime 继续工作只通过用户确认的 Handoff，把当前 Goal 与必要上下文交给目标 Runtime 并创建新的目标 Session；没有当前 Goal 时必须先选择 Goal。所有关联、转移、解绑、归档、路径修复、启动与 Handoff 都逐次确认；归档 GoalBoard 记录不删除 Runtime 原生内容，移除工作目录记录不删除文件。
 
@@ -54,17 +54,17 @@ Relay 所有权迁移由用户显式触发：GoalBoard 以只读方式打开本�
 
 ## Authority and Proposal Rules
 
-- 用户可以直接手工录入 `draft / abstract` Goal；用户在当前 Runtime 提出粗略想法时，Runtime 可通过复合 MCP 创建最小 Draft 和澄清会话，但不把推断写成 accepted Contract 或 canonical 结构。
+- 用户可以直接手工录入 `draft / abstract` Goal。新意图默认用 `goal_intent_create` 保存并归事件 owner。Draft、clarifier 与 Claim 相关规则只服务未转交旧 Goal：用户在 Runtime 对未转交 Draft 提出粗略想法时，仍可通过复合 MCP 创建最小 Draft 和澄清会话，但不把推断写成 accepted Contract 或 canonical 结构。
 - Runtime 发现新需求时只提交 Candidate Goal。用户是否接受 Candidate、是否确认它引起的 Rewire 是两个独立决定；接受新 Goal 不等于同意它阻塞当前 Goal。
-- 用户创建 Goal 时亲自指定的 `parent / depends_on` 可以直接成为 active；Runtime 发现的拆分、依赖或关系变化只能先成为 Proposal。
+- 用户创建 Goal 时亲自指定的 `parent / depends_on` 可以直接成为 active。用户明确选择进行 Goal Tree 拆分或关系提案时，Runtime 发现的拆分、依赖或关系变化仍只能先成为 Proposal；这不是新事件 Goal 开始记录的强制前置。
 - 依赖 Proposal 不由 GoalBoard 扫描代码自动产生。Runtime 先选择当前任务的工作类型、专业领域、行业与场景叠加层方法，再结合 Contract、代码、文档、测试、数据结构、业务顺序、影响冲突和风险策略，说明哪项产出被哪项工作消费；依赖方向由这条产出—消费关系推导，不能只凭时间先后或主观直觉连接。
 - 规划方法按 `项目 > 个人 > 内置冷启包` 生效。内置方法分为元方法、工作类型、专业领域、行业和跨行业场景叠加层；它们是共同检查同一 Goal Tree 的正交视角，不是机械串行的阶段模板。每个内置方法只在 `skills/goal-advance/methods/` 中占一个 canonical Markdown 文件，尤其每个行业一个文件；新增行业不应要求修改 Runtime 注册代码或复制通用方法正文。遇到未知领域时，Runtime 先用元方法补齐领域边界、专业阶段、关键产物、质量门和失败模式，再提出可复用的新方法。项目与个人方法都由用户显式保存，不会自动改写 Goal Tree。
 - 每轮拆分和 Rewire 都必须通过同一套整图检查：不存在缺失端点、自依赖、重复关系、父子循环、依赖循环或父子与依赖组合形成的执行循环。通过后，Coordinator 按拓扑层级、可解锁下游数量和最长后续链给出执行顺序与理由，不再由各 Runtime 各排一套顺序。
 - 用户提出新要求时，Runtime 先分析直接受影响的 Goal、依赖它的下游和仍可复用的工作，只对受影响子图提交 Proposal；确认后再重新计算整图顺序。历史有效且不受影响的 Goal 不重拆、不重做。
 - 正式 Dependency Proposal 必须说明 `from_goal_id`、`to_goal_id`、类型、原因、`basis`、`evidence_refs`、`impact_if_rejected`、`confidence`，以及为什么方向是 A → B 而不是 B → A。
-- 已确认依赖是 Claim 和完成的硬门禁。代码变化只能触发 revalidation / Rewire Proposal，不能静默删除或反转 active dependency。
-- clarifier 认领手工 Draft 后，可以提出 Contract 补全建议；客观代码/文档事实可以标为 proposed/unconfirmed，业务意义、边界、优先级、验收和风险接受必须由用户确认。
-- Draft 只有在用户确认 Contract 补全后才成为 accepted/executable。accepted Contract 不原地改写；后续需求创建新 Goal 并重排关系。
+- 已确认依赖仍是开工和完成的硬门禁。未转交 Goal 的 Claim 与完成仍受此约束；事件 Goal 的显式收尾同样检查适用依赖。代码变化只能触发 revalidation / Rewire Proposal，不能静默删除或反转 active dependency。
+- 未转交旧 Goal 上，clarifier 认领手工 Draft 后，可以提出 Contract 补全建议；客观代码/文档事实可以标为 proposed/unconfirmed，业务意义、边界、优先级、验收和风险接受必须由用户确认。
+- 未转交旧 Goal 的 Draft 只有在用户确认 Contract 补全后才成为 accepted/executable。未转交路径上的 accepted Contract 不原地改写；后续独立需求创建新 Goal 并重排关系。新事件 Goal 开始记录不以 Draft 澄清或 Contract 补全为强制前置。事件 Goal 在已有授权内通过 `event_agree` / `event_configure` 及返回版本维护当前约定，历史保留。
 - 任何复杂 Goal 在标记为拆解完成前，都必须回到用户原始需求并逐项交代五层通用结果链：最终结果、实际流程、核心能力、基础能力与基建、质量与持续交付；不能因为最近讨论的内容很详细就默认省略支撑工作。随后再按任务补查：游戏关注玩法、玩家旅程、交互和视听；App 关注核心功能、端到端旅程、交互和信息；AI/数据关注数据质量、评测、运行成本与安全；内容/研究关注来源、方法、审核与发布；运营关注角色权限、工具流程、例外与衡量。每一项可以由同一个范围合理的子 Goal 承担，也可以说明不适用；核心能力和基础能力由不同 Goal 承担时，必须明确前者消费后者哪项结果以及依赖方向。
 - 任何预计并行执行的复杂项目都先建立或核对一份大小合适的根 SSOT，只保留共同结果、非目标、全局约束、权威决定与证据位置、单元索引、跨单元契约、汇合规则和开放决定。工作单元按两条轴划分：纵向结果单元拥有一个可独立使用和验收的结果；横向共享单元拥有被至少两个纵向单元消费的方法、资产、数据、政策、标准或服务。地图稳定后，各单元 SSOT 可并行撰写，每份只维护自己的结果、消费者、职责与非职责、唯一决策和资产、输入输出、证据、例外、汇合点及 Impact surfaces。两个单元共同编写同一事实、拥有同一决定或可变资产、双向了解内部实现、形成循环或冲突写入面时必须重新划界；不同文件本身不证明正交。
 - 非技术工作也使用同一逻辑，但 SSOT 形态随专业结果变化：研究可用研究协议与证据账本，增长可用项目章程、定位和度量口径，内容可用选题/叙事契约与编辑标准，运营可用服务蓝图、角色权限和例外手册。根 SSOT 或其可信增量只阻塞会改变共同边界的决定；单元执行只依赖自己的 SSOT 和真实消费的提供者结果，独立单元保持并行，最后由综合、发布、审批或运行检查点消费全部结果。
@@ -74,13 +74,13 @@ Relay 所有权迁移由用户显式触发：GoalBoard 以只读方式打开本�
 - 一条叶子 Goal 只能承诺一个可独立交付和验收的主要结果。进入 Inbox 待决定流程前，Runtime 必须逐项说明承诺输出是主要结果、同一次验收所需的配套结果，还是应独立成 Goal 的结果；候选工作在“可单独交付、可单独验收、可独立返工”三项中满足至少两项时必须继续拆分。范围、非目标、输入、输出、验收证据或重要决定仍未写清时，它保持开放拆分，不能伪装成可直接执行的叶子。
 - 一轮对话不必强行拆完整棵树，但阶段性暂停必须保留“仍需拆分”的状态，写明尚未拆完的 Goal 和下一步；只有关键路径都有明确归属且没有开放子树时，父 Goal 才能成为 `closed_compound`。
 
-上述规则是产品 Contract。现阶段已具备 Candidate/Rewire、用户手工或对话初始化的 Draft、完整 Dependency Proposal、同一 Draft 的 Goal Tree 提案与用户原子确认，以及默认 Runtime MCP 暴露面收紧。普通 Runtime 只能读取、选择、认领、执行、提交 Proposal、证据和 Runtime Review，不能自行裁决 canonical Goal；用户确认前，当前 Draft、Policy、Impact 和 Risk 保持不变。用户确认的复合父 Goal 显示“已澄清，等待子 Goal”，确认的叶子显示“待执行”，仍未确认的 Draft 才显示“待澄清”；这是一套派生工作状态，不再另设“澄清完毕”。
+上述规则是产品 Contract。现阶段已具备事件工作入口、Candidate/Rewire、未转交路径上用户手工或对话初始化的 Draft、完整 Dependency Proposal、同一 Draft 的 Goal Tree 提案与用户原子确认，以及默认 Runtime MCP 暴露面收紧。普通 Runtime 对新 Goal 和已转交 Goal 读取、配置/上报事件、请求决定和显式收尾，不能自行裁决 canonical Goal，也不能自填 user 身份；未转交历史 Goal 仍可选择、认领、提交 Evidence 和 Runtime Review。用户确认前，当前 Draft、Policy、Impact 和 Risk 保持不变。用户确认的复合父 Goal 显示“已澄清，等待子 Goal”，确认的叶子显示“待执行”，仍未确认的 Draft 才显示“待澄清”；这是一套派生工作状态，不再另设“澄清完毕”。
 
-父 Goal 的完成规则不能从“有子 Goal”这一事实直接猜测：只有用户已经确认的 `accepted / closed_compound` 才由全部生效子 Goal 自动完成。`abstract / frontier_open` 表示拆分尚未确认结束；即使当前列出的子 Goal 全部完成，父 Goal 也只表示“现有子项已完成，等待确认是否覆盖整个父目标”，不能自动完成。此时 Available 把父目标确认标为优先续办；用户下次要求继续或领取工作时，Runtime 先回到这个父 Goal，确认收口或继续补充子 Goal，不能直接跳过。标为 `closed_leaf` 却同时包含生效子 Goal 属于结构冲突，需要先确认它究竟是独立结果还是复合父 Goal。新增子 Goal 让已完成复合父 Goal 重新打开后，同样必须再次确认扩展后的拆分完整性。
+父 Goal 的完成不能从子 Goal 数量直接证明。事件 owner 的父 Goal 可以记录自己的整合或验收结果。未转交且用户已确认的 `accepted / closed_compound` 仍按原生命周期协调子项；`abstract / frontier_open` 表示拆分尚未确认结束，即使当前列出的子 Goal 全部完成，父 Goal 也只表示“现有子项已完成，等待确认是否覆盖整个父目标”，不能自动完成。此时未转交路径会把父目标确认标为优先续办；用户下次要求继续时，Runtime 先回到这个父 Goal，确认收口或继续补充子 Goal，不能直接跳过。标为 `closed_leaf` 却同时包含生效子 Goal 属于结构冲突，需要先确认它究竟是独立结果还是复合父 Goal。新增子 Goal 让已完成复合父 Goal 重新打开后，同样必须再次确认扩展后的拆分完整性。
 
 用户或 Runtime 发现结果不符合预期、逻辑错误、体验阻塞或其他会让完成结论失真的问题时，必须把它带回 Goal 生命周期，不得只留在聊天或实现备注中。先查是否已有 Goal 负责：直接影响当前验收时保持未完成，并记录失败依据或真实阻塞；已有 Goal 覆盖时更新其下一步，不重复创建；需要独立交付或验收时提出纠正 Goal 并准确关联原 Goal；只有尚未发生的不确定情况才作为 Risk。该规则适用于代码、设计、内容、研究、运营等所有任务。
 
-依赖或风险变化把 Goal 标记为 `needs_revalidation` 后，executor 继续被阻止；只有有效 revalidator Claim/Run 可以提交核对证据。Coordinator 在 accepted Contract、active dependencies 和 blocking Risks 全部通过时才恢复 `valid`，且该入口不能修改 Contract、关系或完成状态。
+未转交 Goal 在依赖或风险变化后被标记为 `needs_revalidation` 时，executor 继续被阻止；只有有效 revalidator Claim/Run 可以提交核对证据。Coordinator 在 accepted Contract、active dependencies 和 blocking Risks 全部通过时才恢复 `valid`，且该入口不能修改 Contract、关系或完成状态。事件 Goal 的反证只更新相关要求；完成仍须显式收尾。
 
 ## Capabilities and Constraints
 
@@ -88,15 +88,16 @@ Relay 所有权迁移由用户显式触发：GoalBoard 以只读方式打开本�
 - SQLite 是权威真相源；JSON/Markdown 只用于导入、导出和可读快照。
 - Goal 必须包含面向人的 `business_logic`，不用技术术语解释业务闭环。
 - Goal 逐步拆解，不要求一开始列出所有远端实现任务；但每轮暂停都要保留开放边界，正式收口前必须确认产品关键路径没有被近期讨论主题淹没。
-- Runtime-neutral。网页和 App 都可以托管用户显式打开的本地 TUI 视口，仍不派单、不选择谁来做。终端必须持续显示所属 Goal；复合父 Goal 无论正在等待还是已经完成，都只提供子 Goal 入口，不能新建、重新打开或继续写入执行终端。打开页面不等于启动 Runtime，也不自动绑定 Session。
-- GoalBoard 是 pull-based 真相源：Runtime 自己读取、认领和回传，不由 Board 分发任务。
-- GoalBoard 同时提供可解释的规划层：Runtime 可读取当前有效方法、整图结构问题、执行优先级和需求变化影响；它仍通过 Proposal 与用户确认改变 canonical Goal，不把规划建议变成自动派单或静默改树。
+- Runtime-neutral。网页和 App 都可以托管用户显式打开的本地 TUI 视口，仍不派单、不选择谁来做。终端必须持续显示所属 Goal，不自动发送。父 Goal 可以记录整合事实，不再把 `closed_compound` 当作“无终端”的完成算法。打开页面不等于启动 Runtime，也不自动绑定 Session。
+- GoalBoard 是 pull-based 真相源：Runtime 自己读取和回传，不由 Board 分发任务。新 Goal 默认走事件入口；未转交历史 Goal 仍可认领。
+- GoalBoard 同时提供可解释的规划层：工作规划提供可选择采用的类型与默认要求，不自动成为强制阶段。Runtime 可读取当前有效方法、整图结构问题、执行优先级和需求变化影响；它仍通过 Proposal 与用户确认改变 canonical Goal 树，不把规划建议变成自动派单或静默改树。
 - 支持 self、cross、adversarial、human Review Policy，以及 Runtime Goal Mode 要求。
-- Goal 详情按“概览 / 完成要求 / 进展与阻塞 / 关联与约束 / 完整记录”组织，一次只显示一个任务区域；概览回答下一步和目标说明，“关联与约束”集中维护关系、风险、影响范围和工作规则，完整记录只读保留原始事实与历史。
-- Goal 标题旁提供“快速记录”，只录入完成依据、风险、影响范围或 Goal 关系；普通字段先出现，低频但必需的信息按需展开，保存失败必须明确指出缺什么。
+- 选中 Goal 是事件正文：顶部当前判断、已做成、下一步和风险不跟随历史选择；左时间索引、右事件正文。工作规划、目标说明、完成要求在右侧同一阅读器打开，并提供「返回所选事件」。桌面双栏独立滚动；阅读容器窄时在时间线与事件之间往返。目标说明/完成要求打开时与转交表单互斥；返回历史后，未转交 Goal 的转交入口仍可用。旧草稿长表单在阅读区内滚动；有限高度只作用于包含事件正文的 surface。
+- 「目标说明」承载目的、范围、有效决定，以及关系、风险、影响范围、Goal 级规则；已绑定资料保留原来源链接、状态、原因和 snapshot_digest。旧草稿编辑仅用于未转交 Goal；事件 Goal 用事件约定入口。「完成要求」承载当前事件要求、已保存的原验收标准（如有），以及关联 Artifact 精确版本。普通补充用「补充一条」；承诺、授权或完成要求变化走事件表单或可信决定。
+- Goal 事件/时间线路径的完成等级是内部完整：真实数据、主链路、异常恢复和桌面/窄屏内部试用已经接通。这不是安装、部署或真人验收，不能据此称为可发布。
 - Goal Tree 的第二视图是“推进态势”，而不是通用 Kanban 或关系浏览器。它从同一份 Goal、active `depends_on`、`part_of`、Claim、Run、Evidence、Review、Risk 与事件事实派生近 7/30 天节奏、完整左到右依赖拓扑和行动队列。`depends_on` 以“前置提供者 → 消费者”显示，`part_of` 只形成分组带；完成节点仍保留并弱化。瓶颈只表示可触达的未完成下游，行动顺序必须显示可追溯理由，历史不足、循环和悬空关系必须诚实降级，不能生成工作量、健康分或第二套状态。
 - 项目默认工作规则属于项目设置，不混在单条 Goal 的完整记录里；单条 Goal 只能增加自己的额外要求。全局设置默认先进入项目，不把 AI Runtime 或 coding 工具当成所有项目的默认语境。
-- Web UI 必须能查看 Goal Spine、Ready/Blocked、风险、Claim/Run、Evidence/Review 和 Candidate 决策。所有待决定事项先说明用户要回答的问题、为什么现在要回答和各选择的后果；没有可靠依据时不得假装给建议。Inbox 在决定卡片关闭后仍以 `Inbox Message · 处理结果` 展示权威事件，并提供回到具体 Goal 记录的入口；没有改变风险状态的“继续待处理”必须明确说明该事项仍会留在 Inbox，最近一次处理后才生成的待决定项必须标为新事项。风险处理类别是用户决定，页面必须直接提供选择，不能让 Runtime 用一段措施代替枚举；具体措施与处理类别分别保存。若 GoalBoard 已经判定方案结构无效，页面必须说清哪条 Goal 为什么还不能直接执行，并提供“先拆成可执行 Goal”的单一路径，系统自动记录检测到的问题，用户补充说明可选；只有有效方案被用户主观退回时才要求填写理由。
+- Web UI 必须能查看 Goal Spine、当前事件状态、风险、Candidate 决策，以及未转交 Goal 的 Claim/Run、Evidence/Review 历史。原 Run/Evidence/Review/Decision 按原 ID/来源可读，不转换成伪造的批准。所有待决定事项先说明用户要回答的问题、为什么现在要回答和各选择的后果；没有可靠依据时不得假装给建议。Inbox 在决定卡片关闭后仍以 `Inbox Message · 处理结果` 展示权威事件，并提供回到具体 Goal 记录的入口；没有改变风险状态的“继续待处理”必须明确说明该事项仍会留在 Inbox，最近一次处理后才生成的待决定项必须标为新事项。风险处理类别是用户决定，页面必须直接提供选择，不能让 Runtime 用一段措施代替枚举；具体措施与处理类别分别保存。若 GoalBoard 已经判定方案结构无效，页面必须说清哪条 Goal 为什么还不能直接执行，并提供“先拆成可执行 Goal”的单一路径，系统自动记录检测到的问题，用户补充说明可选；只有有效方案被用户主观退回时才要求填写理由。
 - V1 不包含云端多租户、复杂权限系统、第三方项目管理同步和完整 Runtime 运维。
 - Actor 身份在 V1 可先采用本地声明身份；更强凭据属于后续能力。
 
@@ -115,7 +116,7 @@ Relay 所有权迁移由用户显式触发：GoalBoard 以只读方式打开本�
 - `specs/goalboard-mvp/coordinator-contract.md`：Coordinator 决策与场景。
 - `modules/` 与 `apps/local-host/`：业务事实、跨模块用例装配、项目数据库和旧数据导入。
 - `apps/desktop/launchers/cli/main.ts` 与 `apps/desktop/launchers/mcp/server.ts`：V1-only CLI/MCP 入口及 Runtime/management audience 边界。
-- `apps/workbench/` 与 `plugins/native/goals/`：Goal Tree 与文档式工作区。
+- `apps/workbench/` 与 `plugins/native/goals/`：Goal Tree 与事件正文工作区。Workbench 只做通用呈现装配；完成判断不另算在 UI。
 - `plugins/native/feed/`、相关 Modules 与官方 Integrations：Feed Workbench 的 Item、来源、资料、处理状态、公开来源与账号连接器运行时、加密本地存储，以及 Relay 所有权迁移。
 - `apps/desktop/`：可选 macOS App 壳，复用同一套带 TUI 的 Web 工作台。
 - `tests/v1.test.ts`、`tests/mcp.test.ts`、`tests/feed.test.ts`、`tests/web.test.ts`：状态门禁、权限、迁移和 UI 数据流证据。

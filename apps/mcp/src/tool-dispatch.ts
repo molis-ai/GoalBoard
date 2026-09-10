@@ -1,4 +1,5 @@
 import { importV3Capability, trashedGoalsCapability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability, createGoalsEntryClient, createExecutionEntryClient, createGoalEntryCompositionClient, createGoalProposalClients, readGoalContractCapability, readProjectGuidanceCapability, setActiveGoalCapability } from "@adeptify/goalboard-plugin-goals";
+import { createMcpGoalEventHandlers } from "./goal-event-commands.js";
 import type { LocalHostProjectClient, RuntimeGoalTreeConfirmation } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { GoalTreeProposalDecisionAuthority } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
@@ -36,6 +37,7 @@ export async function dispatchMcpProjectTool(
     const executionCommandsClient = createExecutionEntryClient(client);
     const availability = createGoalEntryCompositionClient(client);
     const goalTools = createMcpGoalToolHandlers(goalsAdapter, ports.audience);
+    const eventTools = createMcpGoalEventHandlers(client, ports.audience, ports.createError);
     const trashTools = createMcpGoalTrashHandlers(availability, ports.createError);
     const draftDialogueTools = createMcpDraftDialogueHandlers(draftDialogue, ports.createError);
     const goalTreeTools = createMcpGoalTreeHandlers(goalTree);
@@ -104,6 +106,22 @@ export async function dispatchMcpProjectTool(
         result = planningMethodResponse(planning.methods, planning.composition, arguments_, ports.createError);
         break;
       }
+      case "goalboard_v1_goal_intent_create":
+      case "goalboard_v1_goal_state":
+      case "goalboard_v1_event_configure":
+      case "goalboard_v1_event_report":
+      case "goalboard_v1_event_list":
+      case "goalboard_v1_event_read":
+      case "goalboard_v1_event_progress":
+      case "goalboard_v1_event_concern":
+      case "goalboard_v1_event_decision_request":
+      case "goalboard_v1_event_cite_decision":
+      case "goalboard_v1_event_agree":
+      case "goalboard_v1_event_close":
+      case "goalboard_v1_event_resume":
+      case "goalboard_v1_event_decide":
+        result = await eventTools[name](arguments_);
+        break;
       case "goalboard_v1_claim":
       case "goalboard_v1_select_goal":
       case "goalboard_v1_release":

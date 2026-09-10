@@ -77,4 +77,7 @@ export interface GoalsDocumentView {
   resolved_policy: GoalPolicy;
   passed_criteria: string[];
   pending_reviews: string[];
+  event_work?: boolean;
+  event_document?: import("./event-document-model.js").GoalEventDocumentView | null;
+  artifact_embed_html?: string;
 }

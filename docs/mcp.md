@@ -34,9 +34,9 @@ GOALBOARD_MCP_AUDIENCE="runtime" \
 
 Web 是可选查看和用户确认界面，不是连接项目或推进 Goal 的前置条件。浏览页面不会绑定 Runtime；项目设置管理 Session 关联与 workspace membership，不保存目录默认项目。项目创建、Runtime 配置、解除关联与删除仍各有自己的授权。
 
-Runtime audience 只暴露工作入口解析/显式绑定、读取、Available/原子选择/Run、Contract/Candidate/Dependency Proposal、Goal Tree Proposal/Decision、重新验证、Evidence、Runtime Review、完成检查和释放。`goal-tree-decide` 不是 Runtime 自己随意改树的权限：只有用户刚刚在当前对话明确决定后，Runtime 才能传 `user_confirmed=true`、确认摘要和具体决定；GoalBoard 结合宿主 Session 元数据生成审计引用。Runtime 不能通过普通工具参数伪造 Session 身份或覆盖已解析的项目连接。
+Runtime audience 对新 Goal 和已转交 Goal 暴露工作入口解析/显式绑定、读取，以及事件工具 `goal_intent_create`、`goal_state`、`event_configure`、`event_report`、`event_list`、`event_read`、`event_progress`、`event_concern`、`event_decision_request`、`event_cite_decision`、`event_agree`、`event_close`、`event_resume`。它也保留 Goal Tree Proposal/Decision、Candidate/Dependency Proposal，以及未转交 `legacy_claim_run` Goal 的 Available/原子选择/Run、Evidence、Runtime Review、重新验证和释放。`event_decide` 不属于 Runtime audience。`goal-tree-decide` 不是 Runtime 自己随意改树的权限：只有用户刚刚在当前对话明确决定后，Runtime 才能传 `user_confirmed=true`、确认摘要和具体决定；GoalBoard 结合宿主 Session 元数据生成审计引用。Runtime 不能通过普通工具参数伪造 Session 身份、自填 user，或覆盖已解析的项目连接。
 
-Available 的 `action_projections` 是正式动作入口，选定后读 Contract 并携带返回的 `action_id`、`action_token` 调用 `select_goal`。生命周期写后直接消费 `transition.projection`；报告与 Evidence 齐全后自动释放执行者，最后 Review/Risk 门禁通过后自动完成。不要在正常流程追加 `complete → release`。有完成门禁时读返回的原因，按对应动作恢复，不重复执行已完成的工作。
+新 Goal / 已转交 Goal 的普通继续路径是 `goal_intent_create` → `event_configure` / `event_report` → `goal_state` / `event_list` / `event_read`。上报返回记录成功，不是正式完成；显式 `event_close` 才可能让 `completion_applied` 为 true。已有有效同范围授权不重复问。未转交 Goal 才把 Available 的 `action_projections` 当作领取入口：选定后读 Contract 并携带返回的 `action_id`、`action_token` 调用 `select_goal`。生命周期写后直接消费 `transition.projection`。不要把 `complete → release` 当成新 Goal 的默认完成步骤。要开始新版事件写入须显式「使用事件记录继续」；读取不会转交，转交后旧状态写入拒绝。
 
 受信用户入口需要创建 Goal、维护关系/风险/Policy、决定 Contract/Candidate/Rewire 或导入旧数据时，单独使用 `GOALBOARD_MCP_AUDIENCE=management`。不要把 management MCP 交给自主 Runtime。
 

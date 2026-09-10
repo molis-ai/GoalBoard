@@ -35,6 +35,8 @@ function planningMethodSummary(method: PlanningMethodPack): Record<string, unkno
   if ("overridden_scopes" in method) {
     summary.overridden_scopes = method.overridden_scopes;
   }
+  if (method.event_types?.length) summary.event_types = method.event_types;
+  if (method.default_requirements?.length) summary.default_requirements = method.default_requirements;
   return summary;
 }
 

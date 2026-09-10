@@ -18,9 +18,7 @@ test("fragment composition selects the correct owner and preserves collection re
   const calls: { owner: string; args: unknown[] }[] = [];
   const render = (owner: string) => (...args: unknown[]) => { calls.push({ owner, args }); return owner; };
   const fragments = createWorkbenchGoalsFragmentRenderer<typeof current, typeof view>({
-    document: render("document"), trash: render("trash"), completion: render("completion"),
-    progress: render("progress"), factors: render("factors"), records: render("records"),
-    recordEvents: render("events"), quickRecord: render("quick"), momentum: render("momentum"),
+    document: render("document"), trash: render("trash"), momentum: render("momentum"),
     prefixLinks: (html, prefix) => { calls.push({ owner: "prefix", args: [html, prefix] }); return prefix + html; },
   });
   const check = (action: () => unknown, name: string, args: unknown[], prefixed = true) => {
@@ -31,21 +29,10 @@ test("fragment composition selects the correct owner and preserves collection re
   check(() => fragments.renderGoalDocumentFragment(view, "same"), "document", [current, view]);
   check(() => fragments.renderGoalDocumentFragment(view, "same", "archive"), "document", [archived, view]);
   check(() => fragments.renderGoalDocumentFragment(view, "same", "trash"), "trash", [trash]);
-  check(() => fragments.renderGoalPanelFragment(view, "same", "completion", "archive", "trusted artifact"), "completion", [archived, view, "trusted artifact"]);
-  check(() => fragments.renderGoalPanelFragment(view, "same", "progress"), "progress", [current]);
-  check(() => fragments.renderGoalPanelFragment(view, "same", "factors"), "factors", [current, view]);
-  check(() => fragments.renderGoalRecordsFragment(view, "same", "archive"), "records", [archived, view]);
-  check(() => fragments.renderGoalRecordEventsFragment(view, "same", "archive", 40), "events", [archived, 40], false);
-  check(() => fragments.renderGoalQuickRecordFragment(view, "same"), "quick", [current, view]);
   check(() => fragments.renderGoalBoardMomentumFragment(view, "same", "archive"), "momentum", [view, "same", view.archived_goals]);
   calls.length = 0;
   for (const action of [
     () => fragments.renderGoalDocumentFragment(view, "missing"),
-    () => fragments.renderGoalPanelFragment(view, "same", "completion", "trash"),
-    () => fragments.renderGoalRecordsFragment(view, "same", "trash"),
-    () => fragments.renderGoalRecordEventsFragment(view, "same", "trash"),
-    () => fragments.renderGoalQuickRecordFragment(view, "same", "archive"),
-    () => fragments.renderGoalQuickRecordFragment(view, "stale"),
     () => fragments.renderGoalBoardMomentumFragment(view, "same", "trash"),
   ]) assert.equal(action(), null);
   assert.deepEqual(calls, [], "Rejected surfaces do not invoke an owner or prefixer");
@@ -97,13 +84,10 @@ test("Workbench request dispatch rejects invalid requests before reading views o
 test("public route descriptors decode once, preserve collection/offset boundaries and leave unrelated paths alone", () => {
   const read = (path: string) => { const url = new URL(path, "http://fixture.test"); return resolveGoalsReadRoute(url.pathname, url.searchParams); };
   assert.deepEqual(read("/api/goals/goal%252Fname/document?view=archive"), { route: { kind: "document", goal_id: "goal%2Fname", collection: "archive" } });
-  assert.deepEqual(read("/api/goals/a%2Fb/panels/progress"), { route: { kind: "panel", goal_id: "a/b", collection: "current", panel: "progress" } });
-  assert.deepEqual(read("/api/goals/one/record-events?offset=17"), { route: { kind: "record-events", goal_id: "one", collection: "current", offset: 17 } });
   assert.deepEqual(read("/api/board/refresh?goal_id=%20one%20&view=trash"), { route: { kind: "refresh", goal_id: "one", collection: "trash" } });
   assert.deepEqual(read("/api/board/momentum?goal_id=%20&view=archive"), { route: { kind: "momentum", goal_id: "", collection: "archive" } });
-  assert.deepEqual(read("/api/goals/%/records?view=bad"), { status: 404, error: "Goal 内容不存在" });
-  assert.deepEqual(read("/api/goals/one/record-events?offset=01"), { status: 400, error: "Goal 事件偏移量无效" });
-  for (const path of ["/api/goals/one/draft", "/api/goals/one/panels/other", "/api/goals/a/b/document", "/api/goals/one/document/", "/api/board"]) assert.equal(read(path), null, path);
+  assert.deepEqual(read("/api/goals/%/document?view=bad"), { status: 404, error: "Goal 内容不存在" });
+  for (const path of ["/api/goals/one/draft", "/api/goals/one/panels/progress", "/api/goals/one/records", "/api/goals/one/quick-record", "/api/goals/one/record-events", "/api/goals/a/b/document", "/api/goals/one/document/", "/api/board"]) assert.equal(read(path), null, path);
   assert.deepEqual(resolveGoalsPageRoute("/"), { route: { collection: "current" } });
   assert.deepEqual(resolveGoalsPageRoute("/archive"), { route: { collection: "archive" } });
   assert.deepEqual(resolveGoalsPageRoute("/trash/goals/a%252Fb"), { route: { collection: "trash", goal_id: "a%2Fb" } });
@@ -114,15 +98,11 @@ test("public route descriptors decode once, preserve collection/offset boundarie
 test("Workbench routes call only the selected owner with exact inputs and retain empty/missing response semantics", () => {
   const calls: Array<{ owner: string; args: unknown[] }> = [];
   const owner = (name: string) => (...args: unknown[]) => { calls.push({ owner: name, args }); return "<section>" + name + "</section>"; };
-  const renderers: GoalsReadRenderers = { refresh: owner("refresh"), momentum: owner("momentum"), panel: owner("panel"), document: owner("document"), records: owner("records"), recordEvents: owner("recordEvents"), quickRecord: owner("quickRecord") };
+  const renderers: GoalsReadRenderers = { refresh: owner("refresh"), momentum: owner("momentum"), document: owner("document") };
   const cases: [GoalsReadRoute, string, unknown[]][] = [
     [{ kind: "refresh", collection: "trash" }, "refresh", [undefined, "trash"]],
     [{ kind: "momentum", collection: "archive", goal_id: "a/b" }, "momentum", ["a/b", "archive"]],
-    [{ kind: "panel", collection: "current", goal_id: "a", panel: "factors" }, "panel", ["a", "factors", "current"]],
     [{ kind: "document", collection: "trash", goal_id: "a" }, "document", ["a", "trash"]],
-    [{ kind: "records", collection: "archive", goal_id: "a" }, "records", ["a", "archive"]],
-    [{ kind: "record-events", collection: "current", goal_id: "a", offset: 17 }, "recordEvents", ["a", "current", 17]],
-    [{ kind: "quick-record", collection: "current", goal_id: "a" }, "quickRecord", ["a", "current"]],
   ];
   for (const [route, name, args] of cases) {
     calls.length = 0;
@@ -131,7 +111,6 @@ test("Workbench routes call only the selected owner with exact inputs and retain
   }
   assert.deepEqual(renderWorkbenchGoalsReadRoute({ kind: "refresh", collection: "current" }, { ...renderers, refresh: () => "" }), { status: 200, html: "" });
   assert.deepEqual(renderWorkbenchGoalsReadRoute({ kind: "document", collection: "current", goal_id: "missing" }, { ...renderers, document: () => "" }), { status: 404, error: "找不到这个 Goal: missing" });
-  assert.deepEqual(renderWorkbenchGoalsReadRoute({ kind: "panel", panel: "progress", collection: "current", goal_id: "missing" }, { ...renderers, panel: () => null }), { status: 404, error: "找不到这个 Goal 面板: missing" });
 });
 
 test("Goal document HTTP routes retain bad-encoding, collection, offset, missing-content and response-header behavior", async t => {
@@ -149,21 +128,14 @@ test("Goal document HTTP routes retain bad-encoding, collection, offset, missing
     ["/api/board/refresh", 200, null], ["/api/board/momentum", 200, null],
     ["/api/board/refresh?view=bad", 400, "Goal 正文集合无效"],
     ["/api/board/momentum?view=trash", 400, "Goal 推进态势集合无效"],
-    ["/api/goals/V1/document", 200, null], ["/api/goals/V1/records", 200, null],
-    ["/api/goals/V1/quick-record", 200, null], ["/api/goals/V1/panels/completion", 200, null],
-    ["/api/goals/V1/panels/progress", 200, null], ["/api/goals/V1/panels/factors", 200, null],
+    ["/api/goals/V1/document", 200, null],
     ["/api/goals/%/document?view=bad", 404, "Goal 内容不存在"],
-    ["/api/goals/%/panels/factors", 404, "Goal 内容不存在"],
-    ["/api/goals/%/quick-record", 404, "Goal 内容不存在"],
     ["/api/goals/V1/document?view=", 400, "Goal 正文集合无效"],
-    ["/api/goals/V1/panels/factors?view=bad", 400, "Goal 正文集合无效"],
-    ["/api/goals/V1/quick-record?view=trash", 404, "无法为这个 Goal 打开快速记录: V1"],
-    ["/api/goals/V1/panels/factors?view=trash", 404, "找不到这个 Goal 面板: V1"],
-    ["/api/goals/missing/records", 404, "找不到这个 Goal: missing"],
+    ["/api/goals/missing/document", 404, "找不到这个 Goal: missing"],
     ["/api/goals/V1/document?offset=-1", 200, null],
-    ["/api/goals/V1/record-events?offset=0", 200, null],
-    ["/api/goals/V1/record-events?offset=9007199254740991", 200, null],
-    ...["-1", "1.5", "01", "", "9007199254740992"].map(offset => ["/api/goals/V1/record-events?offset=" + offset, 400, "Goal 事件偏移量无效"] as [string, number, string]),
+    ["/api/goals/V1/records", 404, "页面或接口不存在"],
+    ["/api/goals/V1/quick-record", 404, "页面或接口不存在"],
+    ["/api/goals/V1/panels/completion", 404, "页面或接口不存在"],
     ["/goals/%", 404, "Goal 页面不存在"], ["/archive/goals/%", 404, "Goal 页面不存在"],
     ["/trash/goals/%", 404, "Goal 页面不存在"], ["/goals/missing", 404, "找不到这个 Goal: missing"],
   ];

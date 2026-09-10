@@ -412,4 +412,92 @@ test("project Handoff web API keeps the editable draft, requires confirmation, a
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("event-work handoff package uses current facts and does not force Proposal or roles", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-handoff-event-"));
+  const home = path.join(directory, ".goalboard");
+  const boardId = "project-handoff-event";
+  const store = new LocalProjectDatabase(path.join(directory, "board.db"));
+  const coordinator = new GoalProjectApplication(store);
+  coordinator.initializeBoard({ board_id: boardId, title: "Event Handoff", actor_id: "owner", idempotency_key: `${boardId}-init` });
+  const created = coordinator.goalEvents.createIntent({
+    board_id: boardId, title: "事件交接目标", outcome: "按当前差距继续",
+    actor_id: "owner", actor_kind: "user", idempotency_key: "event-handoff-intent",
+  });
+  const state = coordinator.goalEvents.readState(boardId, created.goal.goal_id);
+  const contract = {
+    ...coordinator.readGoalContract(boardId, created.goal.goal_id),
+    event_work: true,
+    event_facts: {
+      work_status: state.work_status,
+      outcome: state.agreement.outcome,
+      next_step: state.progress_summary?.next_step ?? null,
+      pending_decisions: state.pending_decisions.map((item) => item.question),
+      current_decisions: state.current_decisions.map((item) => item.conclusion),
+      gaps: state.gaps.map((item) => item.statement),
+      stale_summary: state.progress_summary?.stale === true,
+    },
+  };
+  const registry = await openWorkSessionRegistry({ homeDirectory: home });
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+  const transport: RuntimeSessionTransport = {
+    async request(method, params) {
+      calls.push({ method, params });
+      if (method === "thread/read") return { thread: { turns: [] } };
+      if (method === "thread/start") return { thread: { id: "thread-event-destination" } };
+      if (method === "turn/start") return { turn: { id: "turn-event-destination" } };
+      throw new Error(`unexpected ${method}`);
+    },
+    subscribe() { return () => undefined; },
+  };
+  try {
+    const source = registry.explicitlyLinkSession({
+      runtime_id: "codex",
+      native_runtime_session_id: "thread-event-source",
+      actor_id: "user",
+      user_confirmed: true,
+      project_id: boardId,
+      current_goal_id: created.goal.goal_id,
+      workspace_path: directory,
+      title: "事件来源 Session",
+    });
+    const router = new RuntimeHostRouter((runtimeId) => new RegistryFallbackSessionAdapter(runtimeId, registry));
+    router.register(new CodexRuntimeSessionAdapter(transport));
+    const service = new SessionHandoffService(
+      registry,
+      router,
+      new SessionDirectoryService(registry, router),
+      new SessionContentService(registry, router),
+    );
+    const prepared = await service.prepare({
+      source_session_id: source.session_id,
+      project_id: boardId,
+      project_name: "Event Handoff",
+      target_runtime_id: "codex",
+      target_workspace_path: directory,
+      actor_id: "user",
+      goal_contract: contract,
+    });
+    const content = prepared.handoff.content ?? "";
+    assert.match(content, /当前事件工作/);
+    assert.match(content, /不要领取角色或开始 Run/);
+    assert.match(content, /按当前差距继续|当前约定/);
+    assert.doesNotMatch(content, /提交 Proposal/);
+    assert.doesNotMatch(content, /先读取它的合同和当前项目规划组合/);
+    const sent = await service.send({
+      package_id: prepared.handoff.package_id,
+      target_runtime_id: "codex",
+      target_workspace_path: directory,
+      content,
+      actor_id: "user",
+      user_confirmed: true,
+    });
+    assert.equal(sent.handoff.state, "sent");
+    assert.equal((calls[2]?.params.input as Array<{ text: string }>)[0]?.text, content);
+  } finally {
+    registry.close();
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";

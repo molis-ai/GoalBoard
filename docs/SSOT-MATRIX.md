@@ -41,11 +41,11 @@
 | 目标 package | 负责什么 | 当前来源 | 包成熟度 | 迁移 / 实现 Goal |
 | --- | --- | --- | --- | --- |
 | `apps/desktop` | macOS 外壳、生命周期、Native Bridge | Native Bridge、Panel、Capsule 与发布工具；Tauri 配置在 apps/desktop/src-tauri | `partial` | AP4/DV4/Cutover；实际平台安装证据见验证报告 |
-| `apps/workbench` | 本地产品 UI 与页面组合 | Shell、导航、页面组合与注册 UI contribution；无数据库实现 | `partial` | AP3/FD4/GW5/EX4/AR3/WK3/Cutover |
-| `apps/local-host` | 本地唯一业务 composition root 和 single writer | 唯一项目数据库和业务装配；Web/CLI/MCP、凭据与本机 IO 适配 | `partial` | AP2/Cutover；同库事务与跨入口恢复已验证 |
+| `apps/workbench` | 本地产品 UI 与页面组合 | Shell、导航、页面组合与注册 UI contribution；通用呈现边界，不拥有 Goal 完成算法；无数据库实现 | `partial` | AP3/FD4/GW5/EX4/AR3/WK3/Cutover |
+| `apps/local-host` | 本地唯一业务 composition root 和 single writer | 唯一项目数据库和业务装配；可信身份、HTTP 与 MCP 装配；Web/CLI/MCP、凭据与本机 IO 适配 | `partial` | AP2/Cutover；同库事务与跨入口恢复已验证 |
 | `apps/server` | 轻量交换、Team 控制面、Team Plugin Host | 当前无正式 Server 实现 | `absent` | F2；未来独立功能 Spec |
 | `apps/cli` | 参数、协议和终端展示适配 | 协议参数、命令分发与公开应用 adapter；root bin 仅注入启动环境 | `partial` | DV1/Cutover；CLI 协议和真实进程验证 |
-| `apps/mcp` | MCP schema、audience 和 Capability 适配 | 工具 schema、audience 与分发；Host 管连接身份和资源 | `partial` | DV1/DV2/Cutover；MCP stdio 与同项目用户链路 |
+| `apps/mcp` | MCP schema、audience 和 Capability 适配 | 事件与领取工具 schema、audience 与分发；Host 写入 Runtime 身份；`event_decide` 不属于 Runtime audience | `partial` | DV1/DV2/Cutover；MCP stdio 与同项目用户链路 |
 
 ## 4. Foundation packages
 
@@ -77,12 +77,12 @@
 | `modules/feed` | Feed Item、Signal reference、material、read/archive/disposition 与 promotion provenance | Feed Item/Material/Disposition 与保留正文；旧 FeedStore 已删除 | `partial` | FD2/FD4/Cutover；Sources/Inbox/Feed 真实用户链路 |
 | `modules/actions` | 个人/外部 Action 请求、状态和结果引用 | 占位包已删除；未来功能 | `absent` | F2；未来独立功能 Spec |
 | `modules/attention-resumption` | Attention reference、reason 与最小处置状态 | Attention reference/reason 与最小处置；旧 Inbox 转发已退出 | `partial` | FD2/Cutover；完整 snooze/resume 仍是未来能力 |
-| `modules/goals` | Goal Contract、Graph、Policy、Risk、Lifecycle、Planning | Contract/Graph/Policy/Risk/Lifecycle/Planning/schema；Native Goals 编排跨 owner 用例 | `partial` | GW1–GW6/DD1/DD2/Cutover；旧 v1 已删除 |
+| `modules/goals` | Goal Contract、Graph、Policy、Risk、Lifecycle、Planning、事件事实与事件 Goal 状态 | Contract/Graph/Policy/Risk/Lifecycle/Planning/事件配置与上报/schema；事件 Goal 的完成效果由 `events` 唯一写入；Native Goals 编排跨 owner 用例 | `partial` | GW1–GW6/DD1/DD2/Cutover；旧 v1 已删除 |
 | `modules/private-work-context` | 私人 Session、内容引用、关联语义、Runtime context binding 与 Handoff 事实 | Session / Handoff / Runtime 当前 Project 关联经 Ledger API 保存；私人内容与控制历史留在 Work | `partial` | WK1–WK3 已迁移；AR2 切换 Session schema v5、Catalog v10 与应用层组合 |
 | `modules/execution` | Claim、Run、lease、attempt 与执行生命周期 | EX1 已迁事实与状态机；EX4 已让 Web/CLI/MCP 走统一 application port 并删除 Coordinator 公开 facade | `partial` | EX1、EX4 已迁 |
 | `modules/artifacts` | Artifact、版本、类型、内容引用与 provenance | AR1 已建立唯一正式事实；旧代码仅有各 owner 的字符串引用，没有第二套 Artifact Store | `partial` | AR1 已迁 Core；AR3 切换现有结果入口 |
 | `modules/evidence-verification` | Evidence、Correction 与验证义务 | EX2 已迁事实与门禁；EX4 已迁入口授权与跨 owner application commands | `partial` | EX2、EX4 已迁 |
-| `modules/governance-collaboration` | Review、Proposal、Decision 与确认 provenance | Review/Proposal/Decision、确认 provenance、来源校验与旧提案展示 | `partial` | EX3/EX4/AR2/DD1/DD2/Cutover |
+| `modules/governance-collaboration` | Review、Proposal、Decision 与确认 provenance | Review/Proposal/Decision、确认 provenance、来源校验、旧提案展示，以及事件协议下的可信用户决定 | `partial` | EX3/EX4/AR2/DD1/DD2/Cutover |
 | `modules/automation` | Trigger、Rule、Automation Run 与产生的 Action Request | 占位包已删除；未来功能 | `absent` | F2；未来独立功能 Spec |
 
 每个 Module 的 API、事件和非职责见 [`docs/modules/`](modules/README.md)。Module 之间只通过公开 Capability Contract 调用，不导入彼此 implementation 或 Store。
@@ -102,11 +102,11 @@ Horizontal Service 只保存可恢复的技术状态，不拥有 Goal、Signal�
 
 | 目标 package | 产品能力 | 当前来源 | 包成熟度 | 迁移 / 实现 Goal |
 | --- | --- | --- | --- | --- |
-| `plugins/native/goals` | Goals 一级入口与产品 UI | Goals 页面/查询/写入口/规划/执行验收/决定；Workbench 注册并组合 UI | `partial` | GW/DD/EX/Cutover；旧 renderer 与 Coordinator 已删除 |
+| `plugins/native/goals` | Goals 一级入口与产品 UI | 事件正文（顶部概况、时间索引、阅读器）组装；目标说明/完成要求迁入既有关系、风险、旧验收与 Artifact；未转交 Goal 的旧草稿与领取入口；Workbench 注册并组合 UI，不另算完成 | `partial` | GW/DD/EX/Cutover；旧 renderer 与 Coordinator 已删除 |
 | `plugins/native/artifacts` | Artifacts 一级入口、浏览和嵌入 | 已迁结果链接/项目文件打开；正式版本列表、详情与本地导出已接入 Web；Goal 上下文按明确输入/产出关系嵌入精确版本 | `partial` | AR3 已完成迁移验收；不包含未来安装/Team 同步 |
 | `plugins/native/feed` | Feed 一级入口和处置 UI | Sources/Feed/Inbox UI、路由、同步与 promotion 用例；Host 注入具体 IO | `partial` | FD/Cutover；旧 Feed facade 清零 |
 | `plugins/native/actions` | Actions 一级入口 | 占位包已删除；未来功能 | `absent` | F2；未来独立功能 Spec |
-| `plugins/native/work` | Session、Runtime、resume、handoff 应用和 UI | WK3 已迁应用编排、Session/Terminal contribution、浏览器控制器、HTTP 用例和工作目录恢复 | `partial` | WK3；边界与证据见 `specs/goalboard-architecture-reorganization/wk3-validation.md` |
+| `plugins/native/work` | Session、Runtime、resume、handoff 应用和 UI | WK3 已迁应用编排、Session/Terminal contribution、浏览器控制器、HTTP 用例和工作目录恢复。`GET/POST /api/goals/:id/panels`（无子路径，JSON）仍是 Runtime 终端面板，与已删除的 Goal 五 tab fragment 不同 | `partial` | WK3；边界与证据见 `specs/goalboard-architecture-reorganization/wk3-validation.md` |
 | `plugins/native/automation` | Automation 一级入口 | 占位包已删除；未来功能 | `absent` | F2；未来独立功能 Spec |
 | `plugins/official-integrations/github` | GitHub connector/listener/signal adapter | GitHub Provider、Device OAuth 与账号呈现；Host 注入 Secret/env | `partial` | FD3/Cutover；无旧 connector caller |
 | `plugins/official-integrations/gmail` | Gmail OAuth/connector/listener/signal adapter | Gmail OAuth/安装账号/scope/cursor/Provider；Host 注入安全存储 | `partial` | FD3/Cutover；无旧 connector caller |

@@ -16,8 +16,9 @@ test("Goals relation UI preserves incoming direction, creation, cancel, deactiva
   const form = panel + " [data-relation-form]";
   const submit = form + ' button[type="submit"]';
   async function openRelations() {
-    await waitFor("document.readyState === 'complete' && document.querySelector('#goal-tab-factors-V1')");
-    await click("#goal-tab-factors-V1");
+    await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
+    await click('[data-event-reader="description"]');
+    await waitFor("document.querySelector('[data-event-panel=\"description\"]') && document.querySelector('[data-event-panel=\"description\"]').hidden === false");
     await waitFor("document.querySelector('#goal-factor-tab-relations-V1')");
     await click("#goal-factor-tab-relations-V1");
   }

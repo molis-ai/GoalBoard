@@ -67,6 +67,22 @@ describe("mcp server", () => {
     assert.ok(names.includes("goalboard_v1_project_delete"));
     assert.ok(!names.includes("goalboard_v1_postinstall_project_selection"));
     assert.ok(names.includes("goalboard_v1_available"));
+    assert.ok(names.includes("goalboard_v1_goal_intent_create"));
+    assert.ok(names.includes("goalboard_v1_goal_state"));
+    assert.ok(names.includes("goalboard_v1_event_configure"));
+    assert.ok(names.includes("goalboard_v1_event_report"));
+    assert.ok(names.includes("goalboard_v1_event_list"));
+    assert.ok(names.includes("goalboard_v1_event_read"));
+    const intentTool = listedTools.find((tool) => tool.name === "goalboard_v1_goal_intent_create");
+    assert.match(intentTool?.description ?? "", /创建本身不是完成/);
+    assert.ok(!intentTool?.inputSchema.required?.includes("actor_id"));
+    assert.ok(!Object.hasOwn(intentTool?.inputSchema.properties ?? {}, "actor_kind"));
+    const reportTool = listedTools.find((tool) => tool.name === "goalboard_v1_event_report");
+    assert.match(reportTool?.description ?? "", /不表示完成/);
+    const reportFields = (reportTool?.inputSchema.properties?.events as {
+      items?: { properties?: { fields?: { additionalProperties?: { type?: string } } } };
+    } | undefined)?.items?.properties?.fields;
+    assert.equal(reportFields?.additionalProperties?.type, "string");
     assert.ok(names.includes("goalboard_v1_select_goal"));
     const selectGoalTool = listedTools.find((tool) => tool.name === "goalboard_v1_select_goal");
     assert.match(selectGoalTool?.description ?? "", /调用前.*goalboard_v1_contract.*当前请求.*Contract.*范围/s);

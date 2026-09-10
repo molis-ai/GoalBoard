@@ -8,6 +8,7 @@ export interface GoalsNavigationItem extends Pick<GoalsTreeItem, "status" | "dis
   status_label: string;
   action_summary: string;
   main_action_label: string;
+  event_work?: boolean;
 }
 
 export function buildGoalsNavigationItems(
@@ -22,7 +23,7 @@ export function buildGoalsNavigationItems(
     status_meaning: item.action_summary,
     status_icon: statusIcon(item),
     is_waiting_parent: item.display_status === "waiting",
-    is_compound_parent: item.goal.decomposition_state === "closed_compound",
+    is_compound_parent: item.goal.decomposition_state === "closed_compound" && !item.event_work,
     children: childrenOf(item.goal.goal_id).map(child => ({
       goal: { goal_id: child.goal.goal_id, title: child.goal.title },
       status: visibleGoalStatus(child),

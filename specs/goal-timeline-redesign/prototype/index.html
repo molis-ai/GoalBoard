@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>GoalBoard · 进展时间流原型</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="planning.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+<!--
+THESIS: 顶部掌握目标整体进展，左侧密集扫描时间点，右侧阅读选中事件；历史选择不改变当前整体事实。
+OWN-WORLD: GoalBoard 中性白灰、系统中文字体和克制蓝色；紧凑事件索引与白色阅读面，无长内容卡片流。
+STORY: 先知道现状、已做结果、下一步和风险；沿时间线选择事件，核对产物和决定后回到下一条。
+FIRST VIEWPORT: 紧凑目标与整体进展占顶部，左侧约300px纯时间线，右侧完整事件；两区独立滚动。
+FORM: 用户指定时间流；code-led 独立设计原型。保留产品视觉基础，重做 GoalDetail 结构；示例数据不接生产服务。
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+-->
+  <a class="skip-link" href="#goal-title">跳到目标详情</a>
+  <header class="prototype-bar">
+    <div class="prototype-label"><span class="prototype-dot" aria-hidden="true"></span><strong>交互原型</strong><span>示例数据 · 操作仅在本页模拟</span></div>
+    <div class="scenario-picker"><label for="scenario">查看场景</label><select id="scenario">
+      <option value="progress">有新进展</option><option value="custom">全新任务 · 自由规划</option><option value="decision">需要你决定</option><option value="blocked">部分受阻</option><option value="interrupted">会话中断</option><option value="complete">已完成</option><option value="empty">刚创建</option><option value="parent">父目标</option>
+    </select><button class="text-button" id="reset-demo" type="button">重置演示</button></div>
+  </header>
+  <main class="workspace">
+    <nav class="breadcrumb" aria-label="当前位置"><span class="brand" id="brand"></span><span>GoalBoard</span><span aria-hidden="true">/</span><span>示例项目</span><span aria-hidden="true">/</span><span>目标详情</span></nav>
+    <header id="goal-header" class="goal-header"></header>
+    <section id="current-summary" class="goal-overview" aria-label="目标整体进展"></section>
+    <div class="goal-layout" id="goal-layout">
+      <section class="timeline-pane" aria-labelledby="stream-title">
+        <div class="stream-toolbar"><h2 id="stream-title">时间线 <span id="event-count"></span></h2><div class="filters" role="group" aria-label="筛选时间线"><button type="button" data-filter="all" aria-pressed="true">全部</button><button type="button" data-filter="result" aria-pressed="false">成果</button><button type="button" data-filter="decision" aria-pressed="false">决定</button></div></div>
+        <nav id="timeline" aria-label="按时间选择事件"></nav>
+        <div class="timeline-footer">最新在前 <span>↑ ↓ 切换事件</span></div>
+      </section>
+      <section class="detail-pane" aria-label="所选事件及内容">
+        <div class="detail-toolbar"><button type="button" class="text-button mobile-back" data-action="timeline">返回时间线</button><span id="detail-location">事件内容</span><div class="event-paging"><button type="button" class="icon-button" id="previous-event" aria-label="上一条事件"></button><button type="button" class="icon-button" id="next-event" aria-label="下一条事件"></button></div></div>
+        <div id="event-detail" class="event-sheet" tabindex="-1"></div>
+        <section id="reader" class="reader" aria-labelledby="reader-title" hidden><header class="reader-header"><button type="button" class="text-button" id="close-reader">返回所选事件</button><h2 id="reader-title"></h2></header><div id="reader-content" class="reader-content"></div></section>
+        <form id="note-form" class="composer" hidden>
+          <button type="button" class="text-button" data-action="return-event">返回所选事件</button>
+          <label for="note">补充一条</label><textarea id="note" rows="2" placeholder="补充事实、想法，或说说你希望调整什么…" maxlength="5000" required></textarea>
+          <div class="composer-bottom"><span>保留你的原话；不会自动改写已确认的要求。</span><button type="submit" class="button primary">记录到进展</button></div>
+        </form>
+      </section>
+    </div>
+  </main>
+  <div id="toast" role="status" aria-live="polite" class="toast" hidden></div>
+</body>
+</html>

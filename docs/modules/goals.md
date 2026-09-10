@@ -29,9 +29,9 @@ Web、CLI、MCP 通过各 App 的 Goals adapter 调用 `impacts`；Coordinator �
 
 **定位：** Goal Contract、关系图、Policy、Risk、Lifecycle、Project Guidance 与 Planning 规则的唯一 owner。
 
-**拥有：** Goal identity/version、outcome/scope/criteria、parent/dependency graph、risk/policy、accepted contract revision、ready/completion lifecycle 和 planning analysis。
+**拥有：** Goal identity/version、outcome/scope/criteria、parent/dependency graph、risk/policy、accepted contract revision、ready/completion lifecycle、planning analysis，以及 Goal 局部事件类型/版本、工作事实与当前要求报告判断。
 
-**公开面：** 查询列表/详情/关系/ready/read model；创建和修改 Draft、接受 Contract、管理关系/风险/策略、revalidate/complete/archive；发布 Goal 与图变化事件。
+**公开面：** 查询列表/详情/关系/ready/read model；创建和修改 Draft、接受 Contract、管理关系/风险/策略、revalidate/complete/archive；发布 Goal 与图变化事件；登记局部事件类型/版本、批量上报工作事实、按服务器顺序读取事件和当前要求报告。新意图和已采用事件配置的 Goal 由 `GoalsModule.events` 作为唯一状态 owner：进展摘要、有范围的 Concern、决定请求、显式完成/取消/继续，以及 fulfillment 写入。旧 `evaluateCompletion` / 祖先自动满足在事件归属 Goal 上会在副作用前拒绝或跳过。Runtime MCP 可请求和引用已保存决定；可信用户决定走 Host Web/管理入口与 Governance 来源校验。
 
 **不负责：** Claim/Run 属于 Execution，Evidence 属于 Evidence & Verification，Review/Proposal/Decision 属于 Governance，跨 Module provenance 属于 Context Ledger。Planning 可以提出变化，不能自行确认为正式 Goal 变化。
 
@@ -47,6 +47,10 @@ Draft 编辑后的旧 Contract Proposal 失效现在通过必需的 `supersedePe
 - `GoalsModule.lifecycle`：接受 Draft、按同一 `goal_id` 增加 Contract revision、完成/重新校验、归档、回收站恢复、复合父 Goal 协调。
 - Goal lifecycle migrations：归档、回收站、历史 Run/澄清状态、Active Goal 指针和 Contract coverage schema；由旧 Store 启动流程调用公开迁移函数，不保留第二份实现。
 - `GoalsModule.planning`：项目规划方法选择与版本递增、完整 Runtime instructions、方法组合、关系图循环检查、执行顺序指标和需求变化影响分析。
+- `GoalsModule.events`：当前 Goal 的局部事件类型与版本、配置事件、工作事实上报、分页读取和当前要求的报告判断。配置使用期望版本防覆盖；历史报告按当时类型版本回读。关闭数据库后重新打开仍可读。新意图和已采用事件配置的 Goal 由 `events` 作为唯一状态 owner：普通报告不自动完成，显式收尾才写入 fulfillment；旧 `evaluateCompletion` / 祖先自动满足在副作用前拒绝或跳过。Host 通过 `migrateGoalEventFactsSchema`（migration 32）装配专属表。公开工作事件按 `kind` 区分配置 payload 与报告文本字段。
+- `GoalsPlanningEngine.resolveEventAdoption`：按内置/个人/项目当前可读版本解析采用来源，合并等价事件类型/默认要求并保留来源；冲突在写入前失败。采用不等于启用全部默认要求。默认要求在当前 Goal 实例化，调用方使用返回配置中的实际要求 ID。
+- `GoalsModule.events.listLatestReports`：有界读取当前 Goal 真正最近的报告，不与时间分页混用。`configureRequested` 先按原始业务请求做幂等，再解析可能变化的规划内容。
+- Native Goals 事件入口：`GoalEventApplication` 组合意图 Draft、规划采用、`events` API 与 typed 状态操作；MCP 工具 `goalboard_v1_goal_intent_create`、`goalboard_v1_goal_state`、`goalboard_v1_event_configure`、`goalboard_v1_event_report`、`goalboard_v1_event_list`、`goalboard_v1_event_read`、`goalboard_v1_event_progress`、`goalboard_v1_event_concern`、`goalboard_v1_event_decision_request`、`goalboard_v1_event_cite_decision`、`goalboard_v1_event_agree`、`goalboard_v1_event_close`、`goalboard_v1_event_resume` 经 Host 可信 Runtime 身份调用。`goalboard_v1_event_decide` 和 `POST /api/goals/:id/event-decision` 只接受 Host 注入的用户来源。上报不是完成；完成效果只在显式收尾且本 Goal 结果、当前约定、要求、depends_on、accepted human_approval、completion Risk 与适用待决定都成立时写入。系统状态事件 payload 按 operation 有限可读。`event_agree` 的 CAS 令牌是当前约定版本。
 - `modules/goals/methods/`：37 个内置规划方法的唯一发布资产；源码、npm package 和本地安装包读取同一目录。Home installer 只在已安装 Runtime Skill 下创建指向该目录的包内兼容链接，不保留第二份源文件。
 - Planning decomposition validation：叶子 Goal 粒度检查和复合 Goal 覆盖检查拆成两个文件，均通过 Goals public entrypoint 调用；Proposal/Decision 只作为待检查输入，事实仍归 Governance。
 - `GoalsApplicationApi`：把 Command、Lifecycle 与 Planning 组合成一个公开应用端口；Workbench、MCP、CLI 分别用自己的薄 adapter 接入，不导入 Goals implementation、Store 或 Coordinator 实现。
@@ -54,13 +58,13 @@ Draft 编辑后的旧 Contract Proposal 失效现在通过必需的 `supersedePe
 - `GoalInputBindings`：输入确认 receipt 的公开读写和 schema owner。Web/Feed promotion 不再直接读写 `input_bindings`；跨 Project Goal 不能登记输入。可解析 Feed locator 迁入注入的 Ledger `goal.input` 关系，旧 endpoint 清空，Goals 仅保存 edge key 并通过公开 Query 还原兼容返回值。确认状态、snapshot digest、原始 actor/时间仍归 Goals；URL/不可解析 locator 保留，不自动注册为 Artifact。schema 补列、迁移与新写入失败均与关系一起回滚。
 - 公开错误 Contract：旧 `GoalBoardV1Error` 通过兼容注入保留 `code/message/details`；直接使用 Module 时返回 `GoalsCommandError`。
 - Web、MCP、CLI 和 Feed promotion 的 Goal 写入已经切到公开应用端口；旧 `GoalBoardCoordinator` 的写入、Lifecycle、Planning 同名转发方法已经删除，原有 payload、错误与结果保持不变。
-- `plugins/native/goals` 的 `ExecutionValidationApplicationApi` 与 action projection 已成为 Claim → Run → Evidence → Review 的组合入口；三个 App adapter 共享同一 Query/Command port，具体事实仍由四个 Module 各自拥有。
+- `plugins/native/goals` 的 `ExecutionValidationApplicationApi` 与 action projection 仍是未转交 `legacy_claim_run` Goal 的 Claim → Run → Evidence → Review 组合入口；三个 App adapter 共享同一 Query/Command port，具体事实仍由四个 Module 各自拥有。新 Goal 和已转交 Goal 的状态效果只走 `GoalsModule.events`，UI/MCP 不另算完成。
 
 ## 仍未迁入
 
 - Draft dialogue 与 Goal Tree Proposal/Decision 编排不属于本 Module：它们跨 Governance、Execution 和 Goals，也不属于 EX4 的执行验收链。DD1/DD2 已由 Goals Native Plugin 实现，消费本模块 Query/Command；不吸收进 Goals Module。
 - Query 兼容入口：少量旧 Coordinator 只读委托仍保留到对应 caller 完成切换；不得重新加入 Goal SQL 或业务判断。
-- Goals UI 与产品文案属于 `plugins/native/goals`，不是 Goals Module。GW5 全部页面、专属交互、route descriptor、就近文案及项目工作规则页面已完成工程验收；Workbench 只 mount contribution 和装配页面/请求，Host 保留数据、权限、HTTP 与跨 owner 输入。只读呈现消费公开事实/action projection，草稿保存仍走公开 Goals API，不能自动接受或启动 Run。175 项串行 Goals/Web/Desktop 回归和完整映射见 `specs/goalboard-architecture-reorganization/gw5-validation.md`。跨 Execution/Decision/共享 Shell 的剩余组合由最终 Cutover 处理。
+- Goals UI 与产品文案属于 `plugins/native/goals`，不是 Goals Module。选中 Goal 由 Native Goals 组装为事件正文：顶部当前判断/已做成/下一步/风险，左时间索引，右正文；工作规划/目标说明/完成要求使用同一阅读器。Workbench 只 mount contribution 和装配页面/请求，Host 保留数据、权限、HTTP 与跨 owner 输入，不另算完成。旧草稿编辑仅未转交 Goal 可走公开 Goals API；事件 Goal 用 `event_agree` / `event_configure`。未转交 Goal 的 Claim/Run 仍走公开执行入口。GW5 的页面/route/文案工程验收见 `specs/goalboard-architecture-reorganization/gw5-validation.md`，其中旧五 tab 已从选中 Goal 正文移除。
 
 Claims/Runs、Review obligation、Project active Goal 和 Action projection 通过窄 port 由各自 owner 提供；Goals Lifecycle 不跨模块直接读写 Store。Risk 的当前 Action 授权和 Lifecycle reconcile 仍是迁移接缝，后续 Execution/Governance/Query owner 会替换兼容实现。这个 port 不是第二套事实或通用 Event Bus。
 
@@ -68,6 +72,6 @@ Claims/Runs、Review obligation、Project active Goal 和 Action projection 通�
 
 - Planning UI 消费公开 `PlanningMethodPack` / `PlanningMethodComposition`；组合规则仍在 Module。Plugin 拥有方法库/详情/编辑/项目组合呈现、专属客户端/样式/文案及页面 matcher，HTTP 宿主保留确认门槛与持久化。浏览器“加入组合”已补齐漏传的显式确认字段，未放宽 Module 规则。
 
-- GW5 追加：完整记录中的 Goal 基础资料/只读关联归 Context contribution；进展的开放风险/检查规则摘要归 Safety/Policy contribution。初始和刷新导航数据由 `buildGoalsNavigationItems` 输出最小投影，Host 只组合 Project/Board/cursor 和安全 JSON。Execution/检查/历史外层组合不进入 Goals Module 或这次 UI 切片，最终 Cutover 必须单独审查该边界。
+- 目标说明迁入关系、风险、影响范围、Goal 级规则，以及已绑定资料的原来源链接、状态、原因和 snapshot_digest。完成要求保留当前事件要求、已保存的原验收标准（如有）和关联 Artifact 精确版本。Inbox/树 `#risk-` `#relation-` 定位打开目标说明后的既有因素工作面。旧五 tab fragment（`/panels/{completion,progress,factors}`、`/records`、`/quick-record`）已无产品入口。`GET/POST /api/goals/:id/panels`（无子路径，JSON）仍是 Work/Runtime 终端面板。
 
-- 浏览器正文、面板/因素和记录/翻页均通过显式 Host factory 装配，分别持有请求状态；面板 keys 与 hash/键盘/点击由 Plugin 提供。Host 保留共享状态保存、focus/reveal、跨 owner 预览和事件分发顺序。取消会立即释放相应 busy/disabled 状态，迟到响应不能写 DOM；这些是 UI 请求规则，不是新的 Goal 事实或执行许可。
+- 浏览器事件正文与目标说明/完成要求阅读器通过显式 Host factory 装配。Host 保留共享状态保存、focus/reveal、跨 owner 预览和事件分发顺序。取消会立即释放相应 busy/disabled 状态，迟到响应不能写 DOM；这些是 UI 请求规则，不是新的 Goal 事实或执行许可。初始和刷新导航数据由 `buildGoalsNavigationItems` 输出最小投影，Host 只组合 Project/Board/cursor 和安全 JSON。

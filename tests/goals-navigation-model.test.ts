@@ -23,4 +23,10 @@ test("Goal browser projection keeps supplied child order and display state while
   assert.equal(leaf.is_waiting_parent, false);
   assert.equal(leaf.is_compound_parent, false);
   assert.deepEqual(leaf.children, []);
+  const eventParent = buildGoalsNavigationItems([{
+    goal: { goal_id: "parent-event", title: "Event parent", decomposition_state: "closed_compound" },
+    status: "executing", display_status: "in_progress", status_label: "正在推进",
+    action_summary: "整合工作", main_action_label: "记录进展", event_work: true,
+  }], () => [], () => "")[0]!;
+  assert.equal(eventParent.is_compound_parent, false);
 });

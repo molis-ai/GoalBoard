@@ -91,7 +91,26 @@ export async function handleGoalBoardWebRequest(
           return;
         }
         if (await handleSessions(request, response, url, serverOptions.homeDirectory, options, sessionResources, readWebView,
-          (goalId) => coordinator.goalQueries.readGoalContract(options.boardId, goalId))) return;
+          (goalId) => {
+            const contract = coordinator.goalQueries.readGoalContract(options.boardId, goalId);
+            const event_work = coordinator.goalEvents.isEventStateOwner(options.boardId, goalId);
+            const state = event_work ? coordinator.goalEvents.readState(options.boardId, goalId) : null;
+            return {
+              ...contract,
+              event_work,
+              event_facts: state
+                ? {
+                    work_status: state.work_status,
+                    outcome: state.agreement.outcome,
+                    next_step: state.progress_summary?.next_step ?? null,
+                    pending_decisions: state.pending_decisions.map((item) => item.question),
+                    current_decisions: state.current_decisions.map((item) => item.conclusion),
+                    gaps: state.gaps.map((item) => item.statement),
+                    stale_summary: state.progress_summary?.stale === true,
+                  }
+                : undefined,
+            };
+          })) return;
         if (goalsReadHttp.settings(request, response, url, options.boardId, readWebView, coordinator, controlToken)) return;
         if (await planningHttp.project(request, response, url, serverOptions.homeDirectory, options.boardId, controlToken, readWebView, goalsAdapter.planning)) return;
         if (request.method === "GET" && url.pathname === "/health") {
@@ -159,7 +178,7 @@ export async function handleGoalBoardWebRequest(
         }
         if (handleLocalProjectReferenceHttp(request, response, url, options, coordinator.evidenceVerification.query)) return;
         if (await handleGoalsWebHttp({
-          method: request.method, pathname: url.pathname,
+          method: request.method, pathname: url.pathname, search: url.searchParams,
           readBody: () => readBody(request), respond: (status, body) => sendJson(response, status, body),
           options, idempotencyHeader: request.headers["x-goalboard-idempotency-key"],
           snapshot: () => store.snapshot(options.boardId), changed: () => { webViewCache.delete(options.databasePath); },
@@ -169,13 +188,15 @@ export async function handleGoalBoardWebRequest(
           goalTreeWebInput: coordinator.goalTreeWebInput, goalTreeDecision: coordinator.goalTreeDecision,
           legacyContractDecision: coordinator.legacyContractDecision,
           legacyCandidateDecision: coordinator.legacyCandidateDecision, legacyRewireDecision: coordinator.legacyRewireDecision,
+          goalEvents: coordinator.goalEvents,
+          journalEvents: () => store.readEventsDescending(options.boardId),
         })) return;
         if (handleArtifactNativePluginHttp(request, response, url.pathname, {
           boardId: options.boardId, routePrefix: options.routePrefix ?? "",
           projectTitle: options.project?.display_name ?? "GoalBoard",
           query: coordinator.artifacts.query, desktopShell: isDesktopShellRequest(request, url), pageCsp: PAGE_CSP,
         })) return;
-        if (await goalsReadHttp.page(request, response, url, options, serverOptions.homeDirectory, readWebView, sessionResources, controlToken)) return;
+        if (await goalsReadHttp.page(request, response, url, options, serverOptions.homeDirectory, readWebView, sessionResources, controlToken, coordinator, store)) return;
         sendJson(response, 404, { error: L("页面或接口不存在") });
       }
       });

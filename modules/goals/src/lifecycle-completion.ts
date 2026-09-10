@@ -15,6 +15,7 @@ import {
   lifecycleReason,
 } from "./lifecycle-reasons.js";
 import type { GoalCompletionHooks } from "./lifecycle-ports.js";
+import { goalHasEventStateOwner } from "./event-state-repository.js";
 import { rowText } from "./repository.js";
 
 type Row = Record<string, unknown>;
@@ -44,6 +45,7 @@ export class GoalCompletionCommands {
       );
       if (replay) return { ...replay, replayed: true };
       const goal = this.context.requireGoal(input.board_id, input.goal_id);
+      this.rejectEventOwnedWrite(input.board_id, input.goal_id, "evaluateCompletion");
       if (goal.fulfillment_state === "satisfied" && goal.validity_state === "valid") {
         const outcome = {
           satisfied: true,
@@ -106,6 +108,7 @@ export class GoalCompletionCommands {
     reason: string,
   ): number {
     const goal = this.context.requireGoal(boardId, goalId);
+    this.rejectEventOwnedWrite(boardId, goalId, "reopenForLifecycleFacts");
     if (goal.fulfillment_state !== "satisfied") {
       return this.context.repository.eventCursor(boardId);
     }
@@ -139,6 +142,7 @@ export class GoalCompletionCommands {
     at: string,
   ): number {
     const goal = this.context.requireGoal(boardId, goalId);
+    this.rejectEventOwnedWrite(boardId, goalId, "satisfyForLifecycleFacts");
     if (goal.fulfillment_state === "satisfied") {
       return this.context.repository.eventCursor(boardId);
     }
@@ -226,6 +230,7 @@ export class GoalCompletionCommands {
     at: string,
   ): boolean {
     const parent = this.context.requireGoal(boardId, parentGoalId);
+    if (this.isEventOwned(boardId, parentGoalId)) return false;
     if (
       parent.trashed_at ||
       parent.archived_at ||
@@ -263,6 +268,7 @@ export class GoalCompletionCommands {
     at: string,
   ): number {
     const goal = this.context.requireGoal(boardId, goalId);
+    if (this.isEventOwned(boardId, goalId)) return this.context.repository.eventCursor(boardId);
     if (goal.fulfillment_state !== "satisfied") return this.context.repository.eventCursor(boardId);
     if (goal.validity_state === "valid") {
       this.context.repository.db.prepare(
@@ -316,6 +322,7 @@ export class GoalCompletionCommands {
         visitedParents.add(parentGoalId);
         pendingChildren.push(parentGoalId);
         const parent = this.context.requireGoal(boardId, parentGoalId);
+        if (this.isEventOwned(boardId, parentGoalId)) continue;
         if (
           parent.trashed_at ||
           parent.archived_at ||
@@ -404,6 +411,7 @@ export class GoalCompletionCommands {
     at: string,
   ): boolean {
     const goal = this.context.requireGoal(boardId, goalId);
+    if (this.isEventOwned(boardId, goalId)) return false;
     if (
       goal.trashed_at ||
       goal.archived_at ||
@@ -449,6 +457,19 @@ export class GoalCompletionCommands {
       at,
     });
     return true;
+  }
+
+  private isEventOwned(boardId: string, goalId: string): boolean {
+    return goalHasEventStateOwner(this.context.repository.db, boardId, goalId);
+  }
+
+  private rejectEventOwnedWrite(boardId: string, goalId: string, entry: string): void {
+    if (!this.isEventOwned(boardId, goalId)) return;
+    throw this.context.error(
+      "goal.event_state_owner",
+      `这个 Goal 已由事件状态服务负责完成效果。请使用显式收尾（goalboard_v1_event_close），不要调用旧入口 ${entry}`,
+      { goal_id: goalId, entry, recovery: "goalboard_v1_event_close" },
+    );
   }
 
 }

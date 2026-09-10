@@ -168,31 +168,6 @@ export const QUIET_PAPER_STYLES = `  /* Quiet Paper visual replacement. Persiste
     color: var(--ink);
     background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
-  body[data-desktop-shell="true"] .goal-workspace-nav,
-  .goal-workspace-nav {
-    width: fit-content;
-    max-width: 100%;
-    margin: 0 0 8px;
-    padding: 3px;
-    border: 0;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
-    gap: 2px;
-  }
-  body[data-desktop-shell="true"] .goal-workspace-nav button,
-  .goal-workspace-nav button {
-    min-height: 31px;
-    padding-inline: 11px;
-    border-radius: 7px;
-    color: var(--muted);
-  }
-  .goal-workspace-nav button::after { display: none !important; }
-  body[data-desktop-shell="true"] .goal-workspace-nav button[aria-selected="true"],
-  .goal-workspace-nav button[aria-selected="true"] {
-    color: var(--ink);
-    background: var(--paper);
-    box-shadow: 0 1px 3px rgba(28, 29, 26, .09);
-  }
   .goal-focus-outcome,
   .goal-now,
   .goal-focus-criteria,
@@ -457,14 +432,6 @@ export const QUIET_PAPER_STYLES = `  /* Quiet Paper visual replacement. Persiste
       width: min(100%, 1120px);
       padding: 14px 24px 36px;
     }
-    html[data-density="compact"] body[data-board-view]:not([data-board-view="decisions"]) .goal-workspace-nav {
-      margin-bottom: 4px;
-      padding: 2px;
-    }
-    html[data-density="compact"] body[data-board-view]:not([data-board-view="decisions"]) .goal-workspace-nav button {
-      min-height: 26px;
-      padding-inline: 8px;
-    }
     html[data-density="compact"] body[data-board-view]:not([data-board-view="decisions"]) .navigator-project { padding: 7px 9px 5px; }
   }
 
@@ -490,13 +457,6 @@ export const QUIET_PAPER_STYLES = `  /* Quiet Paper visual replacement. Persiste
     body[data-desktop-shell="true"] .goal-now-body {
       grid-template-columns: minmax(0, 1fr);
       align-items: start;
-    }
-    body[data-desktop-shell="true"] .goal-now-body .goal-primary-action {
-      grid-column: 1;
-      width: fit-content;
-      max-width: 100%;
-      justify-self: start;
-      white-space: normal;
     }
     .settings-navigation,
     .settings-content,

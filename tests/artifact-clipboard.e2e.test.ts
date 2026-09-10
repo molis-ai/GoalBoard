@@ -115,13 +115,16 @@ test("migrated result reference copies exact text and handles denied clipboard p
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await command("Page.navigate", { url: origin + "/goals/V1" }, sessionId);
   await command("Page.bringToFront", {}, sessionId);
-  await waitFor(`document.readyState === 'complete' && document.querySelector('#goal-tab-records-V1')`);
-  await click("#goal-tab-records-V1");
-  await waitFor(`document.querySelector('[data-goal-records-content]')?.dataset.loaded === 'true'`);
-  const executionSelector = await evaluate<string>(`(() => { const button = [...document.querySelectorAll('[data-focus-section-trigger]')].find(b => b.textContent.includes('执行与检查'));
-    if (!button) throw new Error('Missing execution record section'); return '[data-focus-section-trigger="'+button.dataset.focusSectionTrigger+'"]'; })()`);
-  await click(executionSelector);
+  await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
+  const evidenceItem = await evaluate<string>(`(() => {
+    const items = [...document.querySelectorAll("[data-timeline-item]")];
+    const hit = items.find((item) => String(item.dataset.timelineItem || "").includes("evidence") || item.textContent.includes(${JSON.stringify(reference)}));
+    return hit?.dataset.timelineItem || items[0]?.dataset.timelineItem || "";
+  })()`);
+  assert.ok(evidenceItem, "timeline must expose the submitted Evidence");
+  await click(`[data-goal-event-document]:not([hidden]) [data-timeline-item="${evidenceItem}"]`);
   const copySelector = `[data-copy-value=${JSON.stringify(reference)}]`;
+  await waitFor(`document.querySelector(${JSON.stringify(copySelector)})`);
   await click(copySelector);
   await waitFor(`document.querySelector('[data-toast]')?.textContent.includes('引用已复制')`);
   assert.equal(await evaluate("navigator.clipboard.readText()"), reference);

@@ -15,6 +15,7 @@ import { RuntimeSessionHost } from "./runtime-session.js";
 import { RuntimeProjectConnection } from "./runtime-project-connection.js";
 import { runtimeContextHostFromEnvironment } from "./runtime-context.js";
 import { assertMcpToolAllowed, requireMcpRuntimeContextHost } from "./mcp-authority.js";
+import { injectRuntimeEventActor } from "./mcp-event-identity.js";
 import type { LocalWebCatalogRunner } from "./web-project-settings.js";
 
 export type GoalBoardMcpAudience = "runtime" | "management";
@@ -166,7 +167,10 @@ export class LocalMcpServer {
       projectId: this.audience === "runtime" ? runtimeConnection!.projectId : undefined,
     });
     const client = this.localHost.client(reference);
-    return dispatchMcpProjectTool(client, name, arguments_, {
+    const trustedArguments = this.audience === "runtime"
+      ? injectRuntimeEventActor(name, arguments_, this.runtimeContextHost, callContext)
+      : arguments_;
+    return dispatchMcpProjectTool(client, name, trustedArguments, {
       audience: this.audience,
       webBaseUrl: () => String(this.audience === "runtime" ? runtimeConnection!.webBaseUrl
         : arguments_.web_base_url ?? process.env.GOALBOARD_WEB_URL ?? "http://127.0.0.1:4173"),

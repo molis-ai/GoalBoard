@@ -3,6 +3,7 @@ import type {
   AddGoalRelationInput,
   AddProjectGuidanceInput,
   CreateGoalInput,
+  GoalEventFactsApi,
   GoalPolicy,
   PlanningMethodPack,
   GoalsCommandApi,
@@ -53,6 +54,7 @@ import {
 } from "./risk-commands.js";
 import { GoalsPlanningEngine } from "./planning/engine.js";
 import { GoalsQueryService } from "./query.js";
+import { GoalEventFacts } from "./event-facts.js";
 import { GoalsRepository, type GoalsSqliteDatabase } from "./repository.js";
 
 export const packageDescriptor = {
@@ -114,6 +116,7 @@ export class GoalsModule<TTransition> {
   >;
   readonly planning: GoalsPlanningEngine;
   readonly query: GoalsQueryApi;
+  readonly events: GoalEventFactsApi;
 
   constructor(
     db: GoalsSqliteDatabase,
@@ -128,6 +131,7 @@ export class GoalsModule<TTransition> {
       context,
       options.personalPlanningMethodPacks,
     );
+    this.events = new GoalEventFacts(context);
     let lifecycle!: GoalLifecycleCommands<TTransition>;
     const goals = new GoalCommands(context, {
       supersedePendingContractProposals: (...args) => hooks.supersedePendingContractProposals(...args),
@@ -267,6 +271,22 @@ export {
   migrateGoalTrashSchema,
   type GoalLifecycleMigrationDatabase,
 };
+export { GoalEventFacts } from "./event-facts.js";
+export {
+  GOAL_EVENT_FACTS_MIGRATION_ID,
+  GOAL_EVENT_FACTS_SCHEMA_SQL,
+  ensureGoalEventRequirementSourceColumn,
+  migrateGoalEventFactsSchema,
+} from "./event-facts-schema.js";
+export {
+  GOAL_EVENT_STATE_MIGRATION_ID,
+  GOAL_EVENT_OWNER_CONTINUE_MIGRATION_ID,
+  GOAL_EVENT_STATE_SCHEMA_SQL,
+  ensureGoalEventDecisionAuthorizationColumns,
+  migrateGoalEventStateSchema,
+  migrateGoalEventOwnerContinueSource,
+} from "./event-state-schema.js";
+export { goalHasEventStateOwner } from "./event-state-repository.js";
 export {
   type GoalsRiskLifecycleHooks,
 } from "./risk-commands.js";
@@ -290,6 +310,7 @@ export {
   parsePlanningMethodMarkdown,
   type ParsedPlanningMethodSource,
 } from "./planning/method-catalog.js";
+export { instantiatePlanningRequirementId, resolvePlanningEventAdoption } from "./planning/event-adoption.js";
 export {
   BUILTIN_PLANNING_METHOD_PACKS,
   PLANNING_METHOD_CATALOG_DIRECTORY,
@@ -331,6 +352,14 @@ export {
   recordedContractCoverageBlocksClosure,
 } from "./planning/decomposition-coverage.js";
 export type {
+  ConfigureGoalEventsApplicationInput,
+  ConfigureGoalEventsInput,
+  CreateGoalIntentInput,
+  GoalEventConfigView,
+  GoalEventFactsApi,
+  GoalEventLatestReports,
+  GoalEventStateView,
+  GoalWorkEventRecord,
   GoalsPlanningApi,
   GoalsQueryApi,
   SaveProjectPlanningMethodInput,
@@ -343,10 +372,17 @@ export { createPersonalPlanningMethodSchema, PersonalPlanningMethods, readPerson
 
 /** Read-only Module assembly; callers do not construct Goals repositories. */
 export function createGoalReadServices(db: GoalsSqliteDatabase): {
-  query: GoalsQueryApi; impacts: Pick<GoalsImpactApi, "list">;
+  query: GoalsQueryApi;
+  impacts: Pick<GoalsImpactApi, "list">;
+  events: Pick<GoalEventFactsApi, "readConfig" | "listEvents" | "listLatestEvents" | "listLatestTimeline" | "listLatestReports" | "readEvent" | "readCurrentRequirements" | "isEventStateOwner" | "readWorkState" | "continueWithEventWork">;
 } {
   const repository = new GoalsRepository(db);
-  return { query: new GoalsQueryService(repository), impacts: new GoalImpactCommands(new GoalsCommandContext(repository)) };
+  const context = new GoalsCommandContext(repository);
+  return {
+    query: new GoalsQueryService(repository),
+    impacts: new GoalImpactCommands(context),
+    events: new GoalEventFacts(context),
+  };
 }
 
 export { DEFAULT_GOAL_POLICY } from "./query.js";

@@ -32,7 +32,7 @@ export { PLANNING_SETTINGS_STYLES, type GoalsPlanningPrimitives } from "@adeptif
 
 export { matchGoalsPlanningRoute } from "@adeptify/goalboard-plugin-goals";
 
-export { resolveGoalsReadRoute, resolveGoalsPageRoute, type GoalDocumentCollection, type LazyGoalPanel } from "@adeptify/goalboard-plugin-goals";
+export { resolveGoalsReadRoute, resolveGoalsPageRoute, type GoalDocumentCollection } from "@adeptify/goalboard-plugin-goals";
 
 export { buildGoalsNavigationItems } from "@adeptify/goalboard-plugin-goals";
 
@@ -75,12 +75,8 @@ export {
 export { EN } from "./i18n/en.js";
 
 export {
-  createWorkbenchExecutionValidationRenderer,
   EXECUTION_EVIDENCE_KIND_LABELS,
   EXECUTION_EVIDENCE_RESULT_LABELS,
-  type WorkbenchExecutionGoalView,
-  type WorkbenchExecutionValidationRenderer,
-  type WorkbenchExecutionValidationUiDependencies,
 } from "./execution-validation-ui.js";
 
 
@@ -124,7 +120,7 @@ export { GOALS_PRESENTATION_STATES, type GoalsDocumentView, type GoalsCoverageIt
 
 export { createWorkbenchHumanReviewRenderer, type HumanReviewPrimitives } from "./human-review-renderer.js";
 
-export { createWorkbenchGoalRecordsRenderer, GOAL_EVENT_PAGE_SIZE, type GoalRecordsPrimitives } from "./goal-records-renderer.js";
+
 
 
 export type { WebSettingsProject, WebInstallationDiagnostics, GoalBoardSettingsView } from "./settings-view.js";
@@ -142,7 +138,7 @@ export * from "./ui-composition.js";
 export { createWorkbenchFeedProjectionRenderer, type FeedSupplementalEntry } from "./feed-projection-ui.js";
 
 export { createWorkbenchFocusSections, type FocusSectionCardOptions } from "./focus-sections.js";
-export { createWorkbenchGoalDocumentPanels, type GoalDocumentPanelOwners } from "./goal-document-panels.js";
+
 
 export { createWorkbenchProjectSettingsPages, type ProjectSettingsPagePorts } from "./project-settings-pages.js";
 

@@ -1,12 +1,18 @@
-import { GOALS_RECORDS_CLIENT_FACTORY_SCRIPT, GOALS_PANELS_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
+import { GOALS_PANELS_CLIENT_FACTORY_SCRIPT, GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 /** AP3 Workbench client segment: documents-state. */
 export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) => error instanceof DOMException && error.name === "AbortError";
 
-    const { abortGoalRecordsRequest, loadGoalRecords, handleGoalRecordEventsClick } = (${GOALS_RECORDS_CLIENT_FACTORY_SCRIPT})({
-      documentCollection, route, translate: L, isAbortError,
+    let reloadGoalEventDocument = async (_goalId, _restore) => false;
+    let pendingEventRestore = null;
+    const goalEventDocumentApi = (${GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT})({
+      documentPane, route, translate: L, isAbortError,
       showError: (message) => showToast(message, true),
-      afterLoad: (targetId) => { void revealDeepLinkFromId(targetId); },
+      showStatus: (message) => showToast(message, false),
+      reloadDocument: (goalId, restore) => reloadGoalEventDocument(goalId, restore),
+      controlHeaders: () => (typeof goalboardControlHeaders === "function" ? goalboardControlHeaders() : { "content-type": "application/json" }),
     });
+    const bindGoalEventDocument = (...args) => goalEventDocumentApi.bindGoalEventDocument(...args);
+    const openEventReader = (name) => goalEventDocumentApi.openEventReader(name);
 
     const activateFocusSection = (trigger) => {
       const card = trigger?.closest?.("[data-focus-section-card]");
@@ -117,79 +123,14 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
       return target;
     };
 
-    const { abortGoalPanelRequest, setGoalPanel, setGoalFactor,
-      goalPanelFromTargetId, goalPanelFromHash, goalFactorFromTargetId, goalFactorFromHash,
-      handleGoalPanelClick, handleGoalFactorClick, handleGoalPanelKeyboard, handleGoalFactorKeyboard,
+    const { openEventReaderFromHash, eventReaderFromTargetId,
+      setGoalFactor, goalFactorFromTargetId, goalFactorFromHash,
+      handleGoalFactorClick, handleGoalFactorKeyboard,
     } = (${GOALS_PANELS_CLIENT_FACTORY_SCRIPT})({
-      documentPane, documentCollection, route, translate: L, isAbortError,
-      loadGoalRecords, abortGoalRecordsRequest, revealFocusTarget, activateFocusSection,
+      documentPane, activateFocusSection,
       queueSave: () => queueSave(),
-      showError: (message) => showToast(message, true),
-      afterReplace: () => {
-        updateAllRelationFormPreviews();
-        document.querySelectorAll("[data-risk-state-form]").forEach(updateRiskStatePreview);
-        document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
-      },
+      openEventReader,
     });
-
-    const resetQuickRecordDialog = (quickDialog) => {
-      if (!quickDialog) return;
-      const choices = quickDialog.querySelector("[data-quick-record-choices]");
-      if (choices) choices.hidden = false;
-      quickDialog.querySelectorAll("[data-quick-record-panel]").forEach((panel) => { panel.hidden = true; });
-      const title = quickDialog.querySelector("[data-quick-record-title]");
-      if (title) title.textContent = L("快速记录");
-    };
-
-    const loadAndOpenQuickRecord = async (opener) => {
-      const article = opener?.closest?.("[data-goal-view]");
-      const goalId = article?.dataset.goalView;
-      if (!article || !goalId) return;
-      let quickDialog = article.querySelector("[data-quick-record-dialog]");
-      if (!quickDialog) {
-        quickRecordRequest?.abort();
-        const controller = new AbortController();
-        quickRecordRequest = controller;
-        const original = opener.innerHTML;
-        opener.disabled = true;
-        opener.setAttribute("aria-busy", "true");
-        opener.textContent = L("正在载入…");
-        try {
-          const response = await fetch(
-            route("/api/goals/" + encodeURIComponent(goalId) + "/quick-record?view=" + documentCollection),
-            { cache: "no-store", signal: controller.signal },
-          );
-          if (!response.ok) throw new Error(L("无法打开快速记录"));
-          const template = document.createElement("template");
-          template.innerHTML = (await response.text()).trim();
-          const nextDialog = template.content.querySelector("[data-quick-record-dialog]");
-          if (!nextDialog) throw new Error(L("快速记录响应不完整"));
-          if (!article.isConnected || article.dataset.goalView !== goalId || quickRecordRequest !== controller) return;
-          article.append(nextDialog);
-          quickDialog = nextDialog;
-          updateAllRelationFormPreviews();
-          document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
-        } catch (error) {
-          if (isAbortError(error) || quickRecordRequest !== controller) return;
-          showToast(error instanceof Error ? error.message : L("无法打开快速记录"), true);
-          return;
-        } finally {
-          if (quickRecordRequest === controller) {
-            quickRecordRequest = null;
-            if (opener.isConnected) {
-              opener.disabled = false;
-              opener.removeAttribute("aria-busy");
-              opener.innerHTML = original;
-            }
-          }
-        }
-      }
-      if (!quickDialog) return;
-      quickDialog._opener = opener;
-      resetQuickRecordDialog(quickDialog);
-      quickDialog.showModal();
-      requestAnimationFrame(() => quickDialog.querySelector("[data-quick-record-type]")?.focus());
-    };
 
     const setTuiWidth = (value, persist = true) => {
       if (!tuiResizer || !workspace.classList.contains("is-desktop-tui")) return;
@@ -263,7 +204,6 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
       sourceQuery: sourceSearch?.value || "",
       sourceFilter: activeSourceFilter,
       sourceDetailTab: sourceWorkbench?.querySelector('[data-source-detail="' + CSS.escape(selectedSource) + '"] [data-source-detail-tab][aria-selected="true"]')?.dataset.sourceDetailTab || "overview",
-      goalPanel: documentPane.querySelector('[data-goal-tab][aria-selected="true"]')?.dataset.goalTab || "overview",
       goalFactor: documentPane.querySelector('[data-goal-factor-tab][aria-selected="true"]')?.dataset.goalFactorTab || "relations",
       });
     };
@@ -355,12 +295,13 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
         setSourceDetailTab(selectedDetail, restoredSourceDetailTab);
       }
       restoreGoalGraphViewport();
-      setGoalPanel(goalPanelFromHash() || (ui?.selected === selected ? ui?.goalPanel : "overview"), false);
+      bindGoalEventDocument();
+      openEventReaderFromHash();
       setGoalFactor(goalFactorFromHash() || (ui?.selected === selected ? ui?.goalFactor : "relations"), false);
       const hashTargetId = decodeURIComponent(location.hash.slice(1));
       const hashTarget = hashTargetId ? document.getElementById(hashTargetId) : null;
       treeScroll.scrollTop = Number(ui?.treeTop || 0);
-      documentPane.scrollTop = hashTarget?.matches?.("[data-goal-panel]") && activeDesktopSurface === "goal"
+      documentPane.scrollTop = hashTarget?.closest?.("[data-event-panel], [data-goal-factor-panel]") && activeDesktopSurface === "goal"
         ? 0
         : activeDesktopSurface === "goal" && ui?.selected === selected
           ? Number(ui?.documentTop || 0)

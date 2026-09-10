@@ -64,11 +64,11 @@ test("Goals tree supports real collapse, search, status filtering and detail sel
   assert.equal(await evaluate(dom('[data-tree-item][data-goal-id="WEB"]') + ".hidden"), false);
   await click("[data-tree-filter-trigger]");
   await click('.tree-node[data-select-goal="CORE"]');
-  await waitFor(dom("#goal-tab-overview-CORE") + " && " + dom('.tree-node[data-select-goal="CORE"]') + ".getAttribute('aria-pressed') === 'true'");
+  await waitFor(dom('[data-goal-event-document][data-goal-view="CORE"]') + " && " + dom('.tree-node[data-select-goal="CORE"]') + ".getAttribute('aria-pressed') === 'true'");
   const core = before.goals.find(goal => goal.goal_id === "CORE")!;
   assert.equal(await evaluate(dom('.tree-node[data-select-goal="CORE"] strong') + ".textContent"), core.title);
   await reloadPage();
-  await waitFor(dom("#goal-tab-overview-CORE"));
+  await waitFor(dom('[data-goal-event-document][data-goal-view="CORE"]'));
   assert.equal(await evaluate(dom('.tree-node[data-select-goal="CORE"]') + ".getAttribute('aria-pressed')"), "true");
   await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, sessionId);
   await click('[data-mobile-target="tree"]');

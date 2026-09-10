@@ -7,6 +7,8 @@ import { handleGoalPolicyGuidanceHttp } from "./policy-guidance.js";
 import { handleGoalVerificationHttp } from "./verification.js";
 import { handleGoalLifecycleHttp } from "./lifecycle.js";
 import { handleGoalDecisionsHttp } from "./decisions.js";
+import { handleGoalEventDecisionHttp } from "./event-decisions.js";
+import { handleGoalEventHttp } from "./events.js";
 
 export async function handleGoalsWebHttp(context: GoalsHttpContext): Promise<boolean> {
   return await handleGoalCreateHttp(context)
@@ -16,5 +18,7 @@ export async function handleGoalsWebHttp(context: GoalsHttpContext): Promise<boo
     || await handleGoalPolicyGuidanceHttp(context)
     || await handleGoalVerificationHttp(context)
     || await handleGoalLifecycleHttp(context)
-    || await handleGoalDecisionsHttp(context);
+    || await handleGoalDecisionsHttp(context)
+    || await handleGoalEventHttp(context)
+    || await handleGoalEventDecisionHttp(context);
 }

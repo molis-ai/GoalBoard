@@ -1,11 +1,10 @@
 import { countGoalDecisions } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchProjectSettingsPages } from "./project-settings-pages.js";
 import { createWorkbenchFocusSections } from "./focus-sections.js";
-import { createWorkbenchGoalDocumentPanels } from "./goal-document-panels.js";
 import type { GoalBoardWebView } from "./page-view.js";
 import { createWorkbenchSettingsRenderer } from "./settings-renderer.js";
 import { createWorkbenchHumanReviewRenderer } from "./human-review-renderer.js";
-import { createWorkbenchGoalRecordsRenderer } from "./goal-records-renderer.js";
+
 import { type GoalsDocumentView as WebGoalView } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchDecisionCenterRenderer } from "./decision-center.js";
 import { decisionTypeCounts } from "@adeptify/goalboard-plugin-goals";
@@ -21,7 +20,7 @@ import { createWorkbenchGoalsFragmentRenderer } from "./goals-fragment-renderer.
 import { createWorkbenchGoalsPageRenderer } from "./goals-page-renderer.js";
 import { buildGoalsNavigationItems } from "@adeptify/goalboard-plugin-goals";
 import { ARTIFACT_EMBED_STYLES } from "./artifact-ui.js";
-import { icon, renderIconSprite, type GoalBoardIcon } from "@adeptify/goalboard-design-system";
+import { icon, renderIconSprite } from "@adeptify/goalboard-design-system";
 import { createWorkbenchOnboardingRenderer } from "./onboarding-renderer.js";
 import { TRASH_GOAL_STYLES } from "@adeptify/goalboard-plugin-goals";
 import { ONBOARDING_STYLES } from "@adeptify/goalboard-design-system";
@@ -39,7 +38,7 @@ import { PROJECT_RULES_SETTINGS_STYLES } from "./browser-assets.js";
 import { RESPONSIVE_STYLES } from "./browser-assets.js";
 import { SETTINGS_STYLES } from "./browser-assets.js";
 import { STYLES } from "./browser-assets.js";
-import { createWorkbenchExecutionValidationRenderer } from "./execution-validation-ui.js";
+
 import { createWorkbenchGoalsPolicyRenderer } from "./ui-composition.js";
 import { createWorkbenchGoalsSafetyRenderer } from "./ui-composition.js";
 import { createWorkbenchGoalsRelationRenderer } from "./ui-composition.js";
@@ -56,7 +55,6 @@ import { PLANNING_SETTINGS_STYLES } from "@adeptify/goalboard-plugin-goals";
 import { partOfChildViews } from "@adeptify/goalboard-plugin-goals";
 import { sortGoalTreeItems } from "@adeptify/goalboard-plugin-goals";
 import { createArtifactReferenceRenderer } from "./ui-composition.js";
-import { isProjectReference } from "@adeptify/goalboard-plugin-artifacts";
 import { renderWorkbenchDocument } from "./ui-composition.js";
 import { createGoalsDecisionPresentation } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchGoalsProposalRenderer } from "./ui-composition.js";
@@ -109,22 +107,6 @@ const { renderFeedNativePluginPersistedDetail, renderFeedNativePluginSurface } =
 const { explainWorkState, explainParentCompletion } = createGoalStateExplainer(L);
 
 const THEME_BOOTSTRAP_SCRIPT = `${BASE_THEME_BOOTSTRAP_SCRIPT}${NATIVE_DESKTOP_BOOTSTRAP_SCRIPT}`;
-
-const {
-  renderClaimCell,
-  renderRunCell,
-  renderEvidenceForm,
-  renderEvidenceCell,
-  renderReviewCell,
-} = createWorkbenchExecutionValidationRenderer({
-  translate: L,
-  escapeHtml,
-  formatDate,
-  renderIcon: (name) => icon(name as GoalBoardIcon),
-  renderReference,
-  isProjectReference,
-  currentLocale,
-});
 
 const { settingsContextHref, renderProjectSwitcher, renderDesktopProjectChrome, renderSettingsNavigation, renderProjectSettingsNavigation } = createWorkbenchSettingsNavigation({ L, escapeHtml, icon, withDesktopQuery });
 
@@ -212,28 +194,24 @@ const { renderGoalMomentum, renderMomentumPlaceholder } = createWorkbenchGoalsMo
 
 const goalsRelationRenderer = createWorkbenchGoalsRelationRenderer({ translate: L, escapeHtml, icon });
 
-const renderRelationForm = goalsRelationRenderer.renderRelationForm;
-
 function renderRelations(item: WebGoalView, view: GoalBoardWebView, editable = true): string {
   return goalsRelationRenderer.renderRelations(item, view, editable, renderResolvedDependencyHistory(item, view));
 }
 
-const { renderAcceptanceSummary, renderDraftGaps, renderGoalCompletionPanel, renderGoalRecordBasics, renderGoalRecordRelations } = createWorkbenchGoalsContextRenderer({
-  translate: L, escapeHtml, icon, currentLocale, listJoin, renderList, renderReference, formatDate,
-  subsectionHeading, renderFocusSectionDeck, explainWorkState, explainParentCompletion,
+const { renderAcceptanceSummary, renderDraftGaps, renderDraftEditor, renderChildProgress, renderContractCoverage } = createWorkbenchGoalsContextRenderer({
+  translate: L, escapeHtml, icon, currentLocale,
+  subsectionHeading, explainWorkState, explainParentCompletion,
 });
 
-const { renderRiskDecision, renderRiskWorkbench, renderImpactWorkbench, renderSafety, renderQuickRiskForm, renderQuickImpactForm, renderProgressRiskSummary } = createWorkbenchGoalsSafetyRenderer({
+const { renderRiskDecision, renderRiskWorkbench, renderImpactWorkbench } = createWorkbenchGoalsSafetyRenderer({
   translate: L, escapeHtml, formatDate, icon, currentLocale, renderReference, renderList,
 });
 
-const { renderProjectPolicyDocument, renderPolicyEditor, renderProgressCheckSummary } = createWorkbenchGoalsPolicyRenderer({
+const { renderProjectPolicyDocument, renderPolicyEditor } = createWorkbenchGoalsPolicyRenderer({
   translate: L, escapeHtml, formatDate, icon, currentLocale, defaultPolicy: DEFAULT_GOAL_POLICY,
 });
 
 const renderHumanReview = createWorkbenchHumanReviewRenderer({ translate: L, escapeHtml, icon, renderAcceptanceSummary });
-
-const { renderHistory, renderFullRecords, renderGoalEventPage } = createWorkbenchGoalRecordsRenderer({ translate: L, escapeHtml, formatDate, currentLocale });
 
 function decisionGroupModel(group: DecisionGoalGroup, view: GoalBoardWebView): WorkbenchDecisionGroup {
   return { ownerGoalId: group.ownerGoalId, item: group.item, humanReview: group.humanReview,
@@ -347,43 +325,53 @@ function renderGoalFactors(item: WebGoalView, view: GoalBoardWebView): string {
   });
 }
 
-const { renderCompanionRuntime, renderQuickRecordDialog, renderGoalTechnicalDetails, renderGoalProgressPanel } = createWorkbenchGoalDocumentPanels({
-  L, escapeHtml, icon, renderFocusSectionDeck, renderRelations, renderRelationForm,
-  execution: { renderClaimCell, renderRunCell, renderEvidenceCell, renderReviewCell, renderEvidenceForm },
-  context: { renderGoalRecordBasics, renderGoalRecordRelations },
-  safety: { renderSafety, renderQuickRiskForm, renderQuickImpactForm, renderProgressRiskSummary },
-  policy: { renderPolicyEditor, renderProgressCheckSummary },
-  records: { renderHistory, renderFullRecords },
-});
-
 const goalsDocumentRenderer = createWorkbenchGoalsDocumentRenderer({
   translate: L, escapeHtml, icon, formatDate, renderVisibleGoalStatus, renderStatus, sectionHeading,
 });
 
 const { renderTrashGoalDocument } = goalsDocumentRenderer;
 
+function renderCoverageHtml(item: WebGoalView): string {
+  if (!item.coverage.length) return "";
+  return `<h3>${L("需求覆盖")}</h3><ul>${item.coverage.map((coverage) =>
+    `<li><strong>${escapeHtml(coverage.requirement_id)} · ${escapeHtml(coverage.statement)}</strong><small>${escapeHtml(coverage.disposition)}${coverage.reason ? ` · ${escapeHtml(coverage.reason)}` : ""}</small></li>`
+  ).join("")}</ul>`;
+}
+
+function renderInputBindingsHtml(item: WebGoalView): string {
+  if (!item.input_bindings.length) return "";
+  return `<h3>${L("绑定资料")}</h3><div class="bound-list">${item.input_bindings.map((binding) =>
+    `<article>${renderReference(binding.source_ref, binding.input_name)}<small>${escapeHtml(binding.state)} · ${escapeHtml(binding.reason)}${binding.snapshot_digest ? ` · ${escapeHtml(binding.snapshot_digest)}` : ""}</small></article>`
+  ).join("")}</div>`;
+}
+
+function renderDraftEditorHtml(item: WebGoalView): string {
+  if (item.goal.definition_state !== "draft" || item.event_work === true) return "";
+  const goalId = escapeHtml(item.goal.goal_id);
+  return `<details class="goal-edit-disclosure" id="goal-definition-${goalId}"><summary>${icon("settings")}<span><strong>${L("修改这条草稿")}</strong><small>${L("补全目标、范围和完成标准；保存后仍要经过确认才能开始。")}</small></span>${icon("chevron-down")}</summary>${renderDraftEditor(item)}</details>`;
+}
+
 function renderGoalDocument(item: WebGoalView, view: GoalBoardWebView, selected: boolean): string {
   return goalsDocumentRenderer.renderGoalDocument(item, {
     activeGoalId: view.snapshot.board.active_goal_id,
     decisionCount: countGoalDecisions(view, item.goal.goal_id),
-    draftGapsHtml: renderDraftGaps(item),
-    companionRuntimeHtml: renderCompanionRuntime(item),
+    draftGapsHtml: item.event_work === true ? "" : renderDraftGaps(item),
+    draftEditorHtml: renderDraftEditorHtml(item),
+    relatedWorkHtml: renderGoalFactors(item, view),
+    artifactHtml: item.artifact_embed_html
+      ? `<h3>${L("关联结果")}</h3>${item.artifact_embed_html}`
+      : "",
+    coverageHtml: `${renderCoverageHtml(item)}${renderInputBindingsHtml(item)}${renderContractCoverage(item, view)}${renderChildProgress(item, view)}`,
+    eventDocument: item.event_document ?? null,
   }, selected);
 }
 
 /** Bind the public fragment composition to existing content owners. */
 const {
-  renderGoalDocumentFragment, renderGoalPanelFragment, renderGoalQuickRecordFragment,
-  renderGoalRecordsFragment, renderGoalRecordEventsFragment, renderGoalBoardMomentumFragment,
+  renderGoalDocumentFragment, renderGoalBoardMomentumFragment,
 } = createWorkbenchGoalsFragmentRenderer<WebGoalView, GoalBoardWebView>({
   document: (item, view) => renderGoalDocument(item, view, true),
   trash: (item) => renderTrashGoalDocument(item, true),
-  completion: renderGoalCompletionPanel,
-  progress: renderGoalProgressPanel,
-  factors: renderGoalFactors,
-  records: renderGoalTechnicalDetails,
-  recordEvents: renderGoalEventPage,
-  quickRecord: renderQuickRecordDialog,
   momentum: (view, goalId, items) => renderGoalMomentum(view, goalId, [...items]),
   prefixLinks: prefixLocalLinks,
 });
@@ -410,6 +398,7 @@ function renderTuiPane(
   return renderWorkTerminal({
     selected: selected ? {
       ...selected.goal,
+      event_work: selected.event_work === true,
       statusHtml: renderVisibleGoalStatus(selected, "data-tui-owner-status", "data-tui-owner-status-label"),
     } : undefined,
     children: (selected ? sortGoals(partOfChildViews(selected.goal.goal_id, view)) : []).map((child) => {
@@ -475,7 +464,7 @@ const { renderGoalBoardWeb, renderGoalBoardRefreshFragment } =
     renderDesktopProjectChrome, renderProjectSwitcher,
     feedNativePluginSupplementalEntries, renderFeedNativePluginSurface,
   });
-  return { renderGoalBoardProjectIndex, renderGoalBoardSettings, renderDecisionCenter, renderPersistedFeedItemDetail, renderFeedWorkbenchFragment, renderGoalDocumentFragment, renderGoalPanelFragment, renderGoalQuickRecordFragment, renderGoalRecordsFragment, renderGoalRecordEventsFragment, renderGoalBoardMomentumFragment, renderGoalBoardOnboarding, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings, renderGoalBoardWorkbenchStylesheet, renderGoalBoardOnboardingStylesheet, renderGoalBoardProjectIndexStylesheet, renderGoalBoardSettingsStylesheet, renderGoalBoardWorkbenchClientScript, renderGoalBoardWeb, renderGoalBoardRefreshFragment };
+  return { renderGoalBoardProjectIndex, renderGoalBoardSettings, renderDecisionCenter, renderPersistedFeedItemDetail, renderFeedWorkbenchFragment, renderGoalDocumentFragment, renderGoalBoardMomentumFragment, renderGoalBoardOnboarding, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings, renderGoalBoardWorkbenchStylesheet, renderGoalBoardOnboardingStylesheet, renderGoalBoardProjectIndexStylesheet, renderGoalBoardSettingsStylesheet, renderGoalBoardWorkbenchClientScript, renderGoalBoardWeb, renderGoalBoardRefreshFragment };
 }
 
 export type WorkbenchRenderer = ReturnType<typeof createWorkbenchRenderer>;

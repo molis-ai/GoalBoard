@@ -128,18 +128,6 @@ export const NAVIGATION_OWNERSHIP_STYLES = `  /* Navigation ownership correction
       background: color-mix(in srgb, var(--blue) 10%, transparent);
       box-shadow: none;
     }
-    html[data-resolved-theme="light"] body[data-desktop-shell="true"] .goal-workspace-nav {
-      background: transparent;
-    }
-    html[data-resolved-theme="light"] body[data-desktop-shell="true"] .goal-workspace-nav button {
-      border-radius: 0;
-      border-bottom: 2px solid transparent;
-    }
-    html[data-resolved-theme="light"] body[data-desktop-shell="true"] .goal-workspace-nav button[aria-selected="true"] {
-      border-bottom-color: var(--blue);
-      background: transparent;
-      box-shadow: none;
-    }
     html[data-resolved-theme="light"] body.settings-page[data-desktop-shell="true"] .settings-navigation .settings-nav-group > a[aria-current="page"] {
       background: color-mix(in srgb, var(--ink) 8%, transparent);
       box-shadow: none;
