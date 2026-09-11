@@ -51,8 +51,6 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
       afterReplace: () => {
         documentReplaceGeneration += 1;
         updateAllRelationFormPreviews();
-        document.querySelectorAll("[data-risk-state-form]").forEach(updateRiskStatePreview);
-        document.querySelectorAll(".risk-goal-picker").forEach(updateRiskGoalCount);
         bindGoalEventDocument(pendingEventRestore);
         pendingEventRestore = null;
         openEventReaderFromHash();

@@ -8,7 +8,7 @@ import { sendLocalWebJson as sendJson, readLocalWebBody as readBody } from "./we
 import { L } from "./web-locale.js";
 import fs from "node:fs";
 import { handleGoalsWebHttp } from "@adeptify/goalboard-plugin-goals";
-import { createWorkbenchGoalsAdapter, createWorkbenchExecutionValidationAdapter, type GoalBoardWebView } from "@adeptify/goalboard-app-workbench";
+import { createWorkbenchGoalsAdapter, type GoalBoardWebView } from "@adeptify/goalboard-app-workbench";
 import type { GoalBoardPtyHost } from "@adeptify/goalboard-service-runtime-host";
 import type { SessionRuntimeResources } from "./web-session.js";
 import { cachedGoalBoardWebView, type GoalBoardWebViewCache } from "./web-view.js";
@@ -76,7 +76,6 @@ export async function handleGoalBoardWebRequest(
         }).catch(() => undefined);
       }
       const goalsAdapter = createWorkbenchGoalsAdapter(coordinator.goals);
-      const executionAdapter = createWorkbenchExecutionValidationAdapter(coordinator.executionValidation);
       const readWebView = (): GoalBoardWebView =>
         cachedGoalBoardWebView(webViewCache, store, coordinator, options);
       {
@@ -92,11 +91,15 @@ export async function handleGoalBoardWebRequest(
         }
         if (await handleSessions(request, response, url, serverOptions.homeDirectory, options, sessionResources, readWebView,
           (goalId) => {
-            const contract = coordinator.goalQueries.readGoalContract(options.boardId, goalId);
+            const history = coordinator.goalQueries.readGoalContract(options.boardId, goalId);
             const event_work = coordinator.goalEvents.isEventStateOwner(options.boardId, goalId);
             const state = event_work ? coordinator.goalEvents.readState(options.boardId, goalId) : null;
             return {
-              ...contract,
+              board: history.board,
+              goal: history.goal,
+              runs: history.runs,
+              evidence: history.evidence,
+              risks: history.risks,
               event_work,
               event_facts: state
                 ? {
@@ -106,9 +109,12 @@ export async function handleGoalBoardWebRequest(
                     pending_decisions: state.pending_decisions.map((item) => item.question),
                     current_decisions: state.current_decisions.map((item) => item.conclusion),
                     gaps: state.gaps.map((item) => item.statement),
+                    requirements: state.requirements.map((item) => item.statement),
                     stale_summary: state.progress_summary?.stale === true,
+                    resume_required: state.work_status === "completed" || state.work_status === "cancelled",
+                    closure_reason: state.closure?.reason ?? null,
                   }
-                : undefined,
+                : null,
             };
           })) return;
         if (goalsReadHttp.settings(request, response, url, options.boardId, readWebView, coordinator, controlToken)) return;
@@ -155,11 +161,11 @@ export async function handleGoalBoardWebRequest(
             sendJson(response, 400, { error: L("请先选择一个 GoalBoard 项目") });
             return;
           }
-          const available = coordinator.queryAvailable({
+          const directory = coordinator.goalEvents.listGoals({
             board_id: options.boardId,
-            actor_id: "capsule-viewer",
-          }).available;
-          sendJson(response, 200, buildCapsuleSnapshot(readWebView(), available));
+            limit: 100,
+          });
+          sendJson(response, 200, buildCapsuleSnapshot(readWebView(), directory.goals));
           return;
         }
         if (options.project?.project_id) {
@@ -182,12 +188,10 @@ export async function handleGoalBoardWebRequest(
           readBody: () => readBody(request), respond: (status, body) => sendJson(response, status, body),
           options, idempotencyHeader: request.headers["x-goalboard-idempotency-key"],
           snapshot: () => store.snapshot(options.boardId), changed: () => { webViewCache.delete(options.databasePath); },
-          commands: goalsAdapter.commands, impacts: goalsAdapter.impacts, lifecycle: goalsAdapter.lifecycle,
-          query: coordinator.goalQueries, executionCommands: executionAdapter.commands,
+          commands: goalsAdapter.commands, lifecycle: goalsAdapter.lifecycle,
+          query: coordinator.goalQueries,
           setActiveGoal: (...args) => coordinator.setActiveGoal(...args),
           goalTreeWebInput: coordinator.goalTreeWebInput, goalTreeDecision: coordinator.goalTreeDecision,
-          legacyContractDecision: coordinator.legacyContractDecision,
-          legacyCandidateDecision: coordinator.legacyCandidateDecision, legacyRewireDecision: coordinator.legacyRewireDecision,
           goalEvents: coordinator.goalEvents,
           journalEvents: () => store.readEventsDescending(options.boardId),
         })) return;

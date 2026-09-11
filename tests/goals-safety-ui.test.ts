@@ -16,7 +16,7 @@ function fixture() {
     blocking_mode: "completion", revisit_condition: "After rehearsal", owner: "release-owner", state: "open",
     resolution_basis: null, created_at: "2026-09-05", updated_at: "2026-09-05" };
   const item: GoalsSafetyItem = { goal: { goal_id: "goal-one", title: "Release", archived_at: null, priority: 10, created_at: "2026-09-05" },
-    status: "execution_pending", display_status: "continue", action_projection: { actions: [] }, risks: [risk], impacts: [] };
+    status: "execution_pending", display_status: "continue", risks: [risk], impacts: [] };
   const archived: GoalsSafetyItem = { ...item, goal: { ...item.goal, goal_id: "archived", title: 'Old <release>', archived_at: "2026-09-05" },
     display_status: "completed", risks: [], impacts: [] };
   return { risk, item, archived, view: { goals: [item], archived_goals: [archived] } };
@@ -26,30 +26,17 @@ test("Goals safety contribution preserves editable facts, linked archived Goals 
   assert.ok(createWorkbenchUiHost().list().some(entry => entry.contribution_id === GOALS_SAFETY_UI_CONTRIBUTION_ID));
   const { item, view } = fixture();
   const html = renderer.renderRiskWorkbench(item, view);
-  assert.match(html, /data-risk-edit-form/);
-  assert.match(html, /data-risk-create-form/);
-  assert.match(html, /name="description" rows="2" required/);
-  assert.match(html, /name="treatment" required/);
-  assert.match(html, /value="mitigate" selected/);
-  assert.match(html, /value="completion" selected/);
-  assert.match(html, /name="goal_ids" value="archived" checked/);
   assert.match(html, /href="\/archive\/goals\/archived"/);
   assert.match(html, /Old &lt;release&gt;/);
   assert.match(html, /&lt;script&gt;alert\(&quot;risk&quot;\)&lt;\/script&gt;/);
-  assert.doesNotMatch(html, /<script>|risk-decision-link/);
-  assert.match(html, /当前会阻止所有关联 Goal 被标记为完成/);
+  assert.doesNotMatch(html, /<script>|risk-decision-link|<form/);
+  assert.match(html, /历史风险记录/);
 });
 
-test("risk decision links consume explicit user actions, while archive and record views stay read-only", () => {
-  const { item, risk, view } = fixture();
-  const action = { action_id: "decision", actor: "runtime" as const, kind: "accept_risk" as const,
-    status: "ready" as const, target_type: "risk", target_id: risk.risk_id, reasons: [] };
-  item.action_projection.actions = [action];
-  assert.doesNotMatch(renderer.renderRiskWorkbench(item, view), /risk-decision-link/);
-  item.action_projection.actions = [{ ...action, actor: "user" }];
-  assert.match(renderer.renderRiskWorkbench(item, view), /href="\/decisions#decision-goal-goal-one"/);
+test("archive and record views stay read-only", () => {
+  const { item, view } = fixture();
   const records = renderer.renderRiskWorkbench(item, view, false);
-  assert.match(records, /id="record-risk-risk-one"/);
+  assert.match(records, /id="risk-risk-one"/);
   assert.doesNotMatch(records, /<form|risk-decision-link/);
   item.goal.archived_at = "2026-09-05";
   assert.doesNotMatch(renderer.renderRiskWorkbench(item, view), /<form|<input|<textarea/);
@@ -67,28 +54,23 @@ test("resolved risk evidence and missing historical basis are displayed without 
   assert.match(html, /<code>project:\/\/checks.md<\/code>/);
   assert.match(html, /<li>Intel pending<\/li>/);
   assert.doesNotMatch(html, /risk-resolution--unrecorded/);
-  assert.match(html, /当前状态不再施加领取或完成门禁/);
+  assert.match(html, /历史事实/);
 });
 
-test("impact edit and deactivation history preserve state-specific controls and request locale", () => {
+test("impact history preserves escaped facts, deactivation reason and request locale", () => {
   const { item, view } = fixture();
   const impact = { binding_id: "impact-one", board_id: "board", goal_id: item.goal.goal_id, surface: 'release <files>',
     access: "read" as const, input_snapshot: "commit://release", state: "confirmed" as const, reason: "Review release",
     created_by: "user", created_at: "2026-09-05", updated_at: "2026-09-05", deactivated_at: null, deactivation_reason: null };
   item.impacts = [impact, { ...impact, binding_id: "old-impact", state: "inactive", deactivated_at: "2026-09-05", deactivation_reason: "Replaced scope" }];
   const html = renderer.renderImpactWorkbench(item);
-  assert.match(html, /data-impact-edit-form/);
-  assert.match(html, /data-impact-deactivate-form/);
-  assert.match(html, /data-impact-create-form/);
   assert.match(html, /release &lt;files&gt;/);
   assert.match(html, /Replaced scope/);
   const history = html.slice(html.indexOf('id="impact-old-impact"'));
   assert.doesNotMatch(history, /<form/);
-  assert.match(html, /name="input_snapshot" value="commit:\/\/release"/);
+  assert.doesNotMatch(html, /data-impact-edit-form|data-impact-create-form/);
   const english = runWithLocale("en", () => renderer.renderRiskWorkbench(item, view) + renderer.renderImpactWorkbench(item));
   assert.match(english, /Replaced scope/);
-  assert.doesNotMatch(english, /当前会阻止所有关联 Goal 被标记为完成/);
-  assert.match(runWithLocale("zh", () => renderer.renderRiskWorkbench(item, view)), /当前会阻止所有关联 Goal 被标记为完成/);
   item.risks = [];
   assert.match(renderer.renderRiskWorkbench(item, view, false), /当前没有已记录的风险/);
 });

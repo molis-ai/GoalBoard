@@ -38,62 +38,6 @@ function fixture(name: string): {
   };
 }
 
-test("Governance public module owns Review obligations and distinct-reviewer satisfaction", () => {
-  const { governance, dispose } = fixture("reviews");
-  try {
-    const [obligation] = governance.reviews.reconcileObligations({
-      board_id: DEMO_BOARD_ID,
-      goal_id: "V1",
-      contract_revision: 1,
-      desired: [{
-        role: "cross_reviewer",
-        required_count: 2,
-        independence_rule: "actor_must_differ_from_executor",
-        criterion_scope: ["criterion-a"],
-      }],
-    });
-    assert.ok(obligation);
-
-    const first = governance.reviews.submitAuthorizedReview({
-      board_id: DEMO_BOARD_ID,
-      goal_id: "V1",
-      obligation_id: obligation.obligation_id,
-      actor_id: "reviewer-a",
-      verdict: "pass",
-      evidence_refs: ["evidence-a", "evidence-a"],
-      reasoning: "first independent review",
-    });
-    assert.equal(first.obligation.state, "pending");
-    assert.deepEqual(first.review.evidence_refs, ["evidence-a"]);
-
-    const second = governance.reviews.submitAuthorizedReview({
-      board_id: DEMO_BOARD_ID,
-      goal_id: "V1",
-      obligation_id: obligation.obligation_id,
-      actor_id: "reviewer-b",
-      verdict: "pass",
-      evidence_refs: ["evidence-b"],
-      reasoning: "second independent review",
-    });
-    assert.equal(second.obligation.state, "satisfied");
-    assert.equal(governance.query.listReviews(DEMO_BOARD_ID, "V1").length, 2);
-
-    governance.reviews.reopenObligation(DEMO_BOARD_ID, obligation.obligation_id);
-    const changes = governance.reviews.submitAuthorizedReview({
-      board_id: DEMO_BOARD_ID,
-      goal_id: "V1",
-      obligation_id: obligation.obligation_id,
-      actor_id: "reviewer-c",
-      verdict: "needs_changes",
-      evidence_refs: [],
-      reasoning: "fresh work is required",
-    });
-    assert.equal(changes.obligation.state, "pending");
-  } finally {
-    dispose();
-  }
-});
-
 test("Governance decision provenance and target-owner materialization share one rollback boundary", () => {
   const { store, governance, dispose } = fixture("decisions");
   try {

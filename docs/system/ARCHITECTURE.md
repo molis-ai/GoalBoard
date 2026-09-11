@@ -71,6 +71,10 @@ Goal 和 Artifact 是官方维护、签名保护的一等 Plugin 能力，也是
 - Artifact 类型由 `artifact_type_id + schema_version` 判断能否消费，生产者身份只做来源审计。
 - 接收端没有对应 Plugin 时，Server 仍可保存和转发 opaque payload；安装兼容 consumer 后再解释。
 
+当前本地 Goal 工作使用一套事件协议。Goals 保存意图、笔记、类型版本、报告、当前约定与要求，并决定显式收尾的完成效果；Governance 保存可信用户决定与有限树提案。Native Goals 组合用例和界面，Host 提供已绑定项目、Session 身份与同库事务，MCP/Web 不另算工作状态。普通记录不要求先建立规划或领取 Run。
+
+旧 Claim/Run/Evidence/Review 的写入链和操作投影已经退役，历史 schema、迁移、原记录阅读与项目删除的现有历史活动检查保留。真实 Session、Runtime 进程和终端仍由 Work/Runtime Host 负责。当前调用合同见 [Goals](../modules/goals.md)、[Governance](../modules/governance-collaboration.md) 和 [Runtime](../runtime.md)。
+
 ## 6. Local 与 Server
 
 ### Local

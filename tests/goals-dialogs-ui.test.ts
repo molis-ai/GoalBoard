@@ -24,7 +24,7 @@ test("create dialog preserves editable Draft fields, limits and parent/dependenc
   const dependencyIds = [...html.matchAll(/name="dependency_goal_ids" value="([^"]*)"/g)].map(match => match[1]);
   assert.deepEqual(dependencyIds, ["first&quot;", "later", "finished"]);
   assert.match(html, /data-create-error role="alert" hidden/);
-  assert.match(html, /创建草稿 Goal/);
+  assert.match(html, /创建 Goal/);
   assert.doesNotMatch(html, /name="user_confirmed"/);
 });
 
@@ -36,10 +36,10 @@ test("empty create and recoverable trash dialogs retain independent creation and
   assert.match(empty, /data-dependency-preview/);
   const trash = renderer.renderGoalTrashDialog();
   assert.match(trash, /name="reason" rows="3" required maxlength="4000"/);
-  assert.match(trash, /有效 Claim 或执行中的 Run/);
+  assert.match(trash, /未结束的历史活动记录/);
   assert.match(trash, /Goal 历史会保留/);
   assert.match(trash, /data-goal-trash-error role="alert" hidden/);
   for (const hook of ["data-goal-trash-form", "data-goal-trash-title", "data-goal-trash-description", "data-goal-trash-target-title", "data-goal-trash-target-id", "data-goal-trash-note", "data-goal-trash-reason-label", "data-goal-trash-submit", "data-close-goal-trash"]) assert.ok(trash.includes(hook));
   const english = runWithLocale("en", () => renderer.renderCreateDialog([]));
-  assert.doesNotMatch(english, /创建草稿 Goal|作为独立 Goal/);
+  assert.doesNotMatch(english, /创建 Goal|作为独立 Goal/);
 });

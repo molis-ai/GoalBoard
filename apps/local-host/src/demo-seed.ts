@@ -254,75 +254,52 @@ export function seedDemoBoard(databasePath: string): void {
         ],
       },
     ];
+    const parents: Record<string, string> = {
+      PLATFORM: "V1", WORKSPACE: "V1", ADOPTION: "V1",
+      CORE: "PLATFORM", INTERFACES: "PLATFORM",
+      WEB: "WORKSPACE", GRAPH: "WORKSPACE", DESKTOP: "WORKSPACE",
+      RELEASE: "ADOPTION", ONBOARDING: "ADOPTION", DOCS: "ADOPTION",
+    };
+    const dependencies: Record<string, string[]> = {
+      INTERFACES: ["CORE"],
+      WEB: ["INTERFACES"],
+      GRAPH: ["INTERFACES"],
+      DESKTOP: ["CORE"],
+      ONBOARDING: ["RELEASE"],
+      DOCS: ["ONBOARDING"],
+    };
     for (const goal of goals) {
-      coordinator.goals.commands.createGoal(DEMO_BOARD_ID, goal, {
+      coordinator.goalEvents.createIntent({
+        board_id: DEMO_BOARD_ID,
+        goal_id: goal.goal_id,
+        title: goal.title,
+        outcome: goal.outcome,
+        why: goal.why,
+        business_logic: goal.business_logic,
+        priority: goal.priority,
+        parent_goal_id: parents[goal.goal_id],
+        dependency_goal_ids: dependencies[goal.goal_id] ?? [],
+        requirements: goal.goal_id === "CORE"
+          ? []
+          : goal.acceptance_criteria.map((item) => ({
+              requirement_id: item.criterion_id,
+              statement: item.statement,
+            })),
         actor_id: "demo-user",
+        actor_kind: "user",
+        source_kind: "onboarding",
         idempotency_key: `demo-goal-${goal.goal_id}`,
       });
     }
-    for (const child of ["PLATFORM", "WORKSPACE", "ADOPTION"]) {
-      coordinator.goals.commands.addRelation(
-        DEMO_BOARD_ID,
-        { from_goal_id: child, to_goal_id: "V1", type: "part_of", reason: "共同组成第一次完整的 GoalBoard 使用体验" },
-        { actor_id: "demo-user", idempotency_key: `demo-part-${child}` },
-      );
-    }
-    for (const [child, parent] of [
-      ["CORE", "PLATFORM"],
-      ["INTERFACES", "PLATFORM"],
-      ["WEB", "WORKSPACE"],
-      ["GRAPH", "WORKSPACE"],
-      ["DESKTOP", "WORKSPACE"],
-      ["RELEASE", "ADOPTION"],
-      ["ONBOARDING", "ADOPTION"],
-      ["DOCS", "ADOPTION"],
-    ] as const) {
-      coordinator.goals.commands.addRelation(
-        DEMO_BOARD_ID,
-        { from_goal_id: child, to_goal_id: parent, type: "part_of", reason: "在 Mock 项目中形成可追溯的产品目标层级" },
-        { actor_id: "demo-user", idempotency_key: `demo-part-${child}` },
-      );
-    }
-    coordinator.goals.commands.addRelation(
-      DEMO_BOARD_ID,
-      { from_goal_id: "INTERFACES", to_goal_id: "CORE", type: "depends_on", reason: "共享项目进度前，必须先保证每项工作的状态和完成依据可靠" },
-      { actor_id: "demo-user", idempotency_key: "demo-dependency-interfaces" },
-    );
-    coordinator.goals.commands.addRelation(
-      DEMO_BOARD_ID,
-      { from_goal_id: "WEB", to_goal_id: "INTERFACES", type: "depends_on", reason: "页面显示必须和不同 Runtime 看到的项目进度一致" },
-      { actor_id: "demo-user", idempotency_key: "demo-dependency-web" },
-    );
-    for (const [from, to, reason] of [
-      ["GRAPH", "INTERFACES", "关系图必须读取不同 Runtime 共享的同一份 Goal 关系事实"],
-      ["DESKTOP", "CORE", "桌面工作站必须先建立可靠的 Goal 状态与完成依据"],
-      ["ONBOARDING", "RELEASE", "首次体验需要建立在可重复的安装与接入路径上"],
-      ["DOCS", "ONBOARDING", "README 的演示必须来自已经走通的首次体验"],
-    ] as const) {
-      coordinator.goals.commands.addRelation(
-        DEMO_BOARD_ID,
-        { from_goal_id: from, to_goal_id: to, type: "depends_on", reason },
-        { actor_id: "demo-user", idempotency_key: `demo-dependency-${from.toLowerCase()}` },
-      );
-    }
 
-    coordinator.goals.commands.addRisk(
-      DEMO_BOARD_ID,
-      {
-        risk_id: "RISK-FIRST-RESTART",
-        goal_ids: ["RELEASE"],
-        description: "用户接入 Runtime 后没有新开会话，误以为安装失败",
-        probability: "medium",
-        impact: "用户看不到 GoalBoard 工具，无法开始第一次使用",
-        affected_surfaces: ["首次安装", "Runtime 接入"],
-        trigger: "用户继续使用接入前已经打开的会话",
-        treatment: "mitigate",
-        blocking_mode: "none",
-        revisit_condition: "安装结果和接入预览都清楚说明新开会话的原因和下一步",
-        owner: "产品体验",
-      },
-      { actor_id: "demo-user", idempotency_key: "demo-risk-first-restart" },
-    );
+    coordinator.goalEvents.recordNote({
+      board_id: DEMO_BOARD_ID,
+      goal_id: "RELEASE",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      body: "接入 Runtime 后必须新开会话；继续使用接入前的会话会让人误以为安装失败。",
+      idempotency_key: "demo-release-note",
+    });
 
     coordinator.goals.lifecycle.setTrashed(
       DEMO_BOARD_ID,
@@ -334,88 +311,88 @@ export function seedDemoBoard(databasePath: string): void {
       { actor_id: "demo-user", idempotency_key: "demo-trash-auto-connect" },
     );
 
-    const coreClaim = coordinator.executionValidation.commands.claimGoal({
+    coordinator.goalEvents.configure({
       board_id: DEMO_BOARD_ID,
       goal_id: "CORE",
-      actor_id: "runtime-core",
-      idempotency_key: "demo-core-claim",
-    }).claim!;
-    const coreRun = coordinator.executionValidation.commands.startRun({
-      board_id: DEMO_BOARD_ID,
-      claim_id: coreClaim.claim_id,
-      actor_id: "runtime-core",
-      idempotency_key: "demo-core-run",
-    }).run;
-    coordinator.executionValidation.commands.reportRun({
-      board_id: DEMO_BOARD_ID,
-      run_id: coreRun.run_id,
-      actor_id: "runtime-core",
-      state: "completed",
-      output_refs: ["tests/v1.test.ts"],
-      idempotency_key: "demo-core-run-complete",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      expected_version: 0,
+      types: [{
+        type_id: "lifecycle",
+        version: 1,
+        name: "生命周期交付",
+        purpose: "可核对的工作结果",
+        semantic_family: "delivery",
+        source: { kind: "local", label: "演示项目" },
+        fields: [
+          { field_id: "result", name: "结果", purpose: "当前交付", format: "text", required: true },
+        ],
+      }],
+      idempotency_key: "demo-core-configure",
     });
-    const coreEvidence = coordinator.executionValidation.commands.submitEvidence({
+    const configured = coordinator.goalEvents.readState(DEMO_BOARD_ID, "CORE");
+    coordinator.goalEvents.setAgreement({
       board_id: DEMO_BOARD_ID,
       goal_id: "CORE",
-      actor_id: "runtime-core",
-      run_id: coreRun.run_id,
-      criterion_ids: ["CORE-C1"],
-      kind: "test",
-      locator: "command://pnpm-test",
-      result: "passed",
-      idempotency_key: "demo-core-evidence",
-    }).evidence;
-    const coreSelfReview = store
-      .snapshot(DEMO_BOARD_ID)
-      .review_obligations.find((item) => item.goal_id === "CORE" && item.role === "self_verifier")!;
-    coordinator.executionValidation.commands.submitReview({
-      board_id: DEMO_BOARD_ID,
-      goal_id: "CORE",
-      obligation_id: coreSelfReview.obligation_id,
-      actor_id: "runtime-core",
-      verdict: "pass",
-      evidence_refs: [coreEvidence.evidence_id],
-      reasoning: "生命周期测试通过",
-      idempotency_key: "demo-core-review",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      expected_config_version: configured.config.version,
+      expected_agreement_version: configured.agreement.version,
+      outcome: "用户能看到一项工作何时开始、做出了什么，以及为什么可以算完成",
+      new_requirements: [{
+        requirement_id: "CORE-C1",
+        statement: "工作从开始到证据和复核形成完整记录",
+        bound_type_id: "lifecycle",
+      }],
+      idempotency_key: "demo-core-agree",
     });
-    coordinator.goals.lifecycle.evaluateCompletion({
+    coordinator.goalEvents.report({
       board_id: DEMO_BOARD_ID,
       goal_id: "CORE",
-      actor_id: "runtime-core",
-      idempotency_key: "demo-core-complete",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      events: [{
+        type_id: "lifecycle",
+        type_version: 1,
+        title: "生命周期记录已接通",
+        fields: { result: "从约定、报告到收尾形成完整记录" },
+        judgments: [{ requirement_id: "CORE-C1", verdict: "supports" }],
+      }],
+      progress: {
+        summary: "完成依据已经写进当前事件记录。",
+        next_step: "明确收尾",
+        next_actor: "当前用户",
+      },
+      idempotency_key: "demo-core-report",
     });
-
-    const interfaceClaim = coordinator.executionValidation.commands.claimGoal({
+    coordinator.goalEvents.recordNote({
+      board_id: DEMO_BOARD_ID,
+      goal_id: "CORE",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      body: "演示项目用当前事件记录说明这项工作为什么可以算完成，不再领取角色或提交旧 Evidence。",
+      idempotency_key: "demo-core-note",
+    });
+    const readyToClose = coordinator.goalEvents.readState(DEMO_BOARD_ID, "CORE");
+    coordinator.goalEvents.submitClosure({
+      board_id: DEMO_BOARD_ID,
+      goal_id: "CORE",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      kind: "complete",
+      result: "可用的生命周期记录",
+      reason: "约定要求已有支持事实，演示收尾",
+      expected_config_version: readyToClose.config.version,
+      expected_agreement_version: readyToClose.agreement.version,
+      idempotency_key: "demo-core-close",
+    });
+    coordinator.goalEvents.recordNote({
       board_id: DEMO_BOARD_ID,
       goal_id: "INTERFACES",
-      actor_id: "runtime-interface",
-      idempotency_key: "demo-interface-claim",
-    }).claim!;
-    const interfaceRun = coordinator.executionValidation.commands.startRun({
-      board_id: DEMO_BOARD_ID,
-      claim_id: interfaceClaim.claim_id,
-      actor_id: "runtime-interface",
-      idempotency_key: "demo-interface-run",
-    }).run;
-    coordinator.legacyProposalSubmission.submitCandidate({
-      board_id: DEMO_BOARD_ID,
-      actor_id: "runtime-interface",
-      discovered_in_run_id: interfaceRun.run_id,
-      proposed_goal: {
-        title: "让旧数据升级前先看到安全说明",
-        outcome: "用户在升级前知道哪些内容会保留、哪些需要重新整理",
-        why: "旧版数据和当前规则并不完全对应，直接迁移可能让用户误以为缺失内容仍然有效",
-        business_logic: "用户升级时先看到每类旧数据的处理结果；能安全保留的内容明确列出，不能可靠迁移的内容提示重新整理，不会静默丢失或伪造。",
-        acceptance_criteria: [
-          {
-            statement: "升级报告逐项说明可迁移内容和需要重建的内容",
-            decision_method: "automated_check",
-            pass_condition: "迁移样例没有未解释字段",
-          },
-        ],
-      },
-      blocking_mode: "none",
-      idempotency_key: "demo-candidate",
+      actor_id: "demo-user",
+      actor_kind: "user",
+      body: "升级前应先看到安全说明：能保留的旧数据明确列出，不能可靠迁移的内容提示重新整理。",
+      idempotency_key: "demo-interfaces-note",
     });
     store.db
       .prepare("UPDATE boards SET active_goal_id = ?, updated_at = ? WHERE board_id = ?")

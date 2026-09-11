@@ -8,15 +8,12 @@ import {
   GovernanceRepository,
   type GovernanceSqliteDatabase,
 } from "./repository.js";
-import {
-  GovernanceReviewLifecycle,
-  type GovernanceReviewLifecycleOptions,
-} from "./review-lifecycle.js";
 import { GovernanceRecordStore } from "./record-store.js";
 import { GovernanceProvenance } from "./provenance.js";
 import { GovernanceClarificationStore } from "./clarification-store.js";
 import { GovernanceDecisionTransactions } from "./decision-transactions.js";
 import { GovernanceEventDecisions } from "./event-decisions.js";
+import type { GovernanceErrorFactory } from "./errors.js";
 export { GovernanceClarificationStore } from "./clarification-store.js";
 
 export const packageDescriptor = {
@@ -28,34 +25,33 @@ export const packageDescriptor = {
   migrationGoals: ["goal-reorg-f2","goal-reorg-ex3","goal-reorg-ex4"],
   ssot: "docs/SSOT-MATRIX.md",
   capabilities: [
-    "governance.review-obligations.v1",
-    "governance.reviews.v1",
     "governance.proposals.v1",
     "governance.decisions.v1",
+    "governance.event-decisions.v1",
   ],
 } as const;
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
 
-export interface GovernanceCollaborationModuleOptions extends GovernanceReviewLifecycleOptions {
+export interface GovernanceCollaborationModuleOptions {
   db: GovernanceSqliteDatabase;
+  now?: () => string;
+  errorFactory?: GovernanceErrorFactory;
 }
 
 export class GovernanceCollaborationModule implements GovernanceApplicationApi {
   readonly clarification: GovernanceClarificationStore;
   readonly provenance: GovernanceProvenance;
   readonly repository: GovernanceRepository;
-  readonly reviews: GovernanceReviewLifecycle;
   readonly records: GovernanceRecordsApi;
   readonly decisions: GovernanceApplicationApi["decisions"];
   readonly eventDecisions: GovernanceApplicationApi["eventDecisions"];
   readonly query: GovernanceQueryApi;
 
   constructor(options: GovernanceCollaborationModuleOptions) {
-    this.clarification = new GovernanceClarificationStore(options.db, options.now, options.errorFactory);
+    this.clarification = new GovernanceClarificationStore(options.db);
     this.provenance = new GovernanceProvenance(options.errorFactory);
     this.repository = new GovernanceRepository(options.db);
-    this.reviews = new GovernanceReviewLifecycle(this.repository, options);
     this.records = new GovernanceRecordStore(options.db, options.errorFactory);
     this.decisions = new GovernanceDecisionTransactions(options.db);
     this.eventDecisions = new GovernanceEventDecisions(
@@ -97,10 +93,6 @@ export {
   type GovernanceSqliteStatement,
 } from "./repository.js";
 export {
-  GovernanceReviewLifecycle,
-  type GovernanceReviewLifecycleOptions,
-} from "./review-lifecycle.js";
-export {
   GovernanceRecordStore,
 } from "./record-store.js";
 export {
@@ -111,6 +103,7 @@ export {
   migrateGoalTreeProposalDecisions,
   migrateGoalTreeProposalNarrative,
   migrateGoalTreeProposals,
+  migrateGoalTreeSubmittedSession,
   migrateReviewContractRevisionColumn,
   migrateRuntimeDialogueAuthority,
 } from "./migrations.js";
@@ -137,8 +130,6 @@ function governanceQueries(repository: GovernanceRepository): GovernanceQueryApi
       getGoalTreeProposal: (boardId, proposalId) =>
         repository.getGoalTreeProposal(boardId, proposalId),
       listGoalTreeProposals: (boardId) => repository.listGoalTreeProposals(boardId),
-      latestNeedsChangesReviewEventSeq: (boardId, goalId) =>
-        repository.latestNeedsChangesReviewEventSeq(boardId, goalId),
     };
 }
 

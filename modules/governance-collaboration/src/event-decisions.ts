@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  GoalEventAgreementChange,
   GoalEventTrustedAuthority,
   GoalEventTrustedDecisionRecord,
   RecordGoalUserDecisionInput,
@@ -27,6 +28,7 @@ export const GOAL_EVENT_TRUSTED_DECISIONS_SQL = `
     conclusion TEXT NOT NULL,
     accepts_requirements INTEGER NOT NULL CHECK (accepts_requirements IN (0, 1)),
     scope_json TEXT NOT NULL,
+    change_json TEXT,
     recorded_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS goal_event_trusted_decisions_goal_idx
@@ -35,6 +37,10 @@ export const GOAL_EVENT_TRUSTED_DECISIONS_SQL = `
 
 export function migrateGoalEventTrustedDecisions(db: GovernanceSqliteDatabase): void {
   db.exec(GOAL_EVENT_TRUSTED_DECISIONS_SQL);
+  const columns = db.prepare("PRAGMA table_info(goal_event_trusted_decisions)").all() as Array<{ name: string }>;
+  if (columns.length && !columns.some((column) => column.name === "change_json")) {
+    db.exec("ALTER TABLE goal_event_trusted_decisions ADD COLUMN change_json TEXT");
+  }
 }
 
 export class GovernanceEventDecisions implements GovernanceEventDecisionApi {
@@ -65,8 +71,8 @@ export class GovernanceEventDecisions implements GovernanceEventDecisionApi {
       INSERT INTO goal_event_trusted_decisions (
         decision_id, board_id, goal_id, actor_id, actor_kind, authority_source,
         conversation_ref, message_ref, request_id, selected_option_id, conclusion,
-        accepts_requirements, scope_json, recorded_at
-      ) VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        accepts_requirements, scope_json, change_json, recorded_at
+      ) VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       decisionId,
       input.board_id,
@@ -80,6 +86,7 @@ export class GovernanceEventDecisions implements GovernanceEventDecisionApi {
       conclusion,
       input.accepts_requirements ? 1 : 0,
       json(scope),
+      input.authorized_change == null ? null : json(input.authorized_change),
       at,
     );
     return this.read(input.board_id, decisionId)!;
@@ -109,6 +116,7 @@ export class GovernanceEventDecisions implements GovernanceEventDecisionApi {
         concern_ids: [],
         action: null,
       }),
+      authorized_change: row.change_json == null ? null : parseJson<GoalEventAgreementChange | null>(row.change_json, null),
       recorded_at: String(row.recorded_at),
     };
   }

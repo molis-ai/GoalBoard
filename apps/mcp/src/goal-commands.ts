@@ -1,15 +1,12 @@
 import type { GoalsEntryApi, AsyncGoalsEntryApi } from "@adeptify/goalboard-plugin-goals";
-import type { ImpactFactsInput } from "@adeptify/goalboard-contracts/modules/goals";
-import { mcpBoardPayload } from "./payload.js";
 
 /** Wire adaptation after host authorization; application owners still decide business validity. */
-export function createMcpGoalToolHandlers<TTransition>(
-  goals: GoalsEntryApi<TTransition> | AsyncGoalsEntryApi<TTransition>,
-  audience: "runtime" | "management",
+export function createMcpGoalToolHandlers(
+  goals: GoalsEntryApi | AsyncGoalsEntryApi,
+  _audience: "runtime" | "management",
 ) {
   type Commands = typeof goals.commands;
   type Planning = typeof goals.planning;
-  type Payload = { board_id: string; actor_id: string; idempotency_key: string };
   return {
     goalboard_v1_project_guidance_add: async (input: Record<string, unknown>) => goals.commands.addProjectGuidance({
       board_id: String(input.board_id), actor_id: String(input.actor_id),
@@ -35,30 +32,5 @@ export function createMcpGoalToolHandlers<TTransition>(
       String(input.board_id), (input.changed_goal_ids as string[]) ?? [],
     ),
     goalboard_v1_planning_graph_check: async (input: Record<string, unknown>) => goals.planning.validateBoardGraph(String(input.board_id)),
-    goalboard_v1_relation_add: async (input: Record<string, unknown>) => {
-      const payload = mcpBoardPayload<Payload & { relation: Parameters<Commands["addRelation"]>[1] }>(input);
-      return goals.commands.addRelation(payload.board_id, payload.relation, payload);
-    },
-    goalboard_v1_impact_add: async (input: Record<string, unknown>) => {
-      const payload = mcpBoardPayload<Payload & { impact: ImpactFactsInput }>(input);
-      return goals.impacts.add(payload.board_id, payload.impact, payload);
-    },
-    goalboard_v1_policy_set: async (input: Record<string, unknown>) => {
-      const payload = mcpBoardPayload<Payload & { binding: Parameters<Commands["setPolicy"]>[1] }>(input);
-      return goals.commands.setPolicy(payload.board_id, payload.binding, payload);
-    },
-    goalboard_v1_risk_add: async (input: Record<string, unknown>) => {
-      const payload = mcpBoardPayload<Payload & { risk: Parameters<Commands["addRisk"]>[1] }>(input);
-      return goals.commands.addRisk(payload.board_id, payload.risk, payload);
-    },
-    goalboard_v1_risk_state: async (input: Record<string, unknown>) => {
-      const payload = mcpBoardPayload<Payload & { risk: Parameters<Commands["setRiskState"]>[1] }>(input);
-      return goals.commands.setRiskState(payload.board_id, payload.risk, {
-        actor_id: payload.actor_id, actor_kind: audience === "runtime" ? "runtime" : "user",
-        idempotency_key: payload.idempotency_key,
-      });
-    },
-    goalboard_v1_revalidate: async (input: Record<string, unknown>) => goals.lifecycle.revalidate(mcpBoardPayload(input)),
-    goalboard_v1_complete: async (input: Record<string, unknown>) => goals.lifecycle.evaluateCompletion(mcpBoardPayload(input)),
   };
 }

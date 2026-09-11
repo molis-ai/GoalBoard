@@ -7,7 +7,7 @@ import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { importV3Board } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
-test("V3 imported coverage remains visible and its Goal editable after Host reopen and browser refresh", { timeout: 60_000 }, async t => {
+test("V3 imported Goal keeps coverage visible and records a current browser note after reopen and refresh", { timeout: 60_000 }, async t => {
   let path = "";
   const browser = await openGoalBrowser(t, false, databasePath => {
     path = databasePath;
@@ -25,45 +25,58 @@ test("V3 imported coverage remains visible and its Goal editable after Host reop
   const goalId = before.goals.find(goal => goal.title === "历史目标")!.goal_id;
   const query = new GoalsQueryService(new GoalsRepository(store.db));
   const coverage = query.listLegacyCoverage(DEMO_BOARD_ID);
-  const dom = (selector: string) => `document.querySelector(${JSON.stringify(selector)})`;
+  const noteBody = "导入后即可继续记录";
+  const noteForm = '[data-event-form="note"]';
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/" + encodeURIComponent(goalId) }, sessionId));
-  await waitFor("document.querySelector('[data-goal-event-document]')");
-  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-goal-event-document]:not([hidden])')");
+  await click('[data-goal-event-document]:not([hidden]) [data-event-reader="description"]');
   await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
   assert.match(await evaluate<string>("document.querySelector('[data-event-panel=\"description\"]').textContent"), /迁移后保留需求覆盖[\s\S]*历史确认理由/);
   await reloadPage();
-  await waitFor("document.querySelector('[data-goal-event-document]')");
-  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-goal-event-document]:not([hidden])')");
+  await click('[data-goal-event-document]:not([hidden]) [data-event-reader="description"]');
   await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
   assert.match(await evaluate<string>("document.querySelector('[data-event-panel=\"description\"]').textContent"), /迁移后保留需求覆盖/);
-  await click("[data-open-goal-edit]");
-  await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
-  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
-  const form = `[data-draft-form][data-goal-id="${goalId}"]`;
-  await evaluate(`(() => { const form = ${dom(form)};
-    for (const [name, value] of Object.entries({title:'迁移后继续编辑', reason:'验证原目标可继续使用'})) {
-      const field = form.elements.namedItem(name); field.value = value; field.dispatchEvent(new Event('input', {bubbles:true}));
-    } return true; })()`);
-  await click(form + ' button[type="submit"]');
-  await waitFor(dom("[data-toast]") + "?.textContent.includes('草稿修改已保存')");
-  assert.equal(query.getGoal(DEMO_BOARD_ID, goalId)!.title, "迁移后继续编辑");
+  await click('[data-goal-event-document]:not([hidden]) [data-event-form-open="note"]');
+  await waitFor(`document.querySelector('${noteForm}')?.hidden === false`);
+  const beforeCursor = await evaluate<number>("Number(document.querySelector('[data-goal-event-document]:not([hidden])')?.dataset.goalEventCursor || 0)");
+  await evaluate(`(() => { const field = document.querySelector('${noteForm} [name="note"]');
+    if (!field) throw new Error("Missing note field");
+    field.value = ${JSON.stringify(noteBody)};
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    return true; })()`);
+  await click(`${noteForm} button[type="submit"]`);
+  try {
+    await waitFor(`Number(document.querySelector('[data-goal-event-document]:not([hidden])')?.dataset.goalEventCursor) > ${beforeCursor}`);
+  } catch (error) {
+    throw new Error(`note save failed: ${await evaluate(`JSON.stringify({status:document.querySelector('${noteForm} [data-form-status]')?.textContent,invalid:Array.from(document.querySelectorAll('${noteForm} :invalid')).map(e=>e.name)})`)} ${error}`);
+  }
+  assert.match(
+    await evaluate<string>("Array.from(document.querySelectorAll('[data-goal-event-document]:not([hidden]) [data-timeline-item]')).map(item => item.textContent).join('\\n')"),
+    /导入后即可继续记录/,
+  );
+  assert.equal(query.getGoal(DEMO_BOARD_ID, goalId)!.title, "历史目标");
   assert.equal(query.getGoal(DEMO_BOARD_ID, goalId)!.definition_state, "draft");
   assert.deepEqual(query.listLegacyCoverage(DEMO_BOARD_ID), coverage);
   assert.deepEqual(store.snapshot(DEMO_BOARD_ID).relations, before.relations);
   await reloadPage();
-  await waitFor("document.querySelector('[data-goal-event-document]')");
-  await click('[data-event-reader="description"]');
+  await waitFor("document.querySelector('[data-goal-event-document]:not([hidden])')");
+  await click('[data-goal-event-document]:not([hidden]) [data-event-reader="description"]');
   await waitFor("document.querySelector('[data-event-panel=\"description\"]')?.hidden === false");
-  await click("[data-open-goal-edit]");
-  await waitFor(dom(".goal-edit-disclosure") + "?.open === true");
-  await waitFor("document.activeElement === document.querySelector('[data-draft-form] input[name=title]')");
-  assert.equal(await evaluate(dom(form + ' [name="title"]') + ".value"), "迁移后继续编辑");
+  assert.match(await evaluate<string>("document.querySelector('[data-event-panel=\"description\"]').textContent"), /迁移后保留需求覆盖/);
+  assert.match(
+    await evaluate<string>("Array.from(document.querySelectorAll('[data-goal-event-document]:not([hidden]) [data-timeline-item]')).map(item => item.textContent).join('\\n')"),
+    /导入后即可继续记录/,
+  );
   const reopened = new LocalProjectDatabase(path);
   try {
     const persisted = new GoalsQueryService(new GoalsRepository(reopened.db));
-    assert.equal(persisted.getGoal(DEMO_BOARD_ID, goalId)!.title, "迁移后继续编辑");
+    const reopenedApp = new GoalProjectApplication(reopened);
+    assert.equal(persisted.getGoal(DEMO_BOARD_ID, goalId)!.title, "历史目标");
     assert.deepEqual(persisted.listLegacyCoverage(DEMO_BOARD_ID), coverage);
+    assert.match(JSON.stringify(reopenedApp.goalEvents.listEvents(DEMO_BOARD_ID, goalId, { limit: 100 })), /导入后即可继续记录/);
   } finally { reopened.close(); }
 });

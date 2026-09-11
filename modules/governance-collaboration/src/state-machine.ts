@@ -1,33 +1,15 @@
 import type {
-  CandidateGoalRecord,
-  ContractProposalRecord,
   GoalTreeProposalItemRecord,
   GoalTreeProposalRecord,
-  RewireRecord,
 } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 
 import { GovernanceError } from "./errors.js";
 
 type GovernanceState =
-  | ContractProposalRecord["state"]
-  | CandidateGoalRecord["state"]
-  | RewireRecord["state"]
   | GoalTreeProposalRecord["state"]
   | GoalTreeProposalItemRecord["state"];
 
 const transitions: Record<string, Record<string, readonly string[]>> = {
-  contract_proposal: {
-    pending: ["pending", "approved", "rejected", "superseded"],
-  },
-  candidate: {
-    pending: ["pending", "approved", "rejected", "dismissed", "superseded"],
-  },
-  rewire: {
-    pending: ["pending", "confirmed", "rejected", "applied"],
-    confirmed: ["confirmed", "rejected", "applied"],
-    applied: ["applied"],
-    rejected: ["rejected"],
-  },
   goal_tree_proposal: {
     pending: ["pending", "partially_applied", "approved", "rejected", "superseded", "closed"],
     partially_applied: ["partially_applied", "approved", "rejected", "superseded", "closed"],

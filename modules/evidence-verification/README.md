@@ -1,12 +1,12 @@
-# 依据记录与验证条件
+# 历史依据与文件引用
 
-保存 Evidence、不可变更正和标准覆盖，判断现有依据是否足以进入验证流程。
+读取历史 Evidence、原始更正及 Review 关联，并提供项目文件引用的读取与路径边界校验。
 
 包名：`@adeptify/goalboard-module-evidence-verification`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-EvidenceVerificationModule.commands 记录依据及更正；query 由验证服务提供。locator preflight 校验引用形态，coverage 区分当前有效依据与已有结果；实际 Review 结论由 Governance 保存。
+Host 通过 `EvidenceVerificationModule.query` 查询原始依据及更正，历史正文按原 ID 展示。Artifacts 与 Web 文件读取复用引用工具；纯查询可用 `createEvidenceQueryApi`。当前工作结果由 Goals 的事件上报入口保存。
 
 ## 从哪里读代码
 
@@ -14,16 +14,17 @@ EvidenceVerificationModule.commands 记录依据及更正；query 由验证服�
 
 | 文件 | 用途 |
 | --- | --- |
-| [src/index.ts](src/index.ts) | Module Command/Query |
-| [src/lifecycle.ts](src/lifecycle.ts) | 依据及更正生命周期 |
-| [src/coverage.ts](src/coverage.ts) | 有效依据与覆盖 |
-| [src/locator.ts](src/locator.ts) | 引用预检 |
+| [src/index.ts](src/index.ts) | Module 查询与文件工具公开入口 |
+| [src/repository.ts](src/repository.ts) | 历史依据、更正和关联查询 |
+| [src/verification.ts](src/verification.ts) | 历史查询服务与项目引用来源 |
+| [src/locator.ts](src/locator.ts) | 引用预检、项目文件读取与路径边界 |
+| [src/migrations.ts](src/migrations.ts) | 历史表结构升级 |
 
 可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
 ## 接入与边界
 
-依据不是 Artifact 正文，也不是用户/Runtime 的 Review verdict。旧记录的更正须保留历史，不能覆盖原始依据来制造通过结果。
+原始依据、更正、Artifact 正文和 Review 结论各自保留。旧提交、纠正和覆盖门禁写服务已退役；当前要求是否满足由 Goals 事件事实及可信用户决定判断。历史读取不得改写原依据或把旧自验证标成用户验收。
 
 由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
@@ -36,10 +37,10 @@ pnpm --filter @adeptify/goalboard-module-evidence-verification typecheck
 pnpm --filter @adeptify/goalboard-module-evidence-verification build
 ```
 
-已有行为示例与回归：[evidence-verification-module.test.ts](../../tests/evidence-verification-module.test.ts)。完成上述构建后运行：
+历史正文、原提交事件与文件引用行为可参考 [evidence-verification-module.test.ts](../../tests/evidence-verification-module.test.ts)、[goal-event-document-history.test.ts](../../tests/goal-event-document-history.test.ts)、[artifact-clipboard.e2e.test.ts](../../tests/artifact-clipboard.e2e.test.ts)。完成仓库构建后运行；浏览器用例需要测试环境中的浏览器：
 
 ```bash
-node --import tsx --test --test-concurrency=1 tests/evidence-verification-module.test.ts
+node --import tsx --test --test-concurrency=1 tests/evidence-verification-module.test.ts tests/goal-event-document-history.test.ts tests/artifact-clipboard.e2e.test.ts
 ```
 
 阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。

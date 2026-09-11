@@ -1,14 +1,12 @@
 import { GOALS_PRESENTATION_STATES, type GoalsCoverageItem, type GoalsInputBinding } from "./document-view.js";
 import type { GoalsPolicyBinding } from "./policy-ui-model.js";
 import type { GoalPresentationState } from "./tree-order.js";
-import { createGoalActionPresenter } from "./action-presentation.js";
 import type { GoalStatusTranslate } from "./goal-state-explanation.js";
 import type { GoalsDocumentReadPorts } from "./document-read-ports.js";
 import { createGoalDocumentIndex } from "./document-index.js";
 import { projectGoalDocument } from "./document-projection.js";
 
-export function buildGoalsDocumentCollection(ports: GoalsDocumentReadPorts, boardId: string, translate: GoalStatusTranslate) {
-  const { presentGoalAction } = createGoalActionPresenter(translate);
+export function buildGoalsDocumentCollection(ports: GoalsDocumentReadPorts, boardId: string, _translate: GoalStatusTranslate) {
   const snapshot = ports.snapshot(boardId);
   const coverage: GoalsCoverageItem[] = ports.goals.listLegacyCoverage(boardId);
   const inputBindings = ports.inputs.list(boardId)
@@ -16,15 +14,8 @@ export function buildGoalsDocumentCollection(ports: GoalsDocumentReadPorts, boar
   const policyBindings: GoalsPolicyBinding[] = ports.goals.listPolicyHistory(boardId);
   const events = ports.events(boardId);
   const index = createGoalDocumentIndex(snapshot, coverage, inputBindings, policyBindings, events, ports.goals.listGoalRiskLinks(boardId));
-  const workStates = new Map(
-    ports.execution.getGoalWorkStates({ board_id: boardId, snapshot }).map((state) => [state.goal_id, state]),
-  );
-  const actionProjections = new Map(
-    ports.execution.getGoalActionProjections({ board_id: boardId, snapshot })
-      .map((projection) => [projection.goal_id, projection]),
-  );
   const allGoals = snapshot.goals.map(goal => projectGoalDocument(goal, {
-    boardId, snapshot, ports, index, workStates, actionProjections, presentGoalAction,
+    boardId, snapshot, ports, index,
   }));
   // Trash is intentionally absent from both the ordinary Tree and the
   // completed-only archive. The dedicated trash view selects it through the
@@ -40,7 +31,6 @@ export function buildGoalsDocumentCollection(ports: GoalsDocumentReadPorts, boar
   const fallback =
     goals.find((item) => item.display_status === "in_progress") ??
     goals.find((item) => item.display_status === "waiting_user") ??
-    goals.find((item) => item.action_projection.progress === "work_recorded" && item.display_status !== "completed") ??
     goals.find((item) => item.display_status === "continue") ??
     goals[0];
   const activeGoalId = goals.some((item) => item.goal.goal_id === snapshot.board.active_goal_id)

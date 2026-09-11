@@ -32,8 +32,8 @@ test("Goals root directory contribution keeps its count, selection and navigatio
 test("collection selection preserves requested/active/first precedence and archive, trash, decision and empty boundaries", () => {
   const first = item("first"), active = item("active"), requested = item("requested");
   const model = { ...view([first, active, requested]), archived_goals: [requested, active], trashed_goals: [first],
-    active_goal_id: "active", counts: { clarifying: 1, executing: 2, reviewing: 0, revalidating: 0,
-      clarification_blocked: 1, execution_blocked: 2, completion_blocked: 3, review_blocked: 4, revalidation_blocked: 5, invalidated: 6 } };
+    active_goal_id: "active", counts: { waiting_for_human: 1, executing: 2, execution_pending: 0,
+      execution_blocked: 2, invalidated: 6 } };
   const before = structuredClone(model);
   const select = (id?: string, archive = false, trash = false, decision = false) =>
     buildGoalCollectionModel(model, id, archive, trash, decision, L);
@@ -44,7 +44,7 @@ test("collection selection preserves requested/active/first precedence and archi
   assert.equal(select("active", false, true).selected, first);
   assert.equal(select("requested", false, false, true).selected, undefined);
   const current = select();
-  assert.equal(current.collectionNote, "澄清中 1 · 执行中 2 · 受阻 21");
+  assert.equal(current.collectionNote, "需要你决定 1 · 正在推进 2 · 受阻 8");
   const full = renderer.renderGoalDirectory(model, current, true);
   const compact = renderer.renderGoalRefreshDirectory(model, current);
   assert.match(full, /data-directory-panel="goals">/);

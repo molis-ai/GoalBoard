@@ -2,21 +2,15 @@ import { buildGoalBoardWebView } from "@adeptify/goalboard-app-local-host";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GoalsModule } from "@adeptify/goalboard-module-goals";
-import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
-
+import { insertHistoricalRisk } from "./historical-sql-fixture.js";
 
 test("public Query preserves complete rule history, linked risks and Runtime dependency/replacement facts", () => {
   const store = new LocalProjectDatabase(":memory:");
   try {
     const coordinator = new GoalProjectApplication(store);
-    const goals = new GoalsModule(store.db, {
-      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
-      currentActionToken: (_board, goal) => `token:${goal}`,
-      authorizeRiskUpdate: () => undefined, authorizeRiskState: () => undefined,
-      transitionRevisionDependents: () => undefined, reconcileLifecycle: (_board, goal) => ({ goal_id: goal }),
-    });
+    const goals = new GoalsModule(store.db, {});
     for (const board of ["query-main", "query-other"]) coordinator.initializeBoard({
       board_id: board, title: board, actor_id: "user", idempotency_key: `init:${board}`,
     });
@@ -63,11 +57,18 @@ test("public Query preserves complete rule history, linked risks and Runtime dep
     assert.equal(goals.query.activeReplacement("query-other", "subject"), null);
 
     for (const [id, links, mode] of [["risk-z", ["subject", "dep-a"], "completion"], ["risk-a", ["subject"], "claim"], ["risk-closed", ["subject"], "none"], ["risk-foreign", ["foreign"], "claim"]] as const) {
-      goals.commands.addRisk(id === "risk-foreign" ? "query-other" : "query-main", {
-        risk_id: id, goal_ids: [...links], description: `description:${id}`, probability: "low", impact: "high",
-        trigger: "fixture condition", treatment: "mitigate", treatment_plan: "Check actual read path", blocking_mode: mode,
-        revisit_condition: `revisit:${id}`, owner: "user", affected_surfaces: ["goal-facts"],
-      }, { actor_id: "user", idempotency_key: `risk:${id}` });
+      insertHistoricalRisk(store.db, {
+        risk_id: id,
+        board_id: id === "risk-foreign" ? "query-other" : "query-main",
+        goal_ids: [...links],
+        description: `description:${id}`,
+        blocking_mode: mode,
+        revisit_condition: `revisit:${id}`,
+        owner: "user",
+        affected_surfaces: ["goal-facts"],
+        treatment_plan: "Check actual read path",
+        created_at: at,
+      });
     }
     store.db.prepare("UPDATE risks SET state = 'resolved' WHERE risk_id = 'risk-closed'").run();
     assert.deepEqual(goals.query.listOpenGoalRisks("query-main", "subject").map(risk => [risk.risk_id, risk.blocking_mode, risk.affected_surfaces]),
@@ -79,12 +80,6 @@ test("public Query preserves complete rule history, linked risks and Runtime dep
     const webSubject = view.goals.find(item => item.goal.goal_id === "subject")!;
     assert.deepEqual(webSubject.risks.find(risk => risk.risk_id === "risk-z")?.goal_ids, ["dep-a", "subject"]);
     assert.ok(!webSubject.risks.some(risk => risk.risk_id === "risk-foreign"));
-    const replaced = coordinator.explainGoal({ board_id: "query-main", goal_id: "subject", actor_id: "runtime", role: "executor", capabilities: [], goal_mode_attestation: true });
-    assert.ok(replaced.reasons.some(reason => reason.code === "goal.replaced" && reason.message.includes("replacement-z")));
-    store.db.prepare("UPDATE goal_relations SET state = 'inactive' WHERE type = 'replaces'").run();
-    const blocked = coordinator.explainGoal({ board_id: "query-main", goal_id: "subject", actor_id: "runtime", role: "executor", capabilities: [], goal_mode_attestation: true });
-    assert.deepEqual(blocked.reasons.filter(reason => reason.code === "dependency.unsatisfied").map(reason => reason.subject_id), ["dep-a", "dep-z"]);
-    assert.deepEqual(blocked.reasons.filter(reason => reason.code === "risk.blocks_claim").map(reason => [reason.subject_id, reason.remediation]), [["risk-a", "revisit:risk-a"]]);
     const after = store.snapshot("query-main");
     assert.deepEqual(after.goals, before.goals);
     assert.deepEqual(after.risks, before.risks);

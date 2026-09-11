@@ -22,7 +22,7 @@ GOALBOARD_MCP_AUDIENCE="runtime" \
 
 > **宿主身份**：GoalBoard 优先读取单次调用 `_meta["goalboard/sessionId"]`、`_meta.threadId`、`_meta.sessionId`，再沿用宿主启动时提供的身份。是否提供这些字段由 Runtime host 决定；不能假设所有版本都会提供。没有 Session 信号时，唯一已验证 workspace membership 仍可只读恢复；其他情况按返回的候选/未绑定状态处理。
 
-- `bound`：返回唯一 `project_id`、`board_id` 和固定数据库连接；之后普通 GoalBoard MCP 调用只能使用该 `board_id`。
+- `bound`：返回唯一项目与固定连接。后续普通调用省略 `board_id` 和操作者字段，由Host从该连接与Session注入；记录某个Goal时仍明确传 `goal_id`。
 - `suggested`：新 Session 有 workspace 历史或其他宿主线索。结果只含候选项目和不泄露原始路径的通用原因，没有项目连接。若当前用户消息已经明确要求用 GoalBoard 连接或推进一个已命名项目，且返回的现有项目中只有一个无歧义匹配，Skill 直接调用 `context_bind`；否则才展示候选并询问。
 - `unbound`：返回 `missing_stable_context` 或 `unknown_context`，不连接任何项目；同样先复用当前消息中对一个现有项目的明确选择，否则展示项目列表并询问选择或新建。
 - 用户明确拒绝某个 `suggested` 候选时，Skill 调用 `goalboard_v1_context_reject_suggestion` 并传入 `user_confirmed=true`。它只在这个 Session 不再提示该候选，随后可返回另一个候选或显式的项目列表／新建路径；不会解绑、删除或影响其他 Session。
@@ -34,10 +34,29 @@ GOALBOARD_MCP_AUDIENCE="runtime" \
 
 Web 是可选查看和用户确认界面，不是连接项目或推进 Goal 的前置条件。浏览页面不会绑定 Runtime；项目设置管理 Session 关联与 workspace membership，不保存目录默认项目。项目创建、Runtime 配置、解除关联与删除仍各有自己的授权。
 
-Runtime audience 对新 Goal 和已转交 Goal 暴露工作入口解析/显式绑定、读取，以及事件工具 `goal_intent_create`、`goal_state`、`event_configure`、`event_report`、`event_list`、`event_read`、`event_progress`、`event_concern`、`event_decision_request`、`event_cite_decision`、`event_agree`、`event_close`、`event_resume`。它也保留 Goal Tree Proposal/Decision、Candidate/Dependency Proposal，以及未转交 `legacy_claim_run` Goal 的 Available/原子选择/Run、Evidence、Runtime Review、重新验证和释放。`event_decide` 不属于 Runtime audience。`goal-tree-decide` 不是 Runtime 自己随意改树的权限：只有用户刚刚在当前对话明确决定后，Runtime 才能传 `user_confirmed=true`、确认摘要和具体决定；GoalBoard 结合宿主 Session 元数据生成审计引用。Runtime 不能通过普通工具参数伪造 Session 身份、自填 user，或覆盖已解析的项目连接。
+## 当前工具
 
-新 Goal / 已转交 Goal 的普通继续路径是 `goal_intent_create` → `event_configure` / `event_report` → `goal_state` / `event_list` / `event_read`。上报返回记录成功，不是正式完成；显式 `event_close` 才可能让 `completion_applied` 为 true。已有有效同范围授权不重复问。未转交 Goal 才把 Available 的 `action_projections` 当作领取入口：选定后读 Contract 并携带返回的 `action_id`、`action_token` 调用 `select_goal`。生命周期写后直接消费 `transition.projection`。不要把 `complete → release` 当成新 Goal 的默认完成步骤。要开始新版事件写入须显式「使用事件记录继续」；读取不会转交，转交后旧状态写入拒绝。
+工具名以下省略 `goalboard_v1_` 前缀；实际输入以当前MCP schema为准。
 
-受信用户入口需要创建 Goal、维护关系/风险/Policy、决定 Contract/Candidate/Rewire 或导入旧数据时，单独使用 `GOALBOARD_MCP_AUDIENCE=management`。不要把 management MCP 交给自主 Runtime。
+| 用途 | Runtime工具 |
+| --- | --- |
+| 项目连接 | `context_resolve`、`context_list_projects`、`context_reject_suggestion`、`context_bind`、`context_unbind`、`context_create_and_bind`、`project_delete` |
+| 发现、创建与状态 | `goal_list`、`goal_intent_create`、`goal_state` |
+| 普通记录与历史 | `event_note`、`event_configure`、`event_report`、`event_progress`、`event_list`、`event_read` |
+| 约定、决定与收尾 | `event_concern`、`event_decision_request`、`event_cite_decision`、`event_agree`、`event_close`、`event_resume` |
+| 结构提案 | `goal_tree_propose`、`goal_tree_read`、`goal_tree_check` |
+| 按需规划 | `planning_methods`、`planning_method_save`、`planning_analyze_change`、`planning_graph_check` |
+| 项目指导 | `project_guidance_get`、`project_guidance_add`、`project_guidance_update` |
+| 回收站 | `goal_trash`、`goal_trash_list`、`goal_restore` |
+
+普通Runtime工具不接受 `board_id`、数据库路径、Web URL或 `actor_id` / `actor_kind` / `runtime_actor_id` 覆盖，即使值与当前连接相同也会拒绝。回收站同样使用有限顶层字段，不接受旧 `payload` 信封。项目选择工具与 `project_delete` 保留各自明确的项目选择和确认参数；这些确认不能被复用为约定或树变化的批准。
+
+最短工作路径是 `goal_intent_create` → `event_note`，无需类型或规划。需要结构化结果时用 `event_configure` / `event_report`。报告可以含多个事实和进展，整批有效才保存，回执给出当前状态、差距和游标。`event_close` 显式收尾，只有 `completion_applied=true` 才表示完成成立；`event_resume` 用必填原因继续已完成或已取消的目标。普通笔记和与当前结论无关的报告不自动重开；有效反证可能使原完成结论退出当前生效，原始历史仍保留。
+
+`event_decide` 和 `goal_tree_decide` 仅在受保护的用户Web/管理入口调用，不属于Runtime。Runtime可以提交具体变化、请求或引用已保存的有效决定，不能自填user身份、确认文本或Session字段批准自己。已有仍有效的同范围授权无需重复决定。
+
+受信管理入口使用 `GOALBOARD_MCP_AUDIENCE=management`，额外保留 `initialize`、`import_v3`、`snapshot`、`event_decide`、`goal_tree_decide`、`active_goal`。管理调用遵循其显式项目和身份schema。不要把management MCP交给自主Runtime。V3导入保留原字段、关系、coverage和来源，导入后的Goal可立即使用当前状态与笔记；不合成验收承诺。
+
+旧Claim/select/Run/Evidence/Review、draft dialogue、Contract/Candidate/Dependency/Rewire写工具，以及Available/Ready/Contract/Explain工作入口已退役；旧名字无法通过管理入口继续执行。历史记录仍可阅读，日常工作只使用当前事件路径。
 
 服务不可用时报告失败，不切换数据库、改 URL 或使用 CLI 兜底。`mcp.context_refresh_required` 仅要求只读 resolve：返回 bound 后用原 idempotency_key 原样重试；未绑定则按项目选择流程处理。旧 reader 的版本错误与连接缓存刷新不同，按返回诊断恢复。完整协议见 [Runtime Skill](../skills/goal-advance/SKILL.md)。

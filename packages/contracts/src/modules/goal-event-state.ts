@@ -22,8 +22,20 @@ export const goalEventDecisionEffectKinds = [
   "reject_concerns",
   "authorize_action",
   "deny_action",
+  "authorize_agreement_change",
 ] as const;
 export type GoalEventDecisionEffectKind = (typeof goalEventDecisionEffectKinds)[number];
+
+export const goalEventDecisionPurposes = [
+  "suggestion",
+  "requirement_acceptance",
+  "action",
+  "agreement_change",
+] as const;
+export type GoalEventDecisionPurpose = (typeof goalEventDecisionPurposes)[number];
+
+export const goalEventRequirementCurrentStatuses = ["active", "retired"] as const;
+export type GoalEventRequirementCurrentStatus = (typeof goalEventRequirementCurrentStatuses)[number];
 
 export const goalEventSystemOperations = [
   "progress_summary",
@@ -40,6 +52,8 @@ export const goalEventSystemOperations = [
   "work_resumed",
   "event_owner_continued",
   "observation_note",
+  "intent_created",
+  "legacy_completion_imported",
 ] as const;
 export type GoalEventSystemOperation = (typeof goalEventSystemOperations)[number];
 
@@ -50,7 +64,7 @@ export interface GoalEventStateOwnerView {
   kind: "event_work";
   adopted_at: string;
   adopted_by: string;
-  source: "intent" | "configuration" | "continue";
+  source: "intent" | "configuration" | "continue" | "migration";
 }
 
 export interface GoalEventScope {
@@ -112,12 +126,28 @@ export interface GoalEventDecisionCommitment {
   requirements: GoalEventRequirementCommitment[];
 }
 
+export interface GoalEventRequirementRevisionInput {
+  requirement_id: string;
+  statement?: string;
+  human_decision_required?: boolean;
+}
+
+export interface GoalEventAgreementChange {
+  outcome?: string;
+  new_requirements?: GoalEventExtraRequirementInput[];
+  revise_requirements?: GoalEventRequirementRevisionInput[];
+  retire_requirement_ids?: string[];
+}
+
 export interface GoalEventDecisionRequestView {
   request_id: string;
   event_id: string;
   question: string;
   options: GoalEventDecisionOption[];
   scope: GoalEventScope;
+  purpose: GoalEventDecisionPurpose;
+  proposed_change: GoalEventAgreementChange | null;
+  commitment: GoalEventDecisionCommitment | null;
   status: "pending" | "decided";
   created_at: string;
 }
@@ -132,6 +162,7 @@ export interface GoalEventAppliedDecisionView {
   effects: GoalEventDecisionEffect[];
   scope: GoalEventScope;
   commitment: GoalEventDecisionCommitment;
+  authorized_change: GoalEventAgreementChange | null;
   config_version: number | null;
   agreement_version: number | null;
   actor_id: string;
@@ -167,7 +198,7 @@ export interface GoalEventClosureView {
   recorded: true;
   completion_applied: boolean;
   expected_config_version: number;
-  expected_agreement_version: number | null;
+  expected_agreement_version: number;
   config_version: number | null;
   agreement_version: number | null;
   unmet_reasons: GoalEventUnmetReason[];
@@ -198,6 +229,7 @@ export interface GoalEventTrustedDecisionRecord {
   conclusion: string;
   accepts_requirements: boolean;
   scope: GoalEventScope;
+  authorized_change: GoalEventAgreementChange | null;
   recorded_at: string;
 }
 
@@ -246,6 +278,8 @@ export interface RequestGoalDecisionInput {
   idempotency_key: string;
   question: string;
   options: GoalEventDecisionOption[];
+  purpose: GoalEventDecisionPurpose;
+  proposed_change?: GoalEventAgreementChange;
   scope?: Partial<GoalEventScope>;
 }
 
@@ -269,6 +303,7 @@ export interface RecordGoalUserDecisionInput {
   conclusion: string;
   accepts_requirements?: boolean;
   effects?: GoalEventDecisionEffect[];
+  authorized_change?: GoalEventAgreementChange;
   scope?: Partial<GoalEventScope>;
 }
 
@@ -278,10 +313,13 @@ export interface SetGoalEventAgreementInput {
   actor_id: string;
   actor_kind?: "user" | "runtime";
   idempotency_key: string;
-  expected_config_version?: number;
-  expected_agreement_version?: number;
+  expected_config_version: number;
+  expected_agreement_version: number;
   outcome?: string;
   new_requirements?: GoalEventExtraRequirementInput[];
+  revise_requirements?: GoalEventRequirementRevisionInput[];
+  retire_requirement_ids?: string[];
+  cited_decision_id?: string;
 }
 
 export interface SubmitGoalEventClosureInput {
@@ -294,7 +332,7 @@ export interface SubmitGoalEventClosureInput {
   result?: string;
   reason: string;
   expected_config_version: number;
-  expected_agreement_version?: number;
+  expected_agreement_version: number;
 }
 
 export interface ResumeGoalEventWorkInput {
@@ -304,26 +342,6 @@ export interface ResumeGoalEventWorkInput {
   actor_kind?: "user" | "runtime";
   idempotency_key: string;
   reason: string;
-}
-
-export interface ContinueGoalEventWorkInput {
-  board_id: string;
-  goal_id: string;
-  actor_id: string;
-  actor_kind?: "user" | "runtime";
-  idempotency_key: string;
-  reopen_completed?: boolean;
-}
-
-export interface ContinueGoalEventWorkResult {
-  owner: GoalEventStateOwnerView;
-  work_status: GoalEventWorkStatus;
-  fulfillment_state: "unmet" | "satisfied";
-  recorded: true;
-  replayed: boolean;
-  event_id: string;
-  observed_event_cursor: number;
-  reopened: boolean;
 }
 
 export interface GoalEventMutationResult {
@@ -399,6 +417,8 @@ export type GoalEventSystemPayload =
       question: string;
       options: GoalEventDecisionOption[];
       scope: GoalEventScope;
+      purpose: GoalEventDecisionPurpose;
+      proposed_change: GoalEventAgreementChange | null;
     }
   | {
       operation: "user_decision";
@@ -410,6 +430,7 @@ export type GoalEventSystemPayload =
       accepts_requirements: boolean;
       effects: GoalEventDecisionEffect[];
       scope: GoalEventScope;
+      authorized_change: GoalEventAgreementChange | null;
       config_version: number;
       agreement_version: number;
     }
@@ -423,6 +444,7 @@ export type GoalEventSystemPayload =
       outcome: string;
       version: number;
       config_version: number;
+      change: GoalEventAgreementChange;
     }
   | {
       operation: "closure_submitted";
@@ -456,7 +478,36 @@ export type GoalEventSystemPayload =
   | {
       operation: "observation_note";
       body: string;
+    }
+  | {
+      operation: "intent_created";
+      source_kind: "web" | "onboarding" | "feed" | "runtime" | "tree";
+    }
+  | {
+      operation: "legacy_completion_imported";
+      journal_type: string | null;
+      journal_seq: number | null;
+      journal_at: string | null;
+      evidence_ids: string[];
+      review_ids: string[];
+      contract_accepted_at: string | null;
+      contract_accepted_by: string | null;
     };
+
+export interface GoalEventImportedCompletion {
+  source: "legacy_fulfillment";
+  imported_at: string;
+  label: "迁入的历史完成";
+  historical: {
+    journal_type: string | null;
+    journal_seq: number | null;
+    journal_at: string | null;
+    evidence_ids: string[];
+    review_ids: string[];
+    contract_accepted_at: string | null;
+    contract_accepted_by: string | null;
+  };
+}
 
 export interface RecordGoalNoteInput {
   board_id: string;
@@ -465,15 +516,6 @@ export interface RecordGoalNoteInput {
   actor_kind?: "user" | "runtime";
   idempotency_key: string;
   body: string;
-}
-
-export interface ReopenCompletedEventWorkInput {
-  board_id: string;
-  goal_id: string;
-  actor_id: string;
-  actor_kind?: "user" | "runtime";
-  idempotency_key: string;
-  reason: string;
 }
 
 export interface GoalEventWorkStateView {
@@ -486,4 +528,5 @@ export interface GoalEventWorkStateView {
   applied_decisions: GoalEventAppliedDecisionView[];
   current_decisions: GoalEventAppliedDecisionView[];
   closure: GoalEventClosureView | null;
+  imported_completion: GoalEventImportedCompletion | null;
 }

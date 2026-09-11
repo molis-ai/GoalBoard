@@ -1,7 +1,6 @@
 import type { AsyncApplicationMethods } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { GoalTrashResult } from "@adeptify/goalboard-contracts/modules/goals";
-import type { GoalEntryCompositionApi, GoalWorkStateView } from "@adeptify/goalboard-plugin-goals";
-import { mcpBoardPayload } from "./payload.js";
+import type { GoalEntryCompositionApi, GoalTrashPlacementView } from "@adeptify/goalboard-plugin-goals";
 import type { McpPresentationErrorFactory } from "./query-presentation.js";
 
 /** Only adapts the user's request and the owner's result; the lifecycle owns all transitions. */
@@ -10,19 +9,34 @@ export function createMcpGoalTrashHandlers(
   createError: McpPresentationErrorFactory,
 ) {
   async function setTrashed(args: Record<string, unknown>, trashed: boolean) {
-    const payload = mcpBoardPayload<{
-      board_id: string; goal_id: string; actor_id: string;
-      user_confirmed: boolean; reason: string; idempotency_key: string;
-    }>(args);
-    if (!payload.user_confirmed) {
+    if (Object.hasOwn(args, "payload")) {
+      throw createError(
+        "mcp.unexpected_field",
+        "不能使用未许可字段：payload",
+        { fields: ["payload"] },
+      );
+    }
+    const boardId = String(args.board_id ?? "");
+    const goalId = String(args.goal_id ?? "");
+    const actorId = String(args.actor_id ?? "");
+    const reason = String(args.reason ?? "");
+    const idempotencyKey = String(args.idempotency_key ?? "");
+    if (!boardId || !goalId || !actorId || !reason || !idempotencyKey) {
+      throw createError(
+        "mcp.invalid_arguments",
+        "回收站写入需要明确的目标、操作者和确认理由",
+        { fields: ["board_id", "goal_id", "actor_id", "reason", "idempotency_key"] },
+      );
+    }
+    if (args.user_confirmed !== true) {
       const action = trashed ? "移入回收站" : "恢复";
       throw createError("mcp.user_confirmation_required",
         `当前 Runtime 只有在用户明确要求${action}指定 Goal 后才能调用；请先在当前对话确认。`);
     }
     const { result, work_state } = await application.setTrashedWithWorkState(
-      payload.board_id,
-      { goal_id: payload.goal_id, trashed, reason: payload.reason },
-      { actor_id: payload.actor_id, idempotency_key: payload.idempotency_key },
+      boardId,
+      { goal_id: goalId, trashed, reason },
+      { actor_id: actorId, idempotency_key: idempotencyKey },
     );
     return presentGoalTrashResult(result, work_state);
   }
@@ -34,9 +48,9 @@ export function createMcpGoalTrashHandlers(
 
 function presentGoalTrashResult<T extends GoalTrashResult>(
   result: T,
-  workState: GoalWorkStateView,
+  workState: GoalTrashPlacementView,
 ): T & {
-  work_state: GoalWorkStateView;
+  work_state: GoalTrashPlacementView;
   next_action: { kind: string; message: string } | null;
 } {
   if (result.status === "blocked") {
@@ -45,7 +59,7 @@ function presentGoalTrashResult<T extends GoalTrashResult>(
       work_state: workState,
       next_action: {
         kind: "finish_active_work",
-        message: "这条 Goal 仍有有效 Claim 或未结束 Run；先在当前工作流结束或释放它，再由用户重新确认删除。",
+        message: "这条 Goal 仍有未结束的工作；先在当前工作流结束或继续它，再由用户重新确认删除。",
       },
     };
   }
@@ -74,8 +88,8 @@ function presentGoalTrashResult<T extends GoalTrashResult>(
       ...result,
       work_state: workState,
       next_action: {
-        kind: "read_goal_contract",
-        message: "Goal 已恢复；读取其 Contract 或 Available，继续当前状态允许的工作。",
+        kind: "read_goal_state",
+        message: "Goal 已恢复；读取其当前状态或事件记录，继续当前允许的工作。",
       },
     };
   }

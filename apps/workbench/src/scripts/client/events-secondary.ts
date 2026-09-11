@@ -281,8 +281,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         return;
       }
       if (handleGoalFactorClick(target)) return;
-      const draftOpen = handleGoalDraftOpen(target);
-      if (draftOpen) { await draftOpen; return; }
       if (target.closest("[data-open-goal-tui]")) {
         setWorkspaceMode("runtime");
         const addTerminal = document.querySelector("[data-tui-add]");
@@ -318,7 +316,6 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         return;
       }
       if (handleGoalRelationDisclosureClick(target)) return;
-      if (handleGoalDraftCriteriaClick(target)) return;
       const lifecycleClick = handleGoalLifecycleClick(target);
       if (lifecycleClick) { await lifecycleClick; return; }
 `;

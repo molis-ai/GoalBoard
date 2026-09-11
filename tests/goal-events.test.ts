@@ -51,35 +51,30 @@ function fixture(options: { human?: boolean } = {}) {
     actor_id: "user-1",
     idempotency_key: "init-board",
   });
-  module.commands.createGoal(BOARD, {
+  const requirements = [
+    { requirement_id: "playable-scene", statement: "有一段能从开始体验到结束的故事" },
+    { requirement_id: "choice-response", statement: "不同选择带来可观察的不同回应" },
+    ...(options.human
+      ? [{ requirement_id: "human-signoff", statement: "用户亲自确认可以内部试用", human_decision_required: true }]
+      : []),
+  ];
+  new GoalEventApplication({
+    query: module.query,
+    commands: module.commands,
+    events: module.events,
+    planning: module.planning,
+  }).createIntent({
+    board_id: BOARD,
     goal_id: GOAL,
     title: "互动故事片段",
     outcome: "玩家能体验一段会回应选择的故事",
     why: "验证局部事件事实",
     business_logic: "先登记类型再上报观察。",
-    acceptance_criteria: [
-      {
-        criterion_id: "playable-scene",
-        statement: "有一段能从开始体验到结束的故事",
-        decision_method: "inspection",
-        pass_condition: "可以完整走一遍",
-      },
-      {
-        criterion_id: "choice-response",
-        statement: "不同选择带来可观察的不同回应",
-        decision_method: "inspection",
-        pass_condition: "两次选择结果不同",
-      },
-      ...(options.human
-        ? [{
-          criterion_id: "human-signoff",
-          statement: "用户亲自确认可以内部试用",
-          decision_method: "human_decision" as const,
-          pass_condition: "用户明确验收",
-        }]
-        : []),
-    ],
-  }, { actor_id: "user-1", idempotency_key: "create-goal" });
+    requirements,
+    actor_id: "user-1",
+    idempotency_key: "create-goal",
+    source_kind: "web",
+  });
   return { directory, databasePath, store, module };
 }
 
@@ -180,10 +175,8 @@ test("registers fields, reports work, and reopens the same facts from SQLite", (
     assert.deepEqual(reported.events[0]?.type?.fields.map((field) => field.field_id), ["piece", "limits"]);
 
     const beforeClose = data.module.events.listEvents(BOARD, GOAL);
-    assert.equal(beforeClose.events.length, 2);
-    assert.equal(beforeClose.events[0]?.kind, "configuration");
-    assert.equal(beforeClose.events[1]?.kind, "report");
-    assert.ok(beforeClose.events[0]!.journal_seq < beforeClose.events[1]!.journal_seq);
+    assert.deepEqual(beforeClose.events.map((item) => item.kind), ["system", "configuration", "report"]);
+    assert.ok(beforeClose.events[1]!.journal_seq < beforeClose.events[2]!.journal_seq);
 
     data.store.close();
     const reopened = new LocalProjectDatabase(data.databasePath);
@@ -194,7 +187,7 @@ test("registers fields, reports work, and reopens the same facts from SQLite", (
       assert.equal(config.types[0]?.version, 1);
       assert.equal(config.types[0]?.source.label, "Runtime 为当前 Goal 设计");
       const page = events.listEvents(BOARD, GOAL);
-      assert.deepEqual(page.events.map((item) => item.kind), ["configuration", "report"]);
+      assert.deepEqual(page.events.map((item) => item.kind), ["system", "configuration", "report"]);
       const report = events.readEvent(BOARD, GOAL, reported.events[0]!.event_id);
       assert.equal(report.payload.piece, "开场洞穴，玩家可以选择帮助旅人");
       assert.equal(report.payload.limits, "还没有第二幕；注释含 <b>HTML</b> & 原文");
@@ -633,6 +626,12 @@ test("bound requirements reject incompatible types in a batch; unbound and bound
       expected_version: 0, idempotency_key: "cfg-types",
       types: [storyDelivery(1), storyObservation()],
       requirement_bindings: [{ type_id: "story-delivery", requirement_id: "playable-scene" }],
+    });
+    data.module.events.setAgreement({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "cfg-types-req",
+      expected_config_version: 1,
+      expected_agreement_version: data.module.events.readWorkState(BOARD, GOAL).agreement.version,
       new_requirements: [{
         requirement_id: "ready",
         statement: "开场已经可以交给别人玩",
@@ -798,7 +797,15 @@ test("event pages keep server order without gaps or duplicates; bad cursor, limi
       });
     }
     const all = data.module.events.listEvents(BOARD, GOAL).events;
-    assert.equal(all.length, 6);
+    assert.deepEqual(all.map((item) => item.kind === "report" ? { kind: item.kind, title: item.title } : { kind: item.kind }), [
+      { kind: "system" },
+      { kind: "configuration" },
+      { kind: "report", title: "进展 一" },
+      { kind: "report", title: "进展 二" },
+      { kind: "report", title: "进展 三" },
+      { kind: "report", title: "进展 四" },
+      { kind: "report", title: "进展 五" },
+    ]);
     const page1 = data.module.events.listEvents(BOARD, GOAL, { limit: 2 });
     const page2 = data.module.events.listEvents(BOARD, GOAL, { after_cursor: page1.next_cursor ?? undefined, limit: 2 });
     const page3 = data.module.events.listEvents(BOARD, GOAL, { after_cursor: page2.next_cursor ?? undefined, limit: 2 });
@@ -808,7 +815,7 @@ test("event pages keep server order without gaps or duplicates; bad cursor, limi
     assert.deepEqual(paged.map((item) => item.journal_seq), all.map((item) => item.journal_seq));
     assert.equal(new Set(paged.map((item) => item.event_id)).size, all.length);
     assert.equal(page1.next_cursor, page1.events[1]?.journal_seq);
-    assert.equal(page4.events.length, 0);
+    assert.equal(page4.events.length, 1);
     assert.equal(page4.next_cursor, null);
 
     assert.throws(
@@ -886,7 +893,13 @@ test("bounded latest reports are the actual newest reports, not the first histor
     assert.equal(state.latest_reports[0]?.title, "report 55");
     assert.deepEqual(state.latest_reports.map((item) => item.title), ["report 55", "report 54", "report 53", "report 52", "report 51"]);
     const page = data.module.events.listEvents(BOARD, GOAL, { limit: 50 });
-    assert.equal(page.events.filter((item) => item.kind === "report").at(-1)?.title, "report 49");
+    assert.equal(page.events.length, 50);
+    assert.equal(page.events[0]?.kind, "system");
+    assert.equal(page.events[1]?.kind, "configuration");
+    assert.deepEqual(
+      page.events.slice(2).map((item) => item.title),
+      Array.from({ length: 48 }, (_, index) => `report ${index + 1}`),
+    );
     const latest = data.module.events.listLatestReports(BOARD, GOAL, { limit: 5 });
     assert.equal(latest.reports[0]?.title, "report 55");
     data.store.close();
@@ -906,23 +919,23 @@ test("bounded latest reports are the actual newest reports, not the first histor
 test("Runtime supports on a human_decision criterion still leaves a user-confirmation gap", () => {
   const data = fixture();
   try {
-    data.module.commands.createGoal(BOARD, {
+    const app = eventApp(data.module);
+    app.createIntent({
+      board_id: BOARD,
       goal_id: "accepted-human",
       title: "需要用户确认的交付",
       outcome: "用户亲自确认可以内部试用",
       why: "验证报告不能代替确认",
       business_logic: "Runtime 可报告支持，正式确认仍待用户。",
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      promised_outputs: ["可试用结果"],
-      acceptance_criteria: [{
-        criterion_id: "accepted-human-signoff",
+      requirements: [{
+        requirement_id: "accepted-human-signoff",
         statement: "用户亲自确认可以内部试用",
-        decision_method: "human_decision",
-        pass_condition: "用户明确验收",
+        human_decision_required: true,
       }],
-    }, { actor_id: "user-1", idempotency_key: "create-accepted-human" });
-    const app = eventApp(data.module);
+      actor_id: "user-1",
+      idempotency_key: "create-accepted-human",
+      source_kind: "web",
+    });
     app.configure({
       board_id: BOARD, goal_id: "accepted-human", actor_id: "runtime-1", expected_version: 0, idempotency_key: "cfg-human",
       types: [storyDelivery(1)],
@@ -944,6 +957,103 @@ test("Runtime supports on a human_decision criterion still leaves a user-confirm
     assert.ok(gap);
     assert.equal(gap.human_decision_required, true);
     assert.equal(gap.current_verdict, "supports");
+  } finally {
+    close(data);
+  }
+});
+
+test("type v2 can rename and drop fields while old events stay on v1", () => {
+  const data = fixture();
+  try {
+    data.module.events.configure({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      expected_version: 0, idempotency_key: "cfg-rename-v1", types: [storyDelivery(1)],
+    });
+    const first = data.module.events.report({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "report-rename-v1",
+      events: [reportDelivery({ fields: { piece: "第一版交付", limits: "当时缺口" } })],
+    });
+    data.module.events.configure({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      expected_version: 1, idempotency_key: "cfg-rename-v2",
+      types: [{
+        ...storyDelivery(1),
+        version: 2,
+        name: "交付内容",
+        fields: [
+          { field_id: "piece", name: "交付内容", purpose: "可体验结果", format: "longtext", required: true },
+        ],
+      }],
+    });
+    const second = data.module.events.report({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "report-rename-v2",
+      events: [{
+        type_id: "story-delivery", type_version: 2, title: "按新版本记录",
+        fields: { piece: "只要这段可体验内容" },
+      }],
+    });
+    const oldReport = data.module.events.readEvent(BOARD, GOAL, first.events[0]!.event_id);
+    const newReport = data.module.events.readEvent(BOARD, GOAL, second.events[0]!.event_id);
+    assert.equal(oldReport.type?.version, 1);
+    assert.equal(oldReport.type?.fields.find((field) => field.field_id === "piece")?.name, "交付了什么片段");
+    assert.equal(oldReport.payload.limits, "当时缺口");
+    assert.equal(newReport.type?.version, 2);
+    assert.equal(newReport.type?.fields.length, 1);
+    assert.equal(newReport.type?.fields[0]?.name, "交付内容");
+    assert.equal(newReport.payload.limits, undefined);
+    assert.throws(
+      () => data.module.events.configure({
+        board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+        expected_version: 2, idempotency_key: "cfg-rewrite-v2",
+        types: [{ ...storyDelivery(1), version: 2, name: "偷偷改同一版" }],
+      }),
+      (error: unknown) => error instanceof GoalsCommandError && error.code === "event_config.cannot_rewrite_type",
+    );
+  } finally {
+    close(data);
+  }
+});
+
+test("extra requirement unknown control fields are rejected and human_decision_required persists", () => {
+  const data = fixture();
+  try {
+    data.module.events.configure({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      expected_version: 0, idempotency_key: "cfg-human-extra", types: [storyDelivery(1)],
+    });
+    const before = data.module.events.listEvents(BOARD, GOAL).events.length;
+    assert.throws(
+      () => data.module.events.setAgreement({
+        board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+        idempotency_key: "unknown-field",
+        expected_config_version: 1,
+        expected_agreement_version: data.module.events.readWorkState(BOARD, GOAL).agreement.version,
+        new_requirements: [{
+          requirement_id: "human-extra",
+          statement: "用户必须亲自确认购买体验",
+          human_decision_required: true,
+          independently_verified: true,
+        } as never],
+      }),
+      (error: unknown) => error instanceof GoalsCommandError && error.code === "event_config.unsupported_property",
+    );
+    assert.equal(data.module.events.listEvents(BOARD, GOAL).events.length, before);
+    data.module.events.setAgreement({
+      board_id: BOARD, goal_id: GOAL, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "human-extra-ok",
+      expected_config_version: 1,
+      expected_agreement_version: data.module.events.readWorkState(BOARD, GOAL).agreement.version,
+      new_requirements: [{
+        requirement_id: "human-extra",
+        statement: "用户必须亲自确认购买体验",
+        human_decision_required: true,
+      }],
+    });
+    const extra = data.module.events.readCurrentRequirements(BOARD, GOAL).find((item) => item.requirement_id === "human-extra");
+    assert.equal(extra?.human_decision_required, true);
+    assert.equal(extra?.currently_satisfied, false);
   } finally {
     close(data);
   }

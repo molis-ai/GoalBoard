@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
+import { insertHistoricalClaim, insertHistoricalEvidence, insertHistoricalRun } from "./historical-sql-fixture.js";
 
 test("Goal navigation preserves history, keyboard focus, failed selection recovery and open-tab limits without executing work", { timeout: 60_000 }, async t => {
   const browser = await openGoalBrowser(t);
@@ -78,6 +79,40 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, before, origin, sessionId, command, evaluate, waitFor, click, navigate, reloadPage } = browser;
+  insertHistoricalClaim(store.db, {
+    claim_id: "core-history-claim",
+    board_id: DEMO_BOARD_ID,
+    goal_id: "CORE",
+    actor_id: "history-runtime",
+    release_reason: "historical CORE lifecycle record",
+  });
+  insertHistoricalRun(store.db, {
+    run_id: "core-history-run",
+    board_id: DEMO_BOARD_ID,
+    goal_id: "CORE",
+    claim_id: "core-history-claim",
+    actor_id: "history-runtime",
+    state: "completed",
+    output_refs_json: JSON.stringify(["artifact://core-lifecycle-history"]),
+    ended_at: "2026-09-02T00:02:00.000Z",
+  });
+  insertHistoricalEvidence(store.db, {
+    evidence_id: "core-history-evidence",
+    board_id: DEMO_BOARD_ID,
+    goal_id: "CORE",
+    producer_actor_id: "history-runtime",
+    locator: "artifact://core-lifecycle-history",
+    kind: "artifact",
+    result: "passed",
+    run_id: "core-history-run",
+  });
+  const seeded = store.snapshot(DEMO_BOARD_ID);
+  const seededClaim = seeded.claims.find((item) => item.claim_id === "core-history-claim")!;
+  const seededRun = seeded.runs.find((item) => item.run_id === "core-history-run")!;
+  const seededEvidence = seeded.evidence.find((item) => item.evidence_id === "core-history-evidence")!;
+  assert.equal(seededClaim.goal_id, "CORE");
+  assert.equal(seededRun.goal_id, "CORE");
+  assert.equal(seededEvidence.locator, "artifact://core-lifecycle-history");
   await command("Network.enable", {}, sessionId);
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
@@ -121,10 +156,20 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   assert.equal(after.goals.find(g => g.goal_id === "CORE")!.created_at, before.goals.find(g => g.goal_id === "CORE")!.created_at);
   assert.deepEqual(after.goals.filter(g => g.goal_id !== "CORE"), before.goals.filter(g => g.goal_id !== "CORE"));
   assert.deepEqual(after.relations, before.relations);
-  assert.deepEqual(after.runs, before.runs);
-  assert.deepEqual(after.claims, before.claims);
-  assert.deepEqual(after.evidence, before.evidence);
+  assert.deepEqual(after.runs, seeded.runs);
+  assert.deepEqual(after.claims, seeded.claims);
+  assert.deepEqual(after.evidence, seeded.evidence);
+  assert.equal(after.claims.find((item) => item.claim_id === "core-history-claim")?.release_reason, "historical CORE lifecycle record");
+  assert.deepEqual(after.runs.find((item) => item.run_id === "core-history-run")?.output_refs, ["artifact://core-lifecycle-history"]);
+  assert.equal(after.evidence.find((item) => item.evidence_id === "core-history-evidence")?.locator, "artifact://core-lifecycle-history");
   assert.equal(after.board.active_goal_id, "WEB");
+  const historyId = await evaluate(`document.querySelector('[data-source="legacy_evidence"]')?.dataset.timelineItem || ""`) as string;
+  assert.ok(historyId, "CORE must keep the original Evidence timeline item after archive and restore");
+  await click(`[data-timeline-item="${historyId}"]`);
+  await waitFor("document.querySelector('[data-event-sheet] .event')");
+  const body = await evaluate("document.querySelector('[data-event-sheet]')?.textContent || ''") as string;
+  assert.match(body, /core-history-evidence/);
+  assert.match(body, /artifact:\/\/core-lifecycle-history/);
 });
 
 test("Sources mutation and Feed reload preserve utility state while fresh Goal links still open Goals", { timeout: 60_000 }, async t => {

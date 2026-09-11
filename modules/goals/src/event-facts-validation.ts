@@ -30,8 +30,49 @@ const RESERVED_FIELD_IDS = new Set([
 ]);
 const TYPE_KEYS = new Set(["type_id", "version", "name", "purpose", "semantic_family", "source", "fields"]);
 const FIELD_KEYS = new Set(["field_id", "name", "purpose", "format", "required", "source"]);
+const REQUIREMENT_KEYS = new Set(["requirement_id", "statement", "bound_type_id", "human_decision_required", "source"]);
+const REQUIREMENT_SOURCE_KEYS = new Set([
+  "kind", "template_requirement_id", "methods", "decision_method", "pass_condition", "policy_binding_ids",
+]);
 
 export type EventFactsError = (code: string, message: string, details?: Record<string, unknown>) => Error;
+
+const REPORT_PROGRESS_KEYS = new Set(["summary", "next_step", "next_actor"]);
+
+export function parseOptionalReportProgress(
+  error: EventFactsError,
+  raw: unknown,
+): { summary: string; next_step: string | null; next_actor: string | null } | null {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw error("event_report.invalid_progress", "进展必须是含原文的对象，不能是数组或其它类型");
+  }
+  const record = raw as Record<string, unknown>;
+  const unexpected = Object.keys(record).filter((key) => !REPORT_PROGRESS_KEYS.has(key));
+  if (unexpected.length) {
+    throw error("event_report.unknown_progress_field", `不能使用未许可的进展字段：${unexpected.join("、")}`, {
+      fields: unexpected,
+    });
+  }
+  if (typeof record.summary !== "string") {
+    throw error("event_progress.summary_required", "进展摘要需要原文");
+  }
+  const summary = record.summary.trim();
+  if (!summary) {
+    throw error("event_progress.summary_required", "进展摘要需要原文");
+  }
+  if (record.next_step != null && typeof record.next_step !== "string") {
+    throw error("event_report.invalid_progress", "next_step 必须是字符串");
+  }
+  if (record.next_actor != null && typeof record.next_actor !== "string") {
+    throw error("event_report.invalid_progress", "next_actor 必须是字符串");
+  }
+  return {
+    summary,
+    next_step: record.next_step?.trim() || null,
+    next_actor: record.next_actor?.trim() || null,
+  };
+}
 
 export function assertConfigText(error: EventFactsError, value: string, label: string): string {
   if (typeof value !== "string") {
@@ -151,25 +192,9 @@ export function normalizeField(error: EventFactsError, field: GoalEventFieldDefi
   };
 }
 
-export function assertAdditiveTypeVersion(error: EventFactsError, previous: GoalEventTypeDefinition, next: GoalEventTypeDefinition): void {
+export function assertNextTypeVersion(error: EventFactsError, previous: GoalEventTypeDefinition, next: GoalEventTypeDefinition): void {
   if (next.type_id !== previous.type_id) {
     throw error("event_config.invalid_type_id", "新类型版本必须使用原来的类型 ID");
-  }
-  const previousFields = new Map(previous.fields.map((field) => [field.field_id, field]));
-  const nextFields = new Map(next.fields.map((field) => [field.field_id, field]));
-  for (const [fieldId, previousField] of previousFields) {
-    const current = nextFields.get(fieldId);
-    if (!current) {
-      throw error("event_config.cannot_remove_field", `不能删除已有字段: ${fieldId}`, { field_id: fieldId });
-    }
-    if (
-      current.format !== previousField.format
-      || current.required !== previousField.required
-      || current.name !== previousField.name
-      || current.purpose !== previousField.purpose
-    ) {
-      throw error("event_config.cannot_change_field", `不能改写已有字段承诺: ${fieldId}`, { field_id: fieldId });
-    }
   }
 }
 
@@ -222,25 +247,42 @@ export function normalizeAdoptedPlanning(
     seen.add(key);
     normalized.push({ method_id: methodId, version: item.version, source: item.source });
   }
-  for (const item of previous) {
-    const key = `${item.source}:${item.method_id}:${item.version}`;
-    if (!seen.has(key)) {
-      throw error("event_config.cannot_remove_planning", "不能移除已经采用的规划来源");
-    }
-  }
   return normalized;
 }
 
 export function normalizeNewRequirement(error: EventFactsError, input: GoalEventExtraRequirementInput): GoalEventExtraRequirementInput {
+  if (input == null || typeof input !== "object" || Array.isArray(input)) {
+    throw error("event_config.invalid_requirement", "新增要求必须是对象");
+  }
+  assertAllowedKeys(error, input, REQUIREMENT_KEYS, "新增要求");
+  if (input.human_decision_required != null && typeof input.human_decision_required !== "boolean") {
+    throw error("event_config.invalid_human_decision_required", "human_decision_required 必须是布尔值");
+  }
   return {
     requirement_id: requiredText(error, input.requirement_id, "event_config.requirement_id_required", "新增要求必须有稳定 ID").trim(),
     statement: assertConfigText(error, requiredText(error, input.statement, "event_config.requirement_statement_required", "新增要求必须说明具体结果").trim(), "新增要求"),
     bound_type_id: input.bound_type_id?.trim() || undefined,
+    human_decision_required: input.human_decision_required === true,
     source: input.source ? normalizeRequirementSource(error, input.source) : undefined,
   };
 }
 
 function normalizeRequirementSource(error: EventFactsError, source: GoalEventRequirementSource): GoalEventRequirementSource {
+  assertAllowedKeys(error, source, REQUIREMENT_SOURCE_KEYS, "局部要求来源");
+  if (source.kind === "create_input") return { kind: "create_input" };
+  if (source.kind === "imported_acceptance_criterion") {
+    return {
+      kind: "imported_acceptance_criterion",
+      decision_method: String(source.decision_method ?? ""),
+      pass_condition: String(source.pass_condition ?? ""),
+    };
+  }
+  if (source.kind === "imported_human_approval") {
+    return {
+      kind: "imported_human_approval",
+      policy_binding_ids: Array.isArray(source.policy_binding_ids) ? source.policy_binding_ids.map(String) : [],
+    };
+  }
   if (source.kind !== "planning") throw error("event_config.invalid_requirement_source", "局部要求来源无效");
   const templateId = requiredText(error, source.template_requirement_id, "event_config.invalid_requirement_source", "规划要求必须保留模板 ID").trim();
   if (!Array.isArray(source.methods) || source.methods.length === 0) {
@@ -328,7 +370,7 @@ function setOwn(target: Record<string, string>, key: string, value: string): voi
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
-function assertAllowedKeys(
+export function assertAllowedKeys(
   error: EventFactsError,
   value: object,
   allowed: Set<string>,

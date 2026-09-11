@@ -50,7 +50,11 @@ export const GOAL_EVENT_FACTS_SCHEMA_SQL = `
     created_at TEXT NOT NULL,
     created_in_config_version INTEGER NOT NULL,
     actor_id TEXT NOT NULL,
-    source_json TEXT
+    source_json TEXT,
+    human_decision_required INTEGER NOT NULL DEFAULT 0 CHECK (human_decision_required IN (0, 1)),
+    current_status TEXT NOT NULL DEFAULT 'active' CHECK (current_status IN ('active', 'retired')),
+    revision INTEGER NOT NULL DEFAULT 1,
+    support_valid_after_seq INTEGER NOT NULL DEFAULT 0
   );
   CREATE INDEX IF NOT EXISTS goal_event_requirements_goal_idx
     ON goal_event_requirements(board_id, goal_id, requirement_id);
@@ -98,8 +102,30 @@ export function ensureGoalEventRequirementSourceColumn(db: {
   exec(sql: string): unknown;
 }): void {
   const columns = db.prepare("PRAGMA table_info(goal_event_requirements)").all() as Array<{ name: string }>;
-  if (!columns.length || columns.some((column) => column.name === "source_json")) return;
-  db.exec("ALTER TABLE goal_event_requirements ADD COLUMN source_json TEXT");
+  if (!columns.length) return;
+  if (!columns.some((column) => column.name === "source_json")) {
+    db.exec("ALTER TABLE goal_event_requirements ADD COLUMN source_json TEXT");
+  }
+}
+
+export function ensureGoalEventRequirementCurrentColumns(db: {
+  prepare(sql: string): { all(): unknown[] };
+  exec(sql: string): unknown;
+}): void {
+  const columns = db.prepare("PRAGMA table_info(goal_event_requirements)").all() as Array<{ name: string }>;
+  if (!columns.length) return;
+  if (!columns.some((column) => column.name === "human_decision_required")) {
+    db.exec("ALTER TABLE goal_event_requirements ADD COLUMN human_decision_required INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.some((column) => column.name === "current_status")) {
+    db.exec("ALTER TABLE goal_event_requirements ADD COLUMN current_status TEXT NOT NULL DEFAULT 'active'");
+  }
+  if (!columns.some((column) => column.name === "revision")) {
+    db.exec("ALTER TABLE goal_event_requirements ADD COLUMN revision INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!columns.some((column) => column.name === "support_valid_after_seq")) {
+    db.exec("ALTER TABLE goal_event_requirements ADD COLUMN support_valid_after_seq INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 export function migrateGoalEventFactsSchema(
@@ -109,6 +135,7 @@ export function migrateGoalEventFactsSchema(
   db.transaction(() => {
     db.exec(GOAL_EVENT_FACTS_SCHEMA_SQL);
     ensureGoalEventRequirementSourceColumn(db);
+    ensureGoalEventRequirementCurrentColumns(db);
     db.prepare("INSERT OR IGNORE INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
       .run(GOAL_EVENT_FACTS_MIGRATION_ID, now().toISOString());
   }).immediate();

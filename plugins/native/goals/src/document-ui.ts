@@ -23,7 +23,7 @@ function createDocumentRenderer(primitives: GoalsDocumentUiPrimitives) {
     <div class="goal-workspace-panels trash-goal-workspace">
     <section class="trash-goal-panel trash-goal-panel--state">
       ${sectionHeading("archive", "回收站状态", "这不是永久删除；恢复后仍是同一个 Goal")}
-      <div class="trash-summary"><p><strong>${L("Goal 的 Contract、Run、Evidence 与事件历史都已保留。")}</strong>${L("移入时仍生效的关联关系会临时停止；恢复时，只有两端都不在回收站的关系才会安全恢复。")}</p>${trashEvent ? `<p><strong>移入原因：</strong>${escapeHtml(trashEvent.reason)}</p>` : ""}</div>
+      <div class="trash-summary"><p><strong>${L("Goal 的内容和完整历史都已保留。")}</strong>${L("移入时仍生效的关联关系会临时停止；恢复时，只有两端都不在回收站的关系才会安全恢复。")}</p>${trashEvent ? `<p><strong>移入原因：</strong>${escapeHtml(trashEvent.reason)}</p>` : ""}</div>
     </section>
     <section class="trash-goal-panel">
       ${sectionHeading("book", "原始目标")}

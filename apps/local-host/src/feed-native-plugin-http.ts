@@ -62,7 +62,7 @@ function createHandlers(options: FeedNativePluginHttpOptions) {
     importRelay: (feed) => importRelayData(feed, options.boardId, undefined, { migrateOwnership: true }),
     renderWorkbench: (preset) => options.renderer.renderFeedWorkbenchFragment(options.readWebView(), preset),
     renderDetail: (item, detail) => options.renderer.renderPersistedFeedItemDetail(item, options.routePrefix, detail),
-    promote: (feed, input) => createLocalFeedGoalPromotion(options.store.db, options.coordinator.goals.commands, options.coordinator.goalInputs, feed)(input),
+    promote: (feed, input) => createLocalFeedGoalPromotion(options.store.db, options.coordinator.goalEvents.createIntent.bind(options.coordinator.goalEvents), options.coordinator.goalInputs, feed)(input),
   });
 }
 

@@ -1,15 +1,9 @@
 # Evidence & Verification
 
-**定位：** Evidence、不可变 Correction、criterion coverage 和自动验证义务的唯一 owner。
+本模块保留旧 Evidence、不可变 Correction、原验收引用和文件来源的历史读取，以及对应 schema 和数据库升级。旧 submit/correct、执行链验证与专属写入口已经退役。新的结果记录使用 Goals 的工作事件和当前要求判断。
 
-**状态：** `partial`。EX2 已迁 Evidence / Correction、文件引用与当前自动门禁；EX3 已迁 Review / Proposal / Decision；EX4 已把 Web/CLI/MCP 的 Evidence/Review 入口切到统一执行验收应用端口。
+原 Evidence 与 correction chain 保留其 ID、locator、作者、时间、结果、Contract revision 和 criterion 关联。历史正文、项目文件读取和快照继续使用本模块的公开查询；已有文件访问边界仍生效。可读文件不等于当前要求已经通过，历史 Review 也不会被改写成新的用户验收。
 
-**拥有：** Evidence identity/kind/locator/result/digest、contract revision、criterion mapping、不可变 correction chain、文件引用预检、criterion coverage 与返工后的 Evidence freshness。
+Artifact 内容和版本由 Artifacts 管理，历史 Review 由 Governance 管理，当前约定、要求及完成效果由 Goals 管理。本模块不再通过旧 Action Projection 或跨 owner 的执行收尾链决定当前 Goal 是否完成。
 
-**公开面：** 查询 Evidence / Correction、当前有效覆盖、Review 引用与项目文件来源；submit、supersede、retract、attach review；发布 Evidence 事件。纯 snapshot coverage 函数供 Action Projection 使用，不要求调用方复制判断规则。
-
-**不负责：** 不拥有 Artifact 正文、Goal Contract、Run 或 Review verdict；人工审批只能来自可信用户入口。文件可读取不等于证据结论有效，验证级别必须明确。
-
-**调用边界：** Goals/Execution application layer 先确认 `goal_id + contract_revision + criterion_ids` 与可选 Run ownership，再调用 Evidence Command。Evidence 不读取 Goal Store，也不直接完成 Goal；完成状态仍由跨 owner lifecycle reconciliation 组合。
-
-**当前迁移事实：** Evidence schema、migrations 17–20、migration 30 Evidence columns、Repository、Correction 状态机、locator helper 和 coverage 规则已经迁入；Store 仅保留总迁移顺序。EX4 把 Evidence/Review 授权、Contract revision、action token 与 lifecycle reconcile 拆进独立 application command owner，Coordinator 不再提供对应公开方法。
+当前报告、人工验收和收尾用法见 [Goals](goals.md)、[Governance](governance-collaboration.md) 与 [Runtime](../runtime.md)。迁移和历史阅读使用真实历史夹具验证，不调用退役写服务重新制造旧数据。

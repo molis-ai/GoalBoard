@@ -76,15 +76,15 @@ function renderGoalMomentum(
       goal_id: item.goal.goal_id,
       title: item.goal.title,
       status: item.status,
-      work_state: item.work_state,
+      work_state: item.work_state ?? item.status,
       display_status: item.display_status,
       priority: item.goal.priority,
       created_at: item.goal.created_at,
       updated_at: item.goal.updated_at,
-      completed: item.goal.fulfillment_state === "satisfied" || item.work_state === "archived",
+      completed: item.goal.fulfillment_state === "satisfied" || item.status === "archived" || item.work_state === "archived",
       acceptance_criteria_count: item.goal.acceptance_criteria.length,
       passed_criteria_count: item.passed_criteria.length,
-      reasons: item.reasons.map((reason) => ({ code: reason.code })),
+      reasons: (item.reasons ?? []).map((reason) => ({ code: reason.code })),
       runs: item.runs.map((run) => ({
         role: run.role,
         state: run.state,
@@ -127,7 +127,6 @@ function renderGoalMomentum(
       node.blocked ? L("阻塞") : node.startable ? L("可开始") : "",
       node.downstream_open_count > 1 ? L("影响 {count} 个下游", { count: node.downstream_open_count }) : "",
       !node.history_sufficient ? L("历史不足") : node.stale ? L("近 7 天停滞") : "",
-      node.work_state === "waiting_children" ? L("由子 Goal 推进") : "",
     ].filter(Boolean).join(" · ");
     const bottleneck = !node.completed && node.downstream_open_count > 0 && (node.blocked || node.stale);
     const startsGroup = groupFirstRowById.get(node.group_id) === node.row;
@@ -154,7 +153,7 @@ function renderGoalMomentum(
   const details = momentum.nodes.map((node) => {
     const item = byId.get(node.goal_id)!;
     const providers = node.unsatisfied_provider_goal_ids.map((goalId) => byId.get(goalId)?.goal.title ?? goalId);
-    const currentReasons = item.reasons.filter((reason) => reason.severity === "blocker").map((reason) => reason.message);
+    const currentReasons = (item.reasons ?? []).filter((reason) => reason.severity === "blocker").map((reason) => reason.message);
     const facts = [
       providers.length ? L("仍在等待：{providers}", { providers: providers.join(currentLocale() === "en" ? ", " : "、") }) : L("没有未满足前置"),
       L("可触达 {count} 个未完成下游", { count: node.downstream_open_count }),

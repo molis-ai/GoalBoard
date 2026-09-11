@@ -1,78 +1,83 @@
-# 运行时协议：核心概念、Goal Contract 与工作流
+# Runtime 协议：约定、事实与收尾
 
-## 核心概念
+GoalBoard 保存目标、实际工作与当前结果。Runtime 在已有授权内推进工作，用户可以看到做了什么、还差什么，以及哪些变化需要自己决定。普通工作不需要领取角色、Run、完整规划或默认模板。
 
-| 概念 | 一句话说明 |
+## 当前工作模型
+
+| 内容 | 用途 |
 | --- | --- |
-| Goal | 一个有验收条件的目标。新 Goal 和已转交 Goal 用事件记录工作；未转交历史 Goal 仍可领取。父 Goal 可以记录自己的整合，子 Goal 数量不自动证明完成 |
-| Goal Tree | 用户确认后的目标拆解结构，Plan 和看板都是它的派生视图 |
-| 依赖 | 已确认的前置关系，是领取和完成的硬门禁 |
-| Risk | 可能阻碍领取或完成的风险，需要人决定处理方式 |
-| Claim | Runtime 对某个 Goal 的带时限占用，不是任务分配 |
-| Run | 一次执行、复核或重新验证过程 |
-| Evidence | 对应验收条件的证据（测试、检查、人工确认等） |
-| Review | 自检、交叉或对抗性复核，通过后才算完成 |
-| Candidate | 执行中发现的新工作，只能由用户决定是否接受 |
-| Rewire | 用户确认后的目标关系重排 |
+| Goal | 先保存可辨认的意图，再逐步明确结果与要求 |
+| 当前约定 | 这轮要交付的结果，以及当前生效的要求 |
+| 笔记 | 直接保存观察、讨论或部分工作，无需先定义类型 |
+| 局部类型与报告 | 类型描述要记录的内容；报告保存实际结果，并可说明它支持或反驳哪些要求 |
+| 关注项 | 保存需要处理的问题；明确阻塞收尾的关注项会参与完成判断 |
+| 用户决定 | 对具体变化或验收作出的可信选择；建议和讨论不自动成为完成门禁 |
+| 收尾与继续 | 显式完成或取消；需要继续时说明原因，开启新一轮 |
+| 目标树与依赖 | 表达父子结果和真实前置关系；按需要使用，不是创建每个Goal的前提 |
 
-普通 Runtime 对新 Goal 和已转交 Goal 读取、配置/上报事件、请求决定和显式收尾，不能自行裁决 canonical Goal，也不能自填 user 身份。未转交的 `legacy_claim_run` Goal 仍可选择、认领、提交证据和 Runtime Review。所有推断和建议在用户确认前都不是权威事实。
+`goal_state` 是当前约定、要求、工作状态和差距的统一读取入口。工作状态为 `open`、`completed` 或 `cancelled`。父目标可以记录自己的整合结果；子目标数量不能证明父目标完成。未完成依赖会影响正式完成，但不会禁止先记笔记或保存部分工作。
 
-## Goal Contract
+## 连接项目与选择目标
 
-用户可以在当前 Runtime 提出一个粗略想法；GoalBoard Skill 用 `goal_intent_create` 保存能辨认的标题，并可附带结果说明。新意图自动归事件 owner，不必先填完整树、默认模板或领取角色。工作规划提供可选择采用的类型与默认要求；采用版本和这条 Goal 的局部修改会留下来，模板变化不改旧含义。也可以不用规划，只登记局部类型。clarifier Runtime 仍可对未转交 Draft 读取项目事实并逐步提出 Outcome、Why、非技术业务逻辑、范围、输入输出、验收、依赖、风险和 Review Policy 的补全建议；这些建议只有在用户确认后才成为 accepted Contract。
+Runtime 通过 MCP 使用 GoalBoard。工具名、输入与展示由 `apps/mcp` 提供；Local Host 注入已绑定项目和操作者；Goals Module 保存当前事件事实，Goals Plugin 组装用例。Skill 不读取内部数据库或重新实现完成判断。
 
-最小可执行 Goal 与 Task 是同一粒度：结果在 Goal 内闭环，并且有可观察或可量化的验收条件。例如“设计用户 Domain，并提供可测试的增删改查方法”可以是一个叶子 Goal；“把账号系统做好”仍需继续拆分。
+先调用 `context_resolve`。已有Session绑定或唯一、已验证的workspace关联可以恢复项目；普通候选、目录名和模型猜测不授权绑定。需要选择项目时，复用用户对唯一项目的明确选择；只有存在歧义才询问。绑定、切换、新建、解绑和删除遵循各自授权，普通绑定不设置目录默认项目。具体接入见 [MCP 接入](mcp.md)。
 
-未转交路径上，accepted Contract 不由 Runtime 直接改写。改变同一目标的 Contract 要求时，提交同一 Goal ID 的 Contract-update Proposal，经用户确认形成新版本并保留历史；独立的新结果才成为 Candidate Goal。事件工作的当前约定用 `event_agree` / `event_configure`，按返回版本和实际授权处理。树或关系变化仍走相应提案。
+连接后用 `goal_list` 发现目标，或用 `goal_intent_create` 保存新意图。新建至少需要标题，可附结果说明。普通调用省略 `board_id`、`actor_id` 等项目和身份字段，由Host注入；读取和记录某个Goal时仍显式提供 `goal_id`，不能靠当前焦点猜写入对象。
 
-## Runtime 工作流
+## 日常记录
 
-协议的唯一入口是 MCP 工具，不是 Web route 或内部类。工具名、输入 schema 和展示属于 `apps/mcp`；Goals/Execution/Governance 事实类型属于各自公开 Contract，跨模块操作由官方 Goals Plugin 公开、Local Host 注册。Skill 不导入这些源码，也不重新实现资格、幂等或完成算法。规划方法通过 `planning_methods` 读取；方法正文由 Goals Module 发布，Skill 的安装兼容链接不是第二份资产。
-
-用户调用 Skill 后先做只读 context resolve。同一 Session 的已确认绑定，或恰好一个已验证 workspace membership，可以返回 bound 并恢复；目录名、普通候选或模型猜测不授权绑定。suggested/unbound 时复用当前用户对唯一项目的明确选择，否则询问。普通绑定不保存目录默认；新建、切换、解绑和删除各自需要对应授权，删除仍保护有效 Claim 和未结束 Run。
-
-Skill 的正常回复先用用户当前语言说明“我理解了什么、为什么还要确认这一点、接下来只问或做什么”，不会把 MCP 工具名和内部 ID 当作回答。新意图保存后用 `goal_state` 接续。复杂拆分时显示可修改的结构化 checkpoint，明确区分用户已确认事实、可查项目事实、Runtime 假设和建议。未转交 Draft 的每次实质回答先写入 dialogue turn；事件 Goal 的事实走 `event_report`。提案就绪时用可读 Goal Tree 汇总结果、非目标、关系依赖、叶子验收、风险和确认后的状态，用户可以整份决定或点名修改条目。
-
-项目连接明确后，当前 Runtime 先读所选 Goal 的 `goal_state`。新 Goal 和已转交 Goal 的普通继续路径是事件工具，不是 Available → Claim/Run。GoalBoard 不返回“唯一下一份”，也不派单。
-
-工具名称以下省略 `goalboard_v1_` 前缀。
+下列工具名省略 `goalboard_v1_` 前缀：
 
 ```text
-new Goal / transferred event_work:
-  goal_intent_create → 可选 event_configure（采用规划类型/所选默认要求，或只登记局部类型）
-  → 工作并 event_report / event_progress / event_concern
-  → goal_state / event_list / event_read
-  → 需要决定时 event_decision_request；引用已有有效决定时 event_cite_decision
-  → 当前约定变化用 event_agree；显式收尾 event_close；取消后恢复 event_resume
-  → recorded 不是 completion_applied；普通支持不自动完成
-
-untransferred legacy_claim_run only:
-  available → contract → select_goal(action_id, action_token)
-  → run_report → evidence_submit → review_submit / revalidate
-  → 旧草稿仍可用 draft_dialogue_*；Host 租约用 claim_renew
-  → 要开始新版事件写入须显式「使用事件记录继续」；读取不会转交
-  → 转交后旧状态写入拒绝
-
-complex Goal Tree:
-  planning_methods → goal_tree_propose / read / check
-  → 用户明确决定 → goal_tree_decide
-  → 检查返回的 semantic_review 与动作，不自行改写其余 Goal
-
-recovery:
-  mcp.context_refresh_required → 只读 context_resolve
-  → bound 后用原幂等键原样重试；其他状态先解决项目选择
-  stale action token → 消费返回的新动作，不盲重试旧请求
-  completion blocker → 处理返回的具体门禁，不重新执行已完成工作
+context_resolve → goal_list / goal_intent_create → goal_state
+  → 无类型记录：event_note
+  → 结构化记录：按需 event_configure → event_report
+  → 仅更新进展：event_progress
+  → 问题与决定：event_concern / event_decision_request / event_cite_decision
+  → 查原文：event_list / event_read
 ```
 
-`event_decide` 只接受 Host Web/管理入口注入的用户来源，不属于 Runtime audience。已有有效同范围授权不重复问；扩大范围按实际授权处理。父 Goal 可以记录自己的整合或验收；子 Goal 数量不自动证明完成。
+`event_configure` 可以登记局部类型，也可以采用合适的规划。类型的已发布版本不能重写；新增版本可以调整名称、字段和约束，旧报告始终按其保存的类型版本读取。专业方法可通过 `planning_methods` 按实际任务选择，不要求先规划才能记录。
 
-未转交路径里，`select_goal` 仍原子创建 Claim 与 Run；失败不留下半套进行中状态。通过公开 `action_projection` / `transition.projection` 继续。`complete`、`release`、`ready`、`claim`、`run_start` 保留管理/兼容用途，不是新 Goal 的默认完成步骤。原 Run/Evidence/Review/Decision 按原 ID/来源可读，不转换成伪造的批准。`GET/POST /api/goals/:id/panels`（无子路径，JSON）仍是 Runtime 终端面板，与已删除的旧 Goal 详情 fragment 不同。
+一次 `event_report` 可以保存多个事实及可选进展说明。整批输入有效才写入；某项非法时本批次全部回滚，先前成功调用的记录仍在。回执给出保存的事实、当前工作状态、差距和游标，通常无需立即重读全部历史。没有新事实时可单独用 `event_progress`，遵循它的 `based_on_cursor` 约束。
 
-对于新想法，Runtime 不必让用户先打开 Web 或逐字段填写 Contract：`goal_intent_create` 保存原始意图并归事件 owner。复杂拆分或改树仍用 `goal-tree-propose` 一次提交整份可确认方案，并可通过 `goal-tree-read`、`goal-tree-check` 跨 Session 恢复和检查；推断和建议在用户确认前都不是 canonical Goal、关系、Risk 或 Policy。用户随后仍可在当前 Runtime 对话中逐项确认、拒绝或要求修改；用户明确回答后，Runtime 调用 `goal-tree-decide` 并传入 `user_confirmed=true`、确认摘要和具体决定，GoalBoard 再结合宿主 Session 元数据记录审计来源。这是本地对话来源记录，不伪装成密码学身份认证。已确认的安全条目才会物化，过期、悬空或循环条目会保持冲突，不影响其他已确认条目。
+同一幂等键和相同输入可以安全重试，不会重复写入；同键换输入会被拒绝。报告重放保留原保存结果，同时读取现在的状态和差距，不能把旧回执当成目标此刻的完成证明。
 
-`draft-dialogue-start` / `turn` / `resume` 只服务未转交历史 Draft：在一个事务中创建或恢复 clarifier Claim 和 Run，保存每次实质回答。不能把这条旧协议说成所有 Goal 的默认继续路径，也不能说所有旧操作必须转交。
+## 当前约定与人工验收
 
-物化后不增加第二套“是否澄清完成”状态：确认的复合父 Goal 有子项时显示“已澄清，等待子 Goal”，确认的最小叶子显示“待执行”，仍是 Draft／开放拆分的分支才显示“待澄清”。
+`event_agree` 维护当前结果与要求。要求可以新增、修订或退休；退休退出当前判断，历史要求与报告仍可阅读。当前要求可绑定相应局部类型。`human_decision_required=false` 的要求允许Runtime报告参与支持判断；设为 `true` 时，仍须有适用于当前要求的可信用户验收，Runtime的支持报告不能代替它。
 
-普通 Runtime 不能自行裁决 canonical Goal、accepted Contract 或关系。Goal Tree 决定仍可在用户刚刚明确回答后由 `goal_tree_decide` 记录。事件工作中的用户决定由 Host Web/管理入口记录；Runtime 只能请求或引用已有有效决定。执行中独立新工作用 Candidate；未转交 Goal 的同一目标 Contract 要求变化用同 ID Contract revision Proposal；事件 Goal 的当前约定用 `event_agree` / `event_configure`；依赖变化用显式关系提案。
+首次补充结果、普通备注和已授权范围内的工作不额外制造审批。替换已承诺的结果、退休或降级要求、取消人工验收等变化，Runtime需要引用对这份具体变化的有效用户决定。无关的批准、笼统的 `authorize_action` 或自填 `user_confirmed` 不能授权另一份变化。已有仍有效的同范围决定可以复用。
+
+Runtime可以请求决定、读取其状态并引用已有决定。真正的用户选择由受保护的Web或管理入口记录；Runtime没有 `event_decide` 或 `goal_tree_decide` 权限。需要这一决定时，把具体变化和返回的Goal页面交给用户，其他已授权工作可以继续。
+
+两个版本有不同用途：配置版本标识当前类型配置；约定版本标识当前结果与承诺。正式约定修改和收尾使用工具要求的当前版本。缺失或过期版本在正式副作用前被拒绝；重新读 `goal_state`、核对变化后再提交。普通历史报告按其实际类型版本保存，不套用正式收尾的并发锁。
+
+## 收尾与继续
+
+```text
+goal_state → 核对当前约定、要求、依赖与决定
+  → event_close(kind=complete 或 cancel)
+  → completed / cancelled 后需要继续：event_resume(reason=具体原因)
+```
+
+记录成功不等于完成成立。`event_close` 的完成回执只有 `completion_applied=true` 才表示正式完成；当前版本仍有验收缺口时，可以保存收尾报告而不应用完成结论。按返回差距处理具体未满足项。缺失或过期版本等非法输入则直接拒绝，不保存本次收尾。
+
+结果发生实质修改、有效反证等情况可能使原完成退出当前生效；历史报告和完成依据保留。普通无关笔记或报告不会自动重开目标。对 `completed` 和 `cancelled` 都用同一个 `event_resume`，原因必填；已经open时不创建多余的新一轮，同键重试不会重复恢复。
+
+## 按需调整结构
+
+用 `goal_tree_propose` 保存明确的Goal和关系变化，通过 `goal_tree_read` / `goal_tree_check` 跨Session恢复与检查。来源引用指向真实已保存的记录。用户通过受保护入口决定整组或选定条目；Runtime不能用自填确认批准结构。
+
+只物化用户选中的有效条目。循环、跨项目引用、过期关系基线和并发修改会被拒绝或作为具体冲突返回；未选中的新Goal不能因某条关系获批而被顺带创建。根据当前状态处理返回的影响与冲突，不重新引入固定拆分阈值、叶子种类或非空规划数组门槛。
+
+## 恢复与历史
+
+`mcp.context_refresh_required` 表示先只读 `context_resolve`；恢复bound后，用原键原样重试。主事实保存成功但Session活动暂时未记入时，保留成功事实，恢复后同键重试可以补齐活动，避免重复记录。
+
+切换Goal不会自动改绑终端或发送消息。Host Session、终端进程与面板继续承担各自职责。
+
+旧库升级和V3导入把当前工作接入事件状态，保留原始来源、关系和真实历史。旧Claim、Run、Evidence、Review仍可按原记录阅读，原有批准不会被伪造或重新编造；这些历史记录不提供另一套可继续执行的工作协议。旧领取、Run写入、Contract/Candidate/Rewire写工具已退役。
+
+实际可调用示例与必要恢复细节见 [Runtime Skill](../skills/goal-advance/SKILL.md)。

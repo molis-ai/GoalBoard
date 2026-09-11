@@ -2,7 +2,7 @@ import { isRuntimeMcpTool, isRuntimeContextMcpTool, type McpToolCallContext } fr
 import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
 import type { GoalBoardRuntimeConnection, GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { RuntimeProjectConnection } from "./runtime-project-connection.js";
-import { assertRuntimeGoalEventToolInput } from "./mcp-event-identity.js";
+import { assertRuntimeOrdinaryToolInput } from "./mcp-event-identity.js";
 
 type GoalBoardMcpToolCallContext = McpToolCallContext;
 export interface McpAuthorityState {
@@ -23,29 +23,14 @@ export function assertMcpToolAllowed(
   if (!isRuntimeMcpTool(name)) {
     throw new GoalBoardV1Error(
       "mcp.authority_denied",
-      `MCP 权限拒绝：${name} 只允许用户或管理入口调用；Runtime 应提交 Candidate 或把决定交给用户`,
+      `MCP 权限拒绝：${name} 只允许用户或管理入口调用；Runtime 应使用当前事件工具，或把决定交给用户`,
     );
   }
-  if (name === "goalboard_v1_review_submit") {
-    const payload = (arguments_.payload as Record<string, unknown> | undefined) ?? {};
-    if (payload.actor_kind === "user") {
-      throw new GoalBoardV1Error(
-        "mcp.user_impersonation_denied",
-        "MCP 权限拒绝：Runtime 不能声明 actor_kind=user 或代替用户提交 human approval Review",
-      );
-    }
-  }
-  if (arguments_.database_path != null || arguments_.web_base_url != null) {
-    throw new GoalBoardV1Error(
-      "mcp.connection_override_denied",
-      "MCP 连接拒绝：Runtime 不能覆盖宿主固定的 SQLite 或 goal_url",
-    );
-  }
-  assertRuntimeGoalEventToolInput(name, arguments_);
   if (isRuntimeContextMcpTool(name)) {
     requireMcpRuntimeContextHost(state, callContext);
     return;
   }
+  assertRuntimeOrdinaryToolInput(name, arguments_);
   if (!state.connectionState.explicit) {
     const host = requireMcpRuntimeContextHost(state, callContext);
     if (state.connectionState.observe(host.runtimeContext) === "refresh_required") {
@@ -66,12 +51,6 @@ export function assertMcpToolAllowed(
     throw new GoalBoardV1Error(
       "mcp.connection_incomplete",
       "MCP 尚未连接项目：请先由统一 GoalBoard Skill 调用 goalboard_v1_context_resolve，或由宿主提供固定连接",
-    );
-  }
-  if (arguments_.board_id !== state.runtimeConnection.boardId) {
-    throw new GoalBoardV1Error(
-      "mcp.board_mismatch",
-      `MCP 连接拒绝：Runtime 必须使用宿主固定的 board_id ${state.runtimeConnection.boardId}`,
     );
   }
 }

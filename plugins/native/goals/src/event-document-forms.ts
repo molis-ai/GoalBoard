@@ -55,7 +55,7 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
   }
 
   function renderTypeForm(doc: GoalEventDocumentView): string {
-    return `<form class="event-form" data-event-form="type" data-config-version="${doc.state.config.version}" hidden>
+    return `<form class="event-form" data-event-form="type" data-config-version="${doc.state.config.version}" data-agreement-version="${doc.state.agreement.version}" hidden>
       <button type="button" class="text-button" data-event-reader="planning">${L("返回工作规划")}</button>
       <h2>${L("新增事件类型")}</h2>
       <p class="form-lead">${L("只作用于当前 Goal。登记类型不会自动启用完成要求。标识会自动生成，已有记录的标识不会改。")}</p>
@@ -73,14 +73,14 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
     </form>`;
   }
 
-  function renderPlanning(doc: GoalEventDocumentView): string {
+  function renderPlanning(doc: GoalEventDocumentView, owned = true): string {
     const adopted = doc.state.config.adopted_planning;
     const source = adopted.length
       ? adopted.map((item) => `${item.source} · ${item.method_id} v${item.version}`).join("；")
       : L("未采用模板。这是空白起点，不会暗中补选默认规划。");
     const types = doc.types.length
-      ? `<ul class="planning-types">${doc.types.map((type) => `<li><div><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.purpose)} · v${type.version}</small></div><span><button type="button" class="button secondary" data-event-report="${escapeHtml(type.type_id)}">${L("记录")}</button><button type="button" class="text-button" data-event-form-open="type-edit" data-type-id="${escapeHtml(type.type_id)}">${L("改这一版")}</button></span></li>`).join("")}</ul>`
-      : `<p class="form-note">${L("还没有可记录的事件类型。")}</p>`;
+      ? `<ul class="planning-types">${doc.types.map((type) => `<li><div><strong>${escapeHtml(type.name)}</strong><small>${escapeHtml(type.purpose)} · v${type.version}</small></div>${owned ? `<span><button type="button" class="button secondary" data-event-report="${escapeHtml(type.type_id)}">${L("记录")}</button><button type="button" class="text-button" data-event-form-open="type-edit" data-type-id="${escapeHtml(type.type_id)}">${L("改这一版")}</button></span>` : ""}</li>`).join("")}</ul>`
+      : `<p class="form-note">${owned ? L("还没有可记录的事件类型。") : L("没有可记录的事件类型。")}</p>`;
     const requirements = doc.state.requirements.length
       ? `<ul class="planning-requirements">${doc.state.requirements.map((item) => {
         const support = item.currently_satisfied
@@ -97,16 +97,16 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
             ? L("报告者 {actor} · 未独立核对", { actor: item.current_report.actor_id })
             : "";
         const needHuman = item.human_decision_required && !accepted;
-        return `<li><button type="button" class="text-button" data-locate-requirement="${escapeHtml(item.requirement_id)}" data-report-event="${escapeHtml(item.current_report?.event_id ?? "")}" data-bound-type="${escapeHtml(item.bound_type_ids[0] ?? "")}">${escapeHtml(item.statement)}</button><small>${escapeHtml(support)}${sourceNote ? ` · ${escapeHtml(sourceNote)}` : ""}${needHuman ? ` · ${L("需要用户验收")}` : ""}</small></li>`;
+        return `<li><button type="button" class="text-button" data-locate-requirement="${escapeHtml(item.requirement_id)}" data-report-event="${escapeHtml(item.current_report?.event_id ?? "")}"${owned && item.bound_type_ids[0] ? ` data-bound-type="${escapeHtml(item.bound_type_ids[0])}"` : ""}>${escapeHtml(item.statement)}</button><small>${escapeHtml(support)}${sourceNote ? ` · ${escapeHtml(sourceNote)}` : ""}${needHuman ? ` · ${L("需要用户验收")}` : ""}</small></li>`;
       }).join("")}</ul>`
-      : `<p class="form-note">${L("还没有完成要求。没有结果约定时可以工作与记录，但不能宣称完成。")}</p>`;
+      : `<p class="form-note">${owned ? L("还没有完成要求。没有结果约定时可以工作与记录，但不能宣称完成。") : L("还没有完成要求。")}</p>`;
     return `<div class="event-reader-panel" data-event-panel="planning">
       <p class="reader-lead">${escapeHtml(source)}</p>
       <h3>${L("当前完成要求")}</h3>
       ${requirements}
       <h3>${L("可记录类型")}</h3>
       ${types}
-      <div class="event-actions">
+      ${owned ? `<div class="event-actions">
         <button type="button" class="button secondary" data-event-reader="type">${L("新增事件类型")}</button>
         <button type="button" class="button secondary" data-event-form-open="requirement">${L("增加完成要求")}</button>
         <button type="button" class="button secondary" data-event-form-open="adopt">${L("采用规划方法")}</button>
@@ -117,12 +117,12 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
         <button type="button" class="button secondary" data-event-form-open="closure">${L("显式收尾")}</button>
         ${doc.transfer.kind === "resume_cancelled" || doc.transfer.kind === "reopen_event_completed"
           ? `<button type="button" class="button primary" data-event-form-open="resume">${doc.transfer.kind === "resume_cancelled" ? L("显式继续") : L("继续此目标")}</button>` : ""}
-      </div>
+      </div>` : ""}
     </div>`;
   }
 
   function renderRequirementForm(doc: GoalEventDocumentView): string {
-    return `<form class="event-form" data-event-form="requirement" data-config-version="${doc.state.config.version}" hidden>
+    return `<form class="event-form" data-event-form="requirement" data-config-version="${doc.state.config.version}" data-agreement-version="${doc.state.agreement.version}" hidden>
       <button type="button" class="text-button" data-event-reader="planning">${L("返回工作规划")}</button>
       <h3>${L("增加完成要求")}</h3>
       <p class="form-lead">${L("启用完成要求是单独操作，不会因为登记了类型就自动出现。")}</p>
@@ -131,6 +131,8 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
       <label><span>${L("绑定类型（可选）")}</span><select name="bound_type_id"><option value="">${L("不绑定")}</option>${
         doc.types.map((type) => `<option value="${escapeHtml(type.type_id)}">${escapeHtml(type.name)}</option>`).join("")
       }</select></label>
+      <label class="check-row"><input type="checkbox" name="human_decision_required"><span>${L("需要用户验收")}</span></label>
+      <p class="form-note">${L("不勾选时，Runtime 报告支持即可参与完成判断。勾选后必须有仍然有效的用户结论。")}</p>
       <p class="event-form-status" data-form-status hidden></p>
       <button class="button primary" type="submit">${L("保存要求")}</button>
     </form>`;
@@ -185,18 +187,23 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
 
   function renderDecisionForm(state: GoalEventStateView): string {
     const pending = state.pending_decisions[0];
+    const agreementChange = pending?.purpose === "agreement_change";
+    const expired = Boolean(agreementChange && pending && agreementChangeRequestExpired(pending, state));
     const requirements = state.requirements.map((item) => `<label class="check-row"><input type="checkbox" name="requirement_ids" value="${escapeHtml(item.requirement_id)}"><span>${escapeHtml(item.statement)}</span></label>`).join("");
     const concerns = state.concerns.filter((item) => item.status === "open").map((item) => `<label class="check-row"><input type="checkbox" name="concern_ids" value="${escapeHtml(item.concern_id)}"><span>${escapeHtml(item.title)}</span></label>`).join("");
-    const options = pending
+    const options = pending && !agreementChange
       ? `<fieldset><legend>${L("选项")}</legend>${pending.options.map((option) => `<label class="check-row"><input type="radio" name="selected_option_id" value="${escapeHtml(option.option_id)}"><span><strong>${escapeHtml(option.label)}</strong><small>${escapeHtml(option.impact)}</small></span></label>`).join("")}</fieldset>`
-      : "";
+      : pending && agreementChange
+        ? `<div class="form-note"><strong>${L("请求中的业务选项（背景，不是批准或拒绝）")}</strong><ul>${pending.options.map((option) => `<li><strong>${escapeHtml(option.label)}</strong> · ${escapeHtml(option.impact)}</li>`).join("")}</ul></div>`
+        : "";
     const pendingAction = pending?.scope.action?.trim() || "";
-    return `<form class="event-form" data-event-form="decision" data-pending-action="${escapeHtml(pendingAction)}" hidden>
-      <button type="button" class="text-button" data-event-back>${L("返回所选事件")}</button>
-      <h2>${L("用户决定")}</h2>
-      ${pending ? `<p class="reader-lead">${escapeHtml(pending.question)}</p><input type="hidden" name="request_id" value="${escapeHtml(pending.request_id)}">` : `<label><span>${L("结论")}</span><textarea name="conclusion" rows="3" required></textarea></label>`}
-      ${options}
-      <fieldset><legend>${L("效果")}</legend>
+    const effects = agreementChange
+      ? `<fieldset><legend>${L("对这一份约定变更")}</legend>
+        <p class="form-note">${L("必须主动选择批准或拒绝。不会根据上面的业务选项猜测。")}</p>
+        <label class="check-row"><input type="radio" name="agreement_change_decision" value="authorize" required><span>${L("批准这一份约定变更")}</span></label>
+        <label class="check-row"><input type="radio" name="agreement_change_decision" value="deny" required><span>${L("拒绝这一份约定变更")}</span></label>
+      </fieldset>`
+      : `<fieldset><legend>${L("效果")}</legend>
         <label class="check-row"><input type="checkbox" name="effect" value="accept_requirements"><span>${L("接受这些要求")}</span></label>
         <label class="check-row"><input type="checkbox" name="effect" value="reject_requirements"><span>${L("拒绝这些要求")}</span></label>
         <label class="check-row"><input type="checkbox" name="effect" value="accept_concerns"><span>${L("接受这些 Concern")}</span></label>
@@ -208,7 +215,15 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
       <fieldset><legend>${L("Concern 范围")}</legend>${concerns || `<p class="form-note">${L("当前没有开放 Concern。")}</p>`}</fieldset>
       ${pendingAction
         ? `<input type="hidden" name="action" value="${escapeHtml(pendingAction)}"><p class="form-note">${L("待决定动作")}：${escapeHtml(pendingAction)}</p>`
-        : `<label><span>${L("相关动作（授权或拒绝时填写，不从一句话猜测）")}</span><input name="action" placeholder="complete"></label>`}
+        : `<label><span>${L("相关动作（授权或拒绝时填写，不从一句话猜测）")}</span><input name="action" placeholder="complete"></label>`}`;
+    return `<form class="event-form" data-event-form="decision" data-pending-action="${escapeHtml(pendingAction)}" hidden>
+      <button type="button" class="text-button" data-event-back>${L("返回所选事件")}</button>
+      <h2>${L("用户决定")}</h2>
+      ${pending ? `<p class="reader-lead">${escapeHtml(pending.question)}</p><input type="hidden" name="request_id" value="${escapeHtml(pending.request_id)}">` : `<label><span>${L("结论")}</span><textarea name="conclusion" rows="3" required></textarea></label>`}
+      ${options}
+      ${pending?.proposed_change ? renderProposedChange(pending, state) : ""}
+      ${expired ? `<p class="form-note">${L("这份请求所依据的结果或要求已经变化，不能按当时内容批准。请刷新或重新请求。")}</p>` : ""}
+      ${effects}
       ${pending ? `<label><span>${L("结论")}</span><textarea name="conclusion" rows="2" required></textarea></label>` : ""}
       <p class="form-note">${L("效果和范围由这里的选择决定，不会从任意一句话猜测批准。")}</p>
       <p class="event-form-status" data-form-status hidden></p>
@@ -231,28 +246,13 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
     </form>`;
   }
 
-  function renderContinueForm(doc: GoalEventDocumentView): string {
-    if (!doc.transfer.available || (doc.transfer.kind !== "continue_open" && doc.transfer.kind !== "reopen_completed")) return "";
-    const reopen = doc.transfer.kind === "reopen_completed";
-    return `<form class="event-form" data-event-form="continue">
-      <h2>${reopen ? L("继续此目标") : L("使用事件记录继续")}</h2>
-      <p class="form-lead">${reopen
-        ? L("原完成事实和来源会保留。明确继续后才会转交，并开启新一轮 open/unmet 工作。")
-        : L("读取不会改变归属。确认后才会把普通新写入交到唯一事件服务，已有结果、验收、依赖和风险会保留。")}</p>
-      <input type="hidden" name="reopen_completed" value="${reopen ? "true" : "false"}">
-      <p class="event-form-status" data-form-status hidden></p>
-      <button class="button primary" type="submit">${reopen ? L("继续此目标") : L("使用事件记录继续")}</button>
-    </form>`;
-  }
-
   function renderResumeForm(doc: GoalEventDocumentView): string {
     if (doc.transfer.kind !== "resume_cancelled" && doc.transfer.kind !== "reopen_event_completed") return "";
     const completed = doc.transfer.kind === "reopen_event_completed";
     return `<form class="event-form" data-event-form="resume" hidden>
       <button type="button" class="text-button" data-event-back>${L("返回所选事件")}</button>
       <h2>${completed ? L("继续此目标") : L("继续已取消的目标")}</h2>
-      <p class="form-lead">${completed ? L("原完成事实和来源会保留。明确继续后开启新一轮 open/unmet 工作。") : L("不会被普通记录自动恢复。")}</p>
-      <input type="hidden" name="resume_kind" value="${completed ? "reopen_event_completed" : "resume_cancelled"}">
+      <p class="form-lead">${completed ? L("原完成事实和来源会保留。明确继续后开启新一轮工作。") : L("不会被普通记录自动恢复。")}</p>
       <label><span>${L("理由")}</span><textarea name="reason" rows="3" required></textarea></label>
       <p class="event-form-status" data-form-status hidden></p>
       <button class="button primary" type="submit">${L("显式继续")}</button>
@@ -263,7 +263,7 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
     const methods = doc.planning_methods.filter((item) => item.enabled !== false);
     const options = methods.map((item) => `<option value="${escapeHtml(item.method_id)}" data-version="${item.version}" data-source="${item.scope === "project" ? "project" : item.scope === "personal" ? "personal" : "built_in"}">${escapeHtml(item.name)} · ${escapeHtml(item.scope)} v${item.version}</option>`).join("");
     const defaults = methods.flatMap((item) => item.default_requirements.map((req) => `<label class="check-row"><input type="checkbox" name="adopt_default_requirement_ids" value="${escapeHtml(req.requirement_id)}"><span>${escapeHtml(item.name)} · ${escapeHtml(req.statement)}</span></label>`)).join("");
-    return `<form class="event-form" data-event-form="adopt" data-config-version="${doc.state.config.version}" hidden>
+    return `<form class="event-form" data-event-form="adopt" data-config-version="${doc.state.config.version}" data-agreement-version="${doc.state.agreement.version}" hidden>
       <button type="button" class="text-button" data-event-reader="planning">${L("返回工作规划")}</button>
       <h2>${L("采用规划方法")}</h2>
       <p class="form-lead">${L("只作用于当前 Goal。空白起点不会暗中补选。启用完成要求是分开的选择。")}</p>
@@ -275,16 +275,78 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
   }
 
   function renderAgreementForm(state: GoalEventStateView): string {
+    const rows = state.requirements.map((item) => `<fieldset data-requirement-edit="${escapeHtml(item.requirement_id)}">
+      <legend>${escapeHtml(item.statement)}</legend>
+      <input type="hidden" name="requirement_id" value="${escapeHtml(item.requirement_id)}">
+      <label><span>${L("当前要求")}</span><textarea name="requirement_statement" rows="2">${escapeHtml(item.statement)}</textarea></label>
+      <label class="check-row"><input type="checkbox" name="human_decision_required"${item.human_decision_required ? " checked" : ""}><span>${L("需要用户验收")}</span></label>
+      <label class="check-row"><input type="checkbox" name="retire_requirement"><span>${L("退休这项要求（历史保留）")}</span></label>
+      ${item.human_decision_required ? `<p class="form-note">${L("取消人工验收需要你亲自确认这一份变化。")}</p>` : ""}
+    </fieldset>`).join("");
     return `<form class="event-form" data-event-form="agreement" hidden>
       <button type="button" class="text-button" data-event-back>${L("返回所选事件")}</button>
       <h2>${L("修改当前约定")}</h2>
       <label><span>${L("预期结果")}</span><textarea name="outcome" rows="3" required>${escapeHtml(state.agreement.outcome)}</textarea></label>
+      ${rows || `<p class="form-note">${L("还没有可修订的当前要求。")}</p>`}
       <input type="hidden" name="expected_config_version" value="${state.config.version}">
       <input type="hidden" name="expected_agreement_version" value="${state.agreement.version}">
-      <p class="form-note">${L("会同时核对约定版本和配置版本。冲突时停下来对照，不会自动换版本。")}</p>
+      <p class="form-note">${L("会同时核对约定版本和配置版本。改已有结果或要求原文、退休要求、取消人工验收都是可审阅的具体变化。冲突时停下来对照，不会自动换版本。")}</p>
       <p class="event-form-status" data-form-status hidden></p>
       <button class="button primary" type="submit">${L("保存约定")}</button>
     </form>`;
+  }
+
+  function agreementChangeRequestExpired(
+    pending: GoalEventStateView["pending_decisions"][number],
+    state: GoalEventStateView,
+  ): boolean {
+    if (!pending.commitment) return true;
+    if (pending.commitment.outcome !== state.agreement.outcome) return true;
+    const recordedIds = new Set(pending.commitment.requirements.map((item) => item.requirement_id));
+    for (const item of pending.commitment.requirements) {
+      const current = state.requirements.find((row) => row.requirement_id === item.requirement_id);
+      if (!current) return true;
+      if (current.statement !== item.statement) return true;
+      if (current.human_decision_required !== item.human_decision_required) return true;
+      if ([...current.bound_type_ids].sort().join("\0") !== [...item.bound_type_ids].sort().join("\0")) return true;
+    }
+    if (pending.proposed_change?.outcome && state.requirements.some((item) => !recordedIds.has(item.requirement_id))) {
+      return true;
+    }
+    return false;
+  }
+
+  function renderProposedChange(
+    pending: GoalEventStateView["pending_decisions"][number],
+    state: GoalEventStateView,
+  ): string {
+    const change = pending.proposed_change;
+    if (!change) return "";
+    const byId = new Map((pending.commitment?.requirements ?? []).map((item) => [item.requirement_id, item]));
+    const parts: string[] = [];
+    if (change.outcome) {
+      const from = pending.commitment?.outcome || state.agreement.outcome;
+      parts.push(`${L("原结果")}：${escapeHtml(from)} → ${L("拟改结果")}：${escapeHtml(change.outcome)}`);
+    }
+    for (const item of change.new_requirements ?? []) parts.push(`${L("新增要求")}：${escapeHtml(item.statement)}`);
+    for (const item of change.revise_requirements ?? []) {
+      const previous = byId.get(item.requirement_id);
+      const from = previous?.statement || item.requirement_id;
+      if (item.statement) {
+        parts.push(`${L("原要求")}：${escapeHtml(from)} → ${L("拟改要求")}：${escapeHtml(item.statement)}`);
+      }
+      if (item.human_decision_required === false) {
+        parts.push(`${L("取消人工验收")}：${escapeHtml(from)}`);
+      }
+      if (item.human_decision_required === true) {
+        parts.push(`${L("改为需要用户验收")}：${escapeHtml(from)}`);
+      }
+    }
+    for (const id of change.retire_requirement_ids ?? []) {
+      const previous = byId.get(id);
+      parts.push(`${L("退休要求")}：${escapeHtml(previous?.statement || id)}`);
+    }
+    return `<div class="reader-lead"><strong>${L("这一份约定变化")}</strong><ul>${parts.map((part) => `<li>${part}</li>`).join("")}</ul></div>`;
   }
 
   function renderTypeEditForms(doc: GoalEventDocumentView): string {
@@ -322,7 +384,6 @@ export function createEventDocumentForms(primitives: GoalsDocumentUiPrimitives) 
     renderConcernForm,
     renderDecisionForm,
     renderClosureForm,
-    renderContinueForm,
     renderResumeForm,
     renderNoteForm,
     renderAdoptForm,

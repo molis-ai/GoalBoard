@@ -4,7 +4,7 @@ import { GovernanceError, type GovernanceErrorFactory } from "./errors.js";
 import { json, parseJson, text, type GovernanceRow } from "./mappers.js";
 import { GovernanceRepository, type GovernanceSqliteDatabase } from "./repository.js";
 
-/** Original proposal operation key and journal, with the same cross-owner atomic boundary. */
+/** Goal Tree submission, check and decision keys share one idempotent journal. */
 export class GovernanceProposalOperationStore {
   private readonly repository: GovernanceRepository;
   constructor(private readonly db: GovernanceSqliteDatabase,
@@ -24,58 +24,6 @@ export class GovernanceProposalOperationStore {
   executeCheck(input: Parameters<GovernanceRecordsApi["executeGoalTreeCheck"]>[0],
     operation: Parameters<GovernanceRecordsApi["executeGoalTreeCheck"]>[1]) {
     return this.execute("check_goal_tree_proposal", input, operation).value;
-  }
-
-  executeContractDecision(input: Parameters<GovernanceRecordsApi["executeContractProposalDecision"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeContractProposalDecision"]>[1]) {
-    const result = this.execute("decide_contract_proposal", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  recordContractDecision(input: Parameters<GovernanceRecordsApi["recordContractProposalDecision"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: `contract_proposal.${input.decision}`, object_type: "contract_proposal", object_id: input.proposal_id,
-      reason: input.reason, at: input.at,
-      payload: { goal_id: input.goal_id, canonical_goal_changed: input.decision === "approved",
-        ...(input.decision === "approved" ? { confirmed_fields: input.confirmed_fields } : {}) },
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  executeCandidateDecision(input: Parameters<GovernanceRecordsApi["executeCandidateDecision"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeCandidateDecision"]>[1]) {
-    const result = this.execute("decide_candidate", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  recordCandidateDecision(input: Parameters<GovernanceRecordsApi["recordCandidateDecision"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: `candidate.${input.decision}`, object_type: "candidate", object_id: input.candidate_id,
-      reason: input.reason, at: input.at, payload: {},
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  executeRewireDecision(input: Parameters<GovernanceRecordsApi["executeRewireDecision"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeRewireDecision"]>[1]) {
-    const result = this.execute("confirm_rewire", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  recordRewireDecision(input: Parameters<GovernanceRecordsApi["recordRewireDecision"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: `rewire.${input.state}`, object_type: "rewire", object_id: input.rewire_id,
-      reason: input.reason, at: input.at,
-      payload: input.state === "rejected"
-        ? { formal_goal_id: input.formal_goal_id, proposed_changes_applied: false }
-        : { formal_goal_id: input.formal_goal_id, added_relation_ids: input.added_relation_ids,
-            deactivated_relation_ids: input.deactivated_relation_ids, added_risk_ids: input.added_risk_ids,
-            goals_needing_revalidation: input.goals_needing_revalidation },
-    });
-    return this.repository.eventCursor(input.board_id);
   }
 
   executeGoalTreeDecision<TTransition>(input: Parameters<GovernanceRecordsApi["executeGoalTreeDecision"]>[0],
@@ -102,55 +50,7 @@ export class GovernanceProposalOperationStore {
     return this.repository.eventCursor(input.board_id);
   }
 
-  executeContractProposalSubmission(input: Parameters<GovernanceRecordsApi["executeContractProposalSubmission"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeContractProposalSubmission"]>[1]) {
-    const result = this.execute("submit_contract_proposal", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  executeCandidateSubmission(input: Parameters<GovernanceRecordsApi["executeCandidateSubmission"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeCandidateSubmission"]>[1]) {
-    const result = this.execute("submit_candidate", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  executeDependencyProposalSubmission(input: Parameters<GovernanceRecordsApi["executeDependencyProposalSubmission"]>[0],
-    operation: Parameters<GovernanceRecordsApi["executeDependencyProposalSubmission"]>[1]) {
-    const result = this.execute("submit_dependency_proposal", input, operation);
-    return { ...result.value, replayed: result.replayed };
-  }
-
-  recordContractProposalSubmission(input: Parameters<GovernanceRecordsApi["recordContractProposalSubmission"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: "contract_proposal.submitted", object_type: "contract_proposal", object_id: input.proposal_id,
-      reason: "目标说明方案已提交，等待用户决定",
-      payload: { goal_id: input.goal_id, field_count: input.field_count, dependency_rewire_ids: input.dependency_rewire_ids }, at: input.at,
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  recordCandidateSubmission(input: Parameters<GovernanceRecordsApi["recordCandidateSubmission"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: "candidate.submitted", object_type: "candidate", object_id: input.candidate_id,
-      reason: "澄清或执行中发现了 Goal 之外的新工作，等待用户决定",
-      payload: { blocking_mode: input.blocking_mode }, at: input.at,
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  recordDependencyProposalSubmission(input: Parameters<GovernanceRecordsApi["recordDependencyProposalSubmission"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: "rewire.proposed", object_type: "rewire", object_id: input.rewire_id,
-      reason: "Runtime 提交了 Dependency Proposal，等待用户决定",
-      payload: { proposal_kind: "dependency", dependency_count: input.dependency_count, blocking_mode: input.blocking_mode }, at: input.at,
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  private execute<T>(operationName: "submit_goal_tree_proposal" | "check_goal_tree_proposal" | "decide_contract_proposal" | "decide_candidate" | "confirm_rewire" | "decide_goal_tree_proposal" | "submit_contract_proposal" | "submit_candidate" | "submit_dependency_proposal",
+  private execute<T>(operationName: "submit_goal_tree_proposal" | "check_goal_tree_proposal" | "decide_goal_tree_proposal",
     input: Parameters<GovernanceRecordsApi["executeGoalTreeSubmission"]>[0],
     operation: () => { value: T; at: string }): { value: T; replayed: boolean } {
     return this.repository.immediate(() => {
@@ -183,16 +83,6 @@ export class GovernanceProposalOperationStore {
         authority_source: input.authority.authority_source, conversation_ref: input.authority.conversation_ref,
         message_ref: input.authority.message_ref,
       }, at: input.at,
-    });
-    return this.repository.eventCursor(input.board_id);
-  }
-
-  recordEquivalentRewireSupersession(input: Parameters<GovernanceRecordsApi["recordEquivalentRewireSupersession"]>[0]): number {
-    this.repository.appendEvent({
-      event_id: randomUUID(), board_id: input.board_id, actor_id: input.actor_id,
-      type: "rewire.superseded_by_goal_tree_proposal", object_type: "rewire", object_id: input.rewire_id,
-      reason: "等价关系变更已通过 native Goal Tree Proposal 落地，关闭重复待确认入口",
-      payload: { goal_tree_proposal_id: input.goal_tree_proposal_id, relation_changes: input.relation_changes }, at: input.at,
     });
     return this.repository.eventCursor(input.board_id);
   }

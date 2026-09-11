@@ -1,12 +1,12 @@
-# 目标、关系与生命周期事实
+# 目标、约定与工作事实
 
-拥有目标合同、完成标准、关系图、策略、风险、项目指导、规划事实，以及 Goal 局部事件配置与工作事实上报，是目标写入及正式生命周期判断的入口。
+保存 Goal 意图、当前约定、要求和工作记录，判断正式收尾是否生效；同时提供关系图、项目指导、可选规划及历史事实读取。
 
 包名：`@adeptify/goalboard-module-goals`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-GoalsModule 公开 commands、query、lifecycle 与 events；Host 提供跨 owner hooks，Native Goals 用公开接口组合页面、执行验收和事件工作入口。createGoalReadServices 给读取场景提供明确服务，schema 与 revision 迁移也由本包提供。新意图和已采用事件配置的 Goal 由 `events` 作为唯一状态 owner，写入进展、Concern、决定效果和显式收尾；旧 lifecycle 完成入口在这些 Goal 上拒绝或跳过。
+Native Goals 通过 `GoalsModule.events` 创建意图、保存普通笔记、配置局部类型、上报事实并显式收尾。当前状态由事件事实统一计算，普通笔记无需配置类型。`commands` 负责实际 Goal/关系及项目指导写入，`lifecycle` 负责归档与回收站，`planning` 提供按需使用的方法。读取场景使用 `createGoalReadServices`；Host 装配数据库与跨模块端口。
 
 ## 从哪里读代码
 
@@ -17,16 +17,18 @@ GoalsModule 公开 commands、query、lifecycle 与 events；Host 提供跨 owne
 | [src/index.ts](src/index.ts) | GoalsModule 与读取服务 |
 | [src/goal-commands.ts](src/goal-commands.ts) | 目标写入 |
 | [src/query.ts](src/query.ts) | 查询与策略解析 |
-| [src/lifecycle-commands.ts](src/lifecycle-commands.ts) | 生命周期入口 |
+| [src/lifecycle-commands.ts](src/lifecycle-commands.ts) | 归档、回收站与恢复 |
 | [src/planning](src/planning) | 规划与方法库 |
 | [src/event-facts.ts](src/event-facts.ts) | Goal 局部事件配置、上报与读取 |
+| [src/event-state.ts](src/event-state.ts) | 当前约定、状态、决定效果与收尾 |
+| [src/event-workflow-migration.ts](src/event-workflow-migration.ts) | 既有 Goal 一次升级到事件状态，保留原始历史 |
 | [src/planning/event-adoption.ts](src/planning/event-adoption.ts) | 规划来源版本解析、等价合并与 Goal 局部要求实例化 |
 
 可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
 ## 接入与边界
 
-新意图和已转交 Goal 由 `events` 作为唯一状态 owner。执行 Claim/Run、证据、Review/Decision 各有独立 owner，实际消费者是未转交 `legacy_claim_run` Goal、历史读取和 Host 租约。规划事实不等于已确认提案；旧 coverage 兼容逻辑仍服务历史数据。不得以页面或 MCP 推导状态回写替代正式生命周期。
+所有当前工作入口采用事件状态；旧 Claim/Run 完成协议已退役。历史策略、风险、覆盖和版本仍可查询，一次升级保留原始来源及完成记录。用户决定由 Governance 保存，实际 Session 与终端由 Host 管理。关系图合法性、当前约定版本、具体变化授权和事务仍由正式应用入口检查，页面和 MCP 只呈现其结果。
 
 由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 

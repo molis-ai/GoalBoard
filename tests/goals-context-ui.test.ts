@@ -16,7 +16,7 @@ const item = (id: string): GoalsContextItem => ({
     definition_state: "draft", decomposition_state: "abstract", decomposition_review: null,
     outcome: "", why: "", business_logic: "", in_scope: [], out_of_scope: [], constraints: [], required_inputs: [], promised_outputs: [],
     acceptance_criteria: [] },
-  status: "clarification_pending", display_status: "continue", passed_criteria: [], relations: [], input_bindings: [], coverage: [],
+  status: "execution_pending", display_status: "continue", passed_criteria: [], relations: [], input_bindings: [], coverage: [],
 });
 const relation = (id: string, type: GoalRelationRecord["type"], from: string, to: string): GoalRelationRecord => ({
   relation_id: id, board_id: "board", type, from_goal_id: from, to_goal_id: to, state: "active", reason: 'Reason "<x>',
@@ -24,31 +24,14 @@ const relation = (id: string, type: GoalRelationRecord["type"], from: string, to
 const view = (goals: GoalsContextItem[], relations: GoalRelationRecord[] = []): GoalsContextView =>
   ({ goals, archived_goals: [], trashed_goals: [], snapshot: { relations } });
 
-test("context contribution renders draft fields and gaps but never permits editing accepted facts", () => {
-  assert.ok(createWorkbenchUiHost().list().some(x => x.contribution_id === GOALS_CONTEXT_UI_CONTRIBUTION_ID));
-  const draft = item("draft"), html = renderer.renderDraftEditor(draft);
-  assert.match(html, /用户 &quot;&lt;title&gt;/);
-  for (const name of ["title", "outcome", "why", "business_logic", "priority", "in_scope", "out_of_scope", "constraints", "required_inputs", "promised_outputs", "reason"]) assert.ok(html.includes('name="' + name + '"'));
-  assert.equal((html.match(/type="radio" name="decomposition_state"/g) ?? []).length, 4);
-  assert.match(html, /name="reason" rows="2" required/);
-  assert.match(html, /data-criterion-field="target"/);
-  assert.match(html, /data-criterion-template/);
-  assert.match(renderer.renderDraftGaps(draft), /还需要补全/);
-  assert.equal(renderer.renderDraftEditor({ ...draft, goal: { ...draft.goal, definition_state: "accepted" } }), "");
-  assert.match(renderer.renderDraftGaps({ ...draft, status: "clarification_decision_pending" }), /查看方案并决定/);
-});
-
 test("HumanReview summary keeps statements and pass conditions without becoming a second completion owner", () => {
+  assert.ok(createWorkbenchUiHost().list().some(x => x.contribution_id === GOALS_CONTEXT_UI_CONTRIBUTION_ID));
   const value = item("criteria");
   value.goal.acceptance_criteria = [
     { goal_id: "criteria", criterion_id: "c1", statement: 'Measured "<x>', decision_method: "measurement", pass_condition: "At least 90", target: { value: 90 }, required_evidence: ["report", "check"] },
     { goal_id: "criteria", criterion_id: "c2", statement: "Object target", decision_method: "inspection", pass_condition: "Verified", target: { min: 1, max: 3 }, required_evidence: [] },
   ];
   value.passed_criteria = ["c1"];
-  const html = renderer.renderDraftEditor(value);
-  assert.match(html, /data-criterion-field="target" value="90"/);
-  assert.match(html, /data-criterion-field="target" value="{&quot;min&quot;:1,&quot;max&quot;:3}"/);
-  assert.match(html, /Measured &quot;&lt;x&gt;/);
   const summary = renderer.renderAcceptanceSummary(value);
   assert.equal((summary.match(/check-box is-checked/g) ?? []).length, 1);
   assert.match(summary, /Measured &quot;&lt;x&gt;/);
@@ -57,10 +40,10 @@ test("HumanReview summary keeps statements and pass conditions without becoming 
   assert.match(renderer.renderAcceptanceSummary(item("empty")), /还没有写清怎样才算完成/);
 });
 
-test("context distinguishes local satisfaction, incomplete parent coverage and child direction", () => {
+test("context distinguishes local satisfaction, historical parent coverage and child direction", () => {
   const parent = item("parent"), child = item("child");
   parent.goal.definition_state = "accepted"; parent.goal.decomposition_state = "closed_compound";
-  child.goal.fulfillment_state = "satisfied"; child.display_status = "completed";
+  child.goal.fulfillment_state = "satisfied"; child.display_status = "completed"; child.status = "satisfied";
   parent.goal.decomposition_review = { status: "complete", coverage: [], open_goal_ids: [], next_step: "",
     contract_coverage: { promised_outputs: [{ parent_promised_output: "Full product", status: "partial", child_outputs: [{ goal_id: "child", promised_output: "One slice" }], reason: "Integration remains" }], acceptance_criteria: [] } };
   const relations = [relation("part", "part_of", "child", "parent"), relation("dep", "depends_on", "parent", "missing")];
@@ -68,10 +51,13 @@ test("context distinguishes local satisfaction, incomplete parent coverage and c
   const model = view([parent, child], relations);
   const coverage = renderer.renderContractCoverage(parent, model);
   assert.match(coverage, /部分覆盖/);
-  assert.match(renderer.renderChildProgress(parent, model), /父级 Contract 仍有覆盖缺口/);
-  assert.match(renderer.renderChildProgress(parent, model), /href="\/goals\/child"/);
+  assert.match(coverage, /历史父子 Contract 覆盖/);
+  const progress = renderer.renderChildProgress(parent, model);
+  assert.match(progress, /已完成 1 \/ 1 个子 Goal/);
+  assert.match(progress, /子 Goal 完成不会自动完成父 Goal/);
+  assert.match(progress, /href="\/goals\/child"/);
   const childHtml = renderer.renderContractCoverage(child, model);
-  assert.match(childHtml, /不自动等于父 Goal 的完整能力已经实现/);
+  assert.match(childHtml, /不自动等于父 Goal 已经完成/);
   assert.match(childHtml, /Full product · 尚有缺口/);
   parent.goal.decomposition_review = null;
   assert.match(renderer.renderContractCoverage(parent, model), /未记录父子 Contract 覆盖（历史数据）/);

@@ -1,12 +1,12 @@
 # 目标用例与原生界面
 
-把目标合同、执行、依据、复核和上下文组合成用户可操作的目标工作流，并提供目标树、文档和决定界面。
+把 Goal 的当前约定、要求、工作记录和可信决定组合成可操作的工作流，提供目标目录、时间线、树结构和历史正文界面。
 
 包名：`@adeptify/goalboard-plugin-goals`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-Host 注入各 Module 的公开端口；ExecutionValidationApplication、GoalReadApplication 等组合状态与操作，HTTP handler 和 UI contribution 将结果交给各 App。批量工作状态复用本次读取的 snapshot。
+Host 注入各 Module 的公开端口。`GoalEventApplication` 连接创建、普通笔记、类型与要求、上报、决定、收尾和明确继续；`GoalReadApplication` 提供项目指导和历史读取。HTTP handler 与 UI contribution 将同一当前事实交给各 App，目录和正文无需重建旧 Claim/Run 动作状态。
 
 ## 从哪里读代码
 
@@ -14,7 +14,7 @@ Host 注入各 Module 的公开端口；ExecutionValidationApplication、GoalRea
 
 | 文件 | 用途 |
 | --- | --- |
-| [src/execution-validation-application.ts](src/execution-validation-application.ts) | 执行与验收用例 |
+| [src/goal-event-application.ts](src/goal-event-application.ts) | 当前事件工作流与紧凑状态回执 |
 | [src/goal-query-application.ts](src/goal-query-application.ts) | 目标读取 |
 | [src/goal-tree-decision.ts](src/goal-tree-decision.ts) | 目标树确认 |
 | [src/document-collection.ts](src/document-collection.ts) | 文档列表投影 |
@@ -24,7 +24,7 @@ Host 注入各 Module 的公开端口；ExecutionValidationApplication、GoalRea
 
 ## 接入与边界
 
-这里拥有跨 Module 用例及呈现，不取代 Module 事实 owner。提案检查、确认、执行和完成各有独立门禁；legacy 文件仍承接旧提案/数据，不是可以整批删除的空壳。
+这里拥有跨 Module 用例及呈现，当前 Goal 状态由 Goals 的事件事实决定。结构变更检查图合法性、基线与具体用户授权；正式收尾检查当前约定和要求。普通记录无需旧执行角色或 Run。历史 Claim/Run、Evidence、Review 和提案通过各自查询读取，保留原始正文、ID 与来源；当前入口不再执行旧协议。
 
 工作区依赖：`@adeptify/goalboard-contracts`、`@adeptify/goalboard-module-evidence-verification`、`@adeptify/goalboard-module-execution`、`@adeptify/goalboard-module-goals`。其他运行依赖见 [package.json](package.json)。
 
@@ -37,10 +37,10 @@ pnpm --filter @adeptify/goalboard-plugin-goals typecheck
 pnpm --filter @adeptify/goalboard-plugin-goals build
 ```
 
-已有行为示例与回归：[execution-validation-app-adapters.test.ts](../../../tests/execution-validation-app-adapters.test.ts)、[goals-document-ui.test.ts](../../../tests/goals-document-ui.test.ts)。完成上述构建后运行：
+当前事件入口、结构变更和界面可参考 [goal-event-http.test.ts](../../../tests/goal-event-http.test.ts)、[goal-tree-event-flow.test.ts](../../../tests/goal-tree-event-flow.test.ts)、[goals-document-ui.test.ts](../../../tests/goals-document-ui.test.ts)。完成仓库构建后运行：
 
 ```bash
-node --import tsx --test --test-concurrency=1 tests/execution-validation-app-adapters.test.ts tests/goals-document-ui.test.ts
+node --import tsx --test --test-concurrency=1 tests/goal-event-http.test.ts tests/goal-tree-event-flow.test.ts tests/goals-document-ui.test.ts
 ```
 
 阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。

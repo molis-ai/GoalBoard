@@ -1,4 +1,4 @@
-import { countGoalDecisions, type AvailableGoal } from "@adeptify/goalboard-plugin-goals";
+import { countGoalDecisions } from "@adeptify/goalboard-plugin-goals";
 import { THEME_BOOTSTRAP_SCRIPT } from "@adeptify/goalboard-design-system";
 import type { GoalBoardWebView } from "./page-view.js";
 import type { WebProjectNavigation } from "./settings-navigation.js";
@@ -18,7 +18,7 @@ export function createCapsuleWorkbench(ports: CapsuleRendererPorts) {
   const { newestRun, activeGoalViews, newestFirst, recentCompletedGoal, projectPath, decisionItem, activeItem, availableItem, blockedItem, waitingItem, completeItem, TAB_ORDER, tabMeta, stateFromItem } = createCapsuleItemProjection(L);
   function buildCapsuleSnapshot(
     view: GoalBoardWebView,
-    available: AvailableGoal[],
+    directory: { goal_id: string }[],
     now = new Date(),
     completionDisplayMs = 10_000,
   ): CapsuleSnapshot {
@@ -63,8 +63,8 @@ export function createCapsuleWorkbench(ports: CapsuleRendererPorts) {
     }
 
     const availableOrder = new Map<string, number>();
-    available.forEach((candidate, index) => {
-      if (!availableOrder.has(candidate.goal.goal_id)) availableOrder.set(candidate.goal.goal_id, index);
+    directory.forEach((candidate, index) => {
+      if (!availableOrder.has(candidate.goal_id)) availableOrder.set(candidate.goal_id, index);
     });
     const continueGoals = view.goals
       .filter((item) => item.display_status === "continue" && !assigned.has(item.goal.goal_id))

@@ -79,6 +79,7 @@ export const GOVERNANCE_SCHEMA_SQL = `
     root_goal_id TEXT REFERENCES goals(goal_id) ON DELETE SET NULL,
     submitted_by TEXT NOT NULL,
     discovered_in_run_id TEXT REFERENCES runs(run_id) ON DELETE SET NULL,
+    submitted_session_id TEXT,
     state TEXT NOT NULL CHECK (state IN ('pending', 'superseded', 'approved', 'partially_applied', 'rejected', 'dismissed', 'closed')),
     version INTEGER NOT NULL,
     supersedes_proposal_id TEXT REFERENCES goal_tree_proposals(proposal_id),
@@ -160,6 +161,7 @@ export const GOVERNANCE_SCHEMA_SQL = `
     conclusion TEXT NOT NULL,
     accepts_requirements INTEGER NOT NULL CHECK (accepts_requirements IN (0, 1)),
     scope_json TEXT NOT NULL,
+    change_json TEXT,
     recorded_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS goal_event_trusted_decisions_goal_idx

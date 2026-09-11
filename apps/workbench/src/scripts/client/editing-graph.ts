@@ -1,8 +1,7 @@
 import { GOALS_DIALOGS_CLIENT_FACTORY_SCRIPT, GOALS_LIFECYCLE_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
-import { GOALS_DRAFT_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 import { GOALS_MOMENTUM_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 import { GOALS_RELATION_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
-import { GOALS_SAFETY_CLIENT_FACTORY_SCRIPT, GOALS_IMPACT_CLIENT_FACTORY_SCRIPT, GOALS_POLICY_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
+import { GOALS_POLICY_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin-goals";
 /** AP3 Workbench client segment: editing-graph. */
 export const CLIENT_EDITING_GRAPH_SCRIPT = `
     const { updateRelationPreviews, updateAllRelationFormPreviews, handleGoalRelationChange,
@@ -14,11 +13,6 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
         showFactorReceipt: (...args) => showFactorReceipt(...args),
         humanDecisionError: (...args) => humanDecisionError(...args),
       });
-    const splitLines = (value) => [...new Set(String(value || "")
-      .split("\\n")
-      .map((item) => item.trim())
-      .filter(Boolean))];
-
     const requireFormFacts = (form, errorBox) => {
       const invalid = [...form.querySelectorAll("[required]")].find((control) => {
         if (control.type === "checkbox" || control.type === "radio") return !control.checked;
@@ -39,37 +33,6 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       return true;
     };
 
-    const riskStateEffect = (blockingMode, riskState) => {
-      if (!riskState) return L("选择处理结果后，这里会说明会发生什么。");
-      const active = riskState === "open" || riskState === "triggered";
-      if (!active) {
-        return blockingMode === "invalidate_on_trigger"
-          ? L("当前不再使 Goal 失效；若此前触发，关联 Goal 必须重新验证。")
-          : L("当前状态不再施加领取或完成门禁。");
-      }
-      if (blockingMode === "claim") return L("当前会阻止所有关联 Goal 被新的 Runtime 领取。");
-      if (blockingMode === "completion") return L("当前会阻止所有关联 Goal 被标记为完成。");
-      if (blockingMode === "invalidate_on_trigger") {
-        return riskState === "triggered"
-          ? L("Risk 已触发，所有关联 Goal 立即失效。")
-          : L("Risk 目前开放；一旦标记为已触发，所有关联 Goal 会失效。");
-      }
-      return L("这是一条持续观察的事实，不直接阻塞领取或完成。");
-    };
-
-    const updateRiskStatePreview = (riskForm) => {
-      const preview = riskForm?.querySelector("[data-risk-state-preview]");
-      const stateSelect = riskForm?.querySelector("[data-risk-state-select]");
-      if (preview && stateSelect) {
-        const effect = riskStateEffect(riskForm.dataset.riskBlocking, stateSelect.value);
-        preview.textContent = stateSelect.value === "open" || stateSelect.value === "triggered"
-          ? L("保存后仍会留在待决定中。{effect}", { effect })
-          : effect;
-      }
-      const basis = riskForm?.querySelector("[data-risk-resolution-basis]");
-      if (basis && stateSelect) basis.hidden = stateSelect.value !== "resolved";
-    };
-
     const showToast = (message, error = false) => {
       toast.textContent = message;
       toast.classList.toggle("is-error", error);
@@ -78,27 +41,6 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2200);
     };
 
-    const { handleGoalDraftSubmit, handleGoalDraftOpen, handleGoalDraftCriteriaClick } =
-      (${GOALS_DRAFT_CLIENT_FACTORY_SCRIPT})({
-        route, controlHeaders: goalboardControlHeaders, splitLines,
-        refreshBoard: (...args) => refreshBoard(...args), showToast, translate: L,
-        openEventReader: (...args) => openEventReader(...args),
-      });
-
-    const { updateRiskGoalCount, handleRiskPickerChange, handleRiskPickerFilter, handleRiskFactsSubmit } =
-      (${GOALS_SAFETY_CLIENT_FACTORY_SCRIPT})({
-        splitLines, route, controlHeaders: goalboardControlHeaders, translate: L, requireFormFacts,
-        refreshBoard: (...args) => refreshBoard(...args),
-        showFactorReceipt: (...args) => showFactorReceipt(...args),
-        humanDecisionError: (...args) => humanDecisionError(...args),
-      });
-    const { handleGoalImpactSubmit } = (${GOALS_IMPACT_CLIENT_FACTORY_SCRIPT})({
-      route, controlHeaders: goalboardControlHeaders, translate: L, requireFormFacts,
-      requireDecisionText: (...args) => requireDecisionText(...args),
-      refreshBoard: (...args) => refreshBoard(...args),
-      showFactorReceipt: (...args) => showFactorReceipt(...args),
-      humanDecisionError: (...args) => humanDecisionError(...args),
-    });
     const { handleGoalPolicySubmit } = (${GOALS_POLICY_CLIENT_FACTORY_SCRIPT})({
       route, controlHeaders: goalboardControlHeaders, translate: L, requireFormFacts, showToast,
       refreshBoard: (...args) => refreshBoard(...args),
@@ -113,7 +55,7 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       bindGoalCreateEvents, handleGoalDialogEscape } = (${GOALS_DIALOGS_CLIENT_FACTORY_SCRIPT})({
         dialog, form, route, controlHeaders: goalboardControlHeaders,
         refreshBoard: (...args) => refreshBoard(...args), updateRelationPreviews,
-        currentLocale: () => document.documentElement.lang,
+        currentLocale: () => document.documentElement.lang, translate: L,
         clearCollectionUiState: () => sessionStorage.removeItem(storageKey),
         clearCurrentGoalUiState: () => sessionStorage.removeItem(currentGoalUiStorageKey),
         navigate: (url) => location.assign(globalThis.goalboardNavigationUrl(url)),

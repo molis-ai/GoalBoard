@@ -1,4 +1,4 @@
-import type { GoalDisplayStatus } from "./execution-validation-contract.js";
+import type { GoalDisplayStatus } from "./tree-order.js";
 
 export interface GoalMomentumEventInput {
   type: string;

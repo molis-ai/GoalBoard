@@ -22,7 +22,7 @@ This MCP process starts "not connected to a project" and opens no Board. The uni
 
 > **Host identity**: GoalBoard reads per-call `_meta["goalboard/sessionId"]`, `_meta.threadId`, then `_meta.sessionId` before falling back to the host's startup identity. Availability is host-dependent; do not assume every Runtime version supplies these fields. Without a Session signal, one exact verified workspace membership may still recover read-only; otherwise follow the returned suggested/unbound state.
 
-- `bound`: returns the unique `project_id`, `board_id`, and a fixed database connection; later normal GoalBoard MCP calls can only use that `board_id`.
+- `bound`: returns one project and a fixed connection. Later ordinary calls omit `board_id` and actor fields; Host injects them from that connection and Session. Calls for a particular Goal still provide `goal_id` explicitly.
 - `suggested`: the new Session has workspace history or other host clues. The result contains only candidate projects and generic reasons that don't leak the original path, with no project connection. If the current user message already explicitly asks to use GoalBoard with a named project and exactly one returned existing project unambiguously matches it, the Skill calls `context_bind` directly; otherwise it shows the candidates and asks.
 - `unbound`: returns `missing_stable_context` or `unknown_context` and connects to no project. The Skill likewise reuses an explicit current-message selection of one unambiguous existing project; otherwise it shows the project list and asks the user to select or create one.
 - When the user explicitly rejects a `suggested` candidate, the Skill calls `goalboard_v1_context_reject_suggestion` with `user_confirmed=true`. It only stops suggesting that candidate in this Session, then may return another candidate or an explicit project list/create path; it never unbinds, deletes, or affects other Sessions.
@@ -34,10 +34,29 @@ This MCP process starts "not connected to a project" and opens no Board. The uni
 
 Web is an optional viewing and user-confirmation surface, not a prerequisite for project connection or Goal work. Browsing does not bind the Runtime. Project Settings manages Session associations and workspace memberships, not directory defaults. Project creation, Runtime configuration, unlinking and deletion each retain their own authorization.
 
-For new and transferred Goals, the Runtime audience exposes work-entry resolution/explicit binding, reads, and the event tools `goal_intent_create`, `goal_state`, `event_configure`, `event_report`, `event_list`, `event_read`, `event_progress`, `event_concern`, `event_decision_request`, `event_cite_decision`, `event_agree`, `event_close`, and `event_resume`. It also keeps Goal Tree Proposal/Decision, Candidate/Dependency Proposal, and — only for untransferred `legacy_claim_run` Goals — Available/atomic selection/Run, Evidence, Runtime Review, revalidation, and release. `event_decide` is not in the Runtime audience. `goal-tree-decide` is not a license for the Runtime to reshape the tree on its own: only after the user has just explicitly decided in the current conversation may the Runtime pass `user_confirmed=true`, a confirmation summary, and the concrete decisions; GoalBoard generates the audit reference from host Session metadata. The Runtime cannot forge a Session identity, fill in a user actor, or override a resolved project connection through ordinary tool arguments.
+## Current tools
 
-The ordinary continue path for new and transferred Goals is `goal_intent_create` → `event_configure` / `event_report` → `goal_state` / `event_list` / `event_read`. A successful report is recorded, not completed; only an explicit `event_close` can set `completion_applied` to true. A valid authorization already in the same scope is not asked again. Only an untransferred Goal uses Available's `action_projections` as the claim entry: read the chosen Contract, then send the returned `action_id` and `action_token` to `select_goal`. After lifecycle writes, consume `transition.projection` directly. Do not treat `complete → release` as the default completion steps for a new Goal. New event writes require the explicit “使用事件记录继续” action; reading does not transfer ownership, and old state writes are rejected after transfer.
+Names below omit `goalboard_v1_`. The current MCP schema defines each tool's actual input.
 
-Trusted user entries that need to create Goals, maintain relations/risks/Policy, decide Contract/Candidate/Rewire, or import legacy data should use `GOALBOARD_MCP_AUDIENCE=management` separately. Never hand the management MCP to an autonomous Runtime.
+| Purpose | Runtime tools |
+| --- | --- |
+| Project connection | `context_resolve`, `context_list_projects`, `context_reject_suggestion`, `context_bind`, `context_unbind`, `context_create_and_bind`, `project_delete` |
+| Discovery, creation, and state | `goal_list`, `goal_intent_create`, `goal_state` |
+| Everyday records and history | `event_note`, `event_configure`, `event_report`, `event_progress`, `event_list`, `event_read` |
+| Agreements, decisions, and closure | `event_concern`, `event_decision_request`, `event_cite_decision`, `event_agree`, `event_close`, `event_resume` |
+| Structure proposals | `goal_tree_propose`, `goal_tree_read`, `goal_tree_check` |
+| Optional planning | `planning_methods`, `planning_method_save`, `planning_analyze_change`, `planning_graph_check` |
+| Project guidance | `project_guidance_get`, `project_guidance_add`, `project_guidance_update` |
+| Trash and restore | `goal_trash`, `goal_trash_list`, `goal_restore` |
+
+Ordinary Runtime tools reject overrides for `board_id`, database paths, Web URLs, or `actor_id` / `actor_kind` / `runtime_actor_id`, even when the supplied value matches the current connection. Trash tools also use finite top-level fields rather than the old `payload` envelope. Project-selection tools and `project_delete` retain their own explicit project and confirmation arguments; those confirmations cannot authorize agreement or tree changes.
+
+The shortest work path is `goal_intent_create` → `event_note`, with no type or plan required. Use `event_configure` / `event_report` for structured results. A report can contain multiple facts and progress; the whole batch must be valid, and the receipt includes current state, gaps, and cursors. `event_close` closes explicitly, and only `completion_applied=true` establishes completion. `event_resume` requires a reason to continue completed or cancelled work. Ordinary notes and unrelated reports do not reopen it automatically. Valid counterevidence may invalidate the effect of an earlier completion while preserving its history.
+
+`event_decide` and `goal_tree_decide` belong to protected user Web/management entries, not Runtime. The Runtime can propose concrete changes and request or cite saved valid decisions; user identities, confirmation text, and Session fields supplied by the Runtime cannot approve its own proposal. Existing authorization does not require another decision while its exact scope remains valid.
+
+Trusted management entries use `GOALBOARD_MCP_AUDIENCE=management`, which additionally retains `initialize`, `import_v3`, `snapshot`, `event_decide`, `goal_tree_decide`, and `active_goal`. Management calls follow their explicit project and identity schemas. Never hand management MCP to an autonomous Runtime. V3 import preserves original fields, relations, coverage, and source. Imported Goals immediately support current state and notes without invented acceptance commitments.
+
+Old Claim/select/Run/Evidence/Review, draft dialogue, Contract/Candidate/Dependency/Rewire writes, and Available/Ready/Contract/Explain work entries are retired. Management does not make those old names executable. Historical records remain readable; everyday work uses the current event path.
 
 If the service is unavailable, report the failure without switching databases, rewriting URLs or falling back to CLI. `mcp.context_refresh_required` asks for read-only resolution: retry unchanged with the same idempotency key only after `bound`; otherwise follow project selection. An older-reader version error is different from a connection-cache refresh and follows its returned diagnosis. See the complete [Runtime Skill](../skills/goal-advance/SKILL.md).

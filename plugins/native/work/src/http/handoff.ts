@@ -45,7 +45,8 @@ export async function handleSessionHandoffHttp(context: WorkSessionHttpContext):
           goal_id: contract.goal.goal_id,
           title: contract.goal.title,
           outcome: contract.goal.outcome,
-          work_state: contract.work_state.work_state,
+          work_state: contract.event_facts?.work_status
+            ?? (contract.goal.trashed_at ? "trashed" : contract.goal.archived_at ? "archived" : "open"),
         },
       });
     } catch (error) {

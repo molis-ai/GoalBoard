@@ -14,7 +14,7 @@ test("Goal browser projection keeps supplied child order and display state while
   assert.deepEqual(result, [{ goal: { goal_id: "parent", title: "Parent </script>" }, status: "waiting", status_label: "等候",
     status_meaning: "Children first", status_icon: "<svg>status owner</svg>", is_waiting_parent: true, is_compound_parent: true,
     children: [
-      { goal: { goal_id: "second", title: 'Child "title"' }, status: "replaced", status_label: "归档", status_meaning: "Kept history", next_action: "Restore" },
+      { goal: { goal_id: "second", title: 'Child "title"' }, status: "completed", status_label: "归档", status_meaning: "Kept history", next_action: "Restore" },
       { goal: { goal_id: "archived", title: 'Child "title"' }, status: "archived", status_label: "归档", status_meaning: "Kept history", next_action: "Restore" },
     ] }]);
   assert.deepEqual(parent, original);

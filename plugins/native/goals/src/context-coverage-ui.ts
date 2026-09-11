@@ -9,7 +9,7 @@ function renderChildProgress(item: GoalsContextItem, view: GoalsContextView): st
   if (!children.length) return "";
   const done = children.filter(goalWorkSatisfied).length;
   const completion = explainParentCompletion(item.goal, done, children.length);
-  return `<div class="child-progress child-progress--${completion.tone}"><header><div><h3>${L("父 Goal 如何完成")}</h3><p class="child-progress-rule"><strong>${escapeHtml(completion.label)}</strong><span>${escapeHtml(completion.meaning)}</span></p></div><strong>${done}/${children.length}</strong></header><ul>${children.map((child) => {
+  return `<div class="child-progress child-progress--${completion.tone}"><header><div><h3>${L("子 Goal 进度")}</h3><p class="child-progress-rule"><strong>${escapeHtml(completion.label)}</strong><span>${escapeHtml(completion.meaning)}</span></p></div><strong>${done}/${children.length}</strong></header><ul>${children.map((child) => {
     const explanation = explainWorkState(child.status);
     return `<li><a href="/goals/${encodeURIComponent(child.goal.goal_id)}"><span><strong>${escapeHtml(child.goal.title)}</strong><small>${escapeHtml(explanation.nextAction)}</small></span><em>${escapeHtml(explanation.label)}</em>${icon("chevron-right")}</a></li>`;
   }).join("")}</ul></div>`;
@@ -18,13 +18,13 @@ function renderChildProgress(item: GoalsContextItem, view: GoalsContextView): st
 function renderContractCoverage(item: GoalsContextItem, view: GoalsContextView): string {
   const goal = item.goal;
   const satisfaction = goalWorkSatisfied(item)
-    ? `<p class="contract-scope-status">${icon("completed")}<strong>${L("本 Goal 按当前 Contract 已满足")}</strong><span>${L("这只表示当前 Goal 自己的承诺和完成条件已满足，不自动等于父 Goal 的完整能力已经实现。")}</span></p>`
+    ? `<p class="contract-scope-status">${icon("completed")}<strong>${L("本 Goal 已按自己的当前约定收尾")}</strong><span>${L("这只表示当前 Goal 自己的约定已满足，不自动等于父 Goal 已经完成。")}</span></p>`
     : "";
   const ownCoverage = goal.decomposition_state !== "closed_compound"
     ? ""
     : goal.decomposition_review?.contract_coverage == null
       ? `<p class="empty-row">${L("未记录父子 Contract 覆盖（历史数据）；现有完成状态不会因此被自动改写。")}</p>`
-      : `<div class="contract-coverage-group"><h4>${L("父子 Contract 覆盖")}</h4>${[
+      : `<div class="contract-coverage-group"><h4>${L("历史父子 Contract 覆盖")}</h4>${[
           ...goal.decomposition_review.contract_coverage.promised_outputs.map((entry) =>
             `<article><strong>${escapeHtml(entry.parent_promised_output)}</strong><small>${escapeHtml(L(entry.status === "complete" ? "完整覆盖" : entry.status === "partial" ? "部分覆盖" : entry.status === "integration_required" ? "仍需父级集成" : "尚未覆盖"))}</small><p>${escapeHtml(entry.reason)}</p><ul>${entry.child_outputs.map((reference) => `<li><button type="button" data-select-goal="${escapeHtml(reference.goal_id)}">${escapeHtml(reference.promised_output)}</button></li>`).join("")}</ul></article>`,
           ),
@@ -38,7 +38,7 @@ function renderContractCoverage(item: GoalsContextItem, view: GoalsContextView):
     .filter((parent): parent is GoalsContextItem => parent != null);
   const parentContributions = parents.length === 0
     ? ""
-    : `<div class="contract-coverage-group"><h4>${L("对父 Goal 的贡献")}</h4>${parents.map((parent) => {
+    : `<div class="contract-coverage-group"><h4>${L("历史对父 Goal 的贡献")}</h4>${parents.map((parent) => {
         const coverage = parent.goal.decomposition_review?.contract_coverage;
         if (!coverage) {
           return `<article><strong>${escapeHtml(parent.goal.title)}</strong><p>${L("这条历史父 Goal 未记录父子 Contract 覆盖；当前子 Goal 的完成不会被解释成父级完整能力。")}</p></article>`;
@@ -55,7 +55,7 @@ function renderContractCoverage(item: GoalsContextItem, view: GoalsContextView):
         ].join("")}</ul></article>`;
       }).join("")}</div>`;
   if (!satisfaction && !ownCoverage && !parentContributions) return "";
-  return `<div class="document-subsection contract-coverage-summary">${subsectionHeading("link", "Contract 覆盖边界", "区分当前 Goal 自己满足了什么，以及它是否覆盖父级承诺。")}${satisfaction}${ownCoverage}${parentContributions}</div>`;
+  return `<div class="document-subsection contract-coverage-summary">${subsectionHeading("link", "历史 Contract 覆盖", "这些是保留的历史覆盖事实；每条 Goal 仍按自己的当前约定收尾。")}${satisfaction}${ownCoverage}${parentContributions}</div>`;
 }
 
 

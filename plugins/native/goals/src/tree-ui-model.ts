@@ -1,6 +1,5 @@
 import type { GoalRecord, GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import type { GoalDisplayStatus } from "./execution-validation-contract.js";
-import type { GoalPresentationState } from "./tree-order.js";
+import type { GoalDisplayStatus, GoalPresentationState } from "./tree-order.js";
 
 export interface GoalsTreeItem {
   goal: Pick<GoalRecord, "goal_id" | "title" | "priority" | "created_at" | "fulfillment_state" | "acceptance_criteria">;
@@ -15,7 +14,7 @@ export interface GoalsTreeView<T extends GoalsTreeItem = GoalsTreeItem> {
   trashed_goals: T[];
   snapshot: { relations: GoalRelationRecord[] };
 }
-export type GoalVisibleStatus = GoalDisplayStatus | "replaced" | "archived" | "trashed";
+export type GoalVisibleStatus = GoalDisplayStatus | "archived" | "trashed";
 export interface GoalsTreeUiPrimitives {
   translate(text: string, values?: Record<string, string | number>): string;
   escapeHtml(value: unknown): string;

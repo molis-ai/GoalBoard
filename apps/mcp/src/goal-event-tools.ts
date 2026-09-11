@@ -1,9 +1,12 @@
 import type { McpToolDefinition } from "./protocol.js";
 import {
   GOAL_EVENT_ADOPTED_PLANNING,
+  GOAL_EVENT_AGREEMENT_CHANGE,
   GOAL_EVENT_DECISION_OPTION,
   GOAL_EVENT_NEW_REQUIREMENT,
   GOAL_EVENT_REPORT_ITEM,
+  GOAL_EVENT_REPORT_PROGRESS,
+  GOAL_EVENT_REQUIREMENT_REVISION,
   GOAL_EVENT_REQUIREMENT_BINDING,
   GOAL_EVENT_SCOPE,
   GOAL_EVENT_TYPE_DEFINITION,
@@ -23,7 +26,7 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
   {
     name: "goalboard_v1_goal_intent_create",
     description:
-      "用能辨认的标题创建一个只保存原始意图的 Draft Goal，可附带结果说明。不填造 why、输入输出、拆分检查或默认模板，也不领取角色或创建 Run。创建本身不是完成；正式完成仍需要明确要求。",
+      "用能辨认的标题创建一个事件 Goal，可附带结果、原文、优先级、要求和关系。不造默认规划，不领取角色或创建 Run。创建本身不是完成。",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -32,16 +35,38 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         ...EVENT_ACTOR,
         title: { type: "string", minLength: 1, description: "能辨认的目标标题" },
         outcome: { type: "string", description: "可选的结果说明，不是完整验收" },
+        why: V1_STRING,
+        business_logic: V1_STRING,
+        priority: { type: "number", minimum: 0, maximum: 100 },
         goal_id: V1_STRING,
+        parent_goal_id: V1_STRING,
+        dependency_goal_ids: V1_STRING_ARRAY,
+        requirements: { type: "array", items: GOAL_EVENT_NEW_REQUIREMENT },
         idempotency_key: V1_STRING,
       },
       required: ["board_id", "title", "idempotency_key", "actor_id"],
     },
   },
   {
+    name: "goalboard_v1_goal_list",
+    description:
+      "按当前事件状态列出 Goal：ID、标题、工作状态、能否记录、待办提示和列表分页游标。after_cursor 是列表分页，不是事件日志游标。",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ...V1_COMMON,
+        work_status: { type: "string", enum: ["open", "completed", "cancelled"] },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+        after_cursor: V1_STRING,
+      },
+      required: ["board_id"],
+    },
+  },
+  {
     name: "goalboard_v1_goal_state",
     description:
-      "读取当前 Goal 的意图、实际采用配置、有效要求、最新报告摘要、事件游标和可继续信息。历史正文用 event_read 或 event_list 按需读取。返回量有界；recorded 不等于正式完成。若 protocol.kind 为 legacy_claim_run，仍走领取角色与 Run 的旧协议。",
+      "读取当前 Goal 的意图、当前约定、有效要求、最新报告摘要、事件游标和可继续信息。当前结果只在 agreement.outcome。历史正文用 event_read 或 event_list。",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -68,16 +93,33 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         types: { type: "array", items: GOAL_EVENT_TYPE_DEFINITION },
         adopted_planning: { type: "array", items: GOAL_EVENT_ADOPTED_PLANNING },
         adopt_default_requirement_ids: V1_STRING_ARRAY,
-        new_requirements: { type: "array", items: GOAL_EVENT_NEW_REQUIREMENT },
+        expected_agreement_version: { type: "integer", minimum: 0 },
         requirement_bindings: { type: "array", items: GOAL_EVENT_REQUIREMENT_BINDING },
       },
       required: ["board_id", "goal_id", "expected_version", "idempotency_key", "actor_id"],
     },
   },
   {
+    name: "goalboard_v1_event_note",
+    description:
+      "保存一条普通笔记。不需要先登记类型。完成后或取消后的无关笔记不会自动重开。",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ...V1_COMMON,
+        ...EVENT_ACTOR,
+        goal_id: V1_STRING,
+        body: { type: "string", minLength: 1, description: "笔记原文" },
+        idempotency_key: V1_STRING,
+      },
+      required: ["board_id", "goal_id", "body", "idempotency_key", "actor_id"],
+    },
+  },
+  {
     name: "goalboard_v1_event_report",
     description:
-      "一次提交多条已登记类型的工作事实。返回记录成功的事实和当前报告判断，不表示完成、人工验收或 Host 已连接。不需要 Claim 或 Run。类型和字段按当前 Goal 已保存的定义校验。",
+      "一次提交多条已登记类型的工作事实，可附带本批进展说明。返回已保存事实和当前工作状态、差距与游标。不表示完成、人工验收或 Host 已连接。不需要 Claim 或 Run。",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -87,6 +129,7 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         goal_id: V1_STRING,
         idempotency_key: V1_STRING,
         events: { type: "array", minItems: 1, items: GOAL_EVENT_REPORT_ITEM },
+        progress: GOAL_EVENT_REPORT_PROGRESS,
       },
       required: ["board_id", "goal_id", "idempotency_key", "events", "actor_id"],
     },
@@ -179,9 +222,14 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         idempotency_key: V1_STRING,
         question: { type: "string", minLength: 1 },
         options: { type: "array", minItems: 2, items: GOAL_EVENT_DECISION_OPTION },
+        purpose: {
+          type: "string",
+          enum: ["suggestion", "requirement_acceptance", "action", "agreement_change"],
+        },
+        proposed_change: GOAL_EVENT_AGREEMENT_CHANGE,
         scope: GOAL_EVENT_SCOPE,
       },
-      required: ["board_id", "goal_id", "idempotency_key", "question", "options", "actor_id"],
+      required: ["board_id", "goal_id", "idempotency_key", "question", "options", "purpose", "actor_id"],
     },
   },
   {
@@ -205,7 +253,7 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
   {
     name: "goalboard_v1_event_agree",
     description:
-      "在已有授权内补充初始结果说明或追加局部要求。不能覆盖或降低已接受的 outcome/criteria。普通补充不制造人工审批。",
+      "更新当前结果约定：首次补全结果、追加要求，或在已获针对具体变化的授权后修订/退休要求、替换已有结果。两个 expected 版本都必填，缺一拒绝。",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -218,8 +266,14 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         expected_agreement_version: { type: "integer", minimum: 0 },
         outcome: V1_STRING,
         new_requirements: { type: "array", items: GOAL_EVENT_NEW_REQUIREMENT },
+        revise_requirements: { type: "array", items: GOAL_EVENT_REQUIREMENT_REVISION },
+        retire_requirement_ids: V1_STRING_ARRAY,
+        cited_decision_id: V1_STRING,
       },
-      required: ["board_id", "goal_id", "idempotency_key", "actor_id"],
+      required: [
+        "board_id", "goal_id", "idempotency_key", "actor_id",
+        "expected_config_version", "expected_agreement_version",
+      ],
     },
   },
   {
@@ -240,12 +294,15 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
         expected_config_version: { type: "integer", minimum: 0 },
         expected_agreement_version: { type: "integer", minimum: 0 },
       },
-      required: ["board_id", "goal_id", "idempotency_key", "kind", "reason", "expected_config_version", "actor_id"],
+      required: [
+        "board_id", "goal_id", "idempotency_key", "kind", "reason",
+        "expected_config_version", "expected_agreement_version", "actor_id",
+      ],
     },
   },
   {
     name: "goalboard_v1_event_resume",
-    description: "显式继续已经取消的 Goal。下一条无关观察不会默默重开。",
+    description: "显式继续已经完成或取消的 Goal，必须说明理由。下一条无关观察不会默默重开。已 open 时新请求会说明无须重开。",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -290,6 +347,7 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
                   "reject_concerns",
                   "authorize_action",
                   "deny_action",
+                  "authorize_agreement_change",
                 ],
               },
               action: V1_STRING,
@@ -297,6 +355,7 @@ export const EVENT_TOOLS: McpToolDefinition[] = [
             required: ["kind"],
           },
         },
+        authorized_change: GOAL_EVENT_AGREEMENT_CHANGE,
         scope: GOAL_EVENT_SCOPE,
       },
       required: ["board_id", "goal_id", "idempotency_key", "conclusion", "actor_id"],

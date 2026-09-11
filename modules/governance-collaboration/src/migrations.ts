@@ -194,3 +194,10 @@ export function migrateReviewContractRevisionColumn(db: GovernanceSqliteDatabase
     db.exec("ALTER TABLE review_obligations ADD COLUMN contract_revision INTEGER NOT NULL DEFAULT 1");
   }
 }
+
+export function migrateGoalTreeSubmittedSession(db: GovernanceSqliteDatabase): void {
+  const columns = db.pragma("table_info(goal_tree_proposals)") as Array<{ name: string }>;
+  if (columns.length && !columns.some((column) => column.name === "submitted_session_id")) {
+    db.exec("ALTER TABLE goal_tree_proposals ADD COLUMN submitted_session_id TEXT");
+  }
+}

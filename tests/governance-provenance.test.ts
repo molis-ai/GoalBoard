@@ -4,7 +4,6 @@ import { GovernanceError, GovernanceProvenance } from "@adeptify/goalboard-modul
 import type { ContractFieldSource, ContractProposalRecord, LegacyGovernanceSnapshot } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 
 const provenance = new GovernanceProvenance();
-const fields: ContractFieldSource["field"][] = ["title", "outcome", "why", "business_logic", "in_scope", "out_of_scope", "priority", "acceptance_criteria", "review_policy"];
 const source = (field: ContractFieldSource["field"]): ContractFieldSource => ({ field, source_kind: "user_answer",
   source_refs: ["clarification-turn:original"], confidence: 1, rationale: "Explicit user requirement",
   status: "proposed", requires_user_confirmation: true });
@@ -39,68 +38,6 @@ test("malformed proposal sources report all missing facts without inventing conf
     assert.deepEqual((error.details.issues as Array<{ path: string }>).map(issue => issue.path), ["items[0].source_refs", "items[0].confidence"]);
     return true;
   });
-});
-
-test("Contract input supplies pending constants without mutating caller facts and aggregates missing facts", () => {
-  const { status, requires_user_confirmation, ...input } = source("title");
-  const before = structuredClone(input);
-  assert.deepEqual(provenance.validateSourceShape([input]), [source("title")]);
-  assert.deepEqual(input, before);
-  assert.throws(() => provenance.validateSourceShape([{ field: "title", source_kind: "user_answer", source_refs: ["conversation://actual"] }]), error => {
-    assert.ok(error instanceof GovernanceError);
-    assert.deepEqual((error.details.issues as Array<{ path: string }>).map(issue => issue.path), ["field_sources[0].rationale", "field_sources[0].confidence"]);
-    return true;
-  });
-});
-
-test("provenance preserves fact versus inference, confirmation and the original dialogue reference", () => {
-  const facts = [
-    { statement: " User requirement ", source_kind: "user_answer" as const, source_refs: [" message:1 ", "message:1", "", "clarification-turn:turn"], confirmed_by_user: false },
-    { statement: "Repository behavior", source_kind: "repository_fact" as const, source_refs: ["repo:src/main.ts"], confidence: 0.8 },
-    { statement: "Document fact", source_kind: "document_fact" as const, source_refs: ["https://example.test/spec"], confirmed_by_user: true },
-  ];
-  const original = structuredClone(facts);
-  assert.deepEqual(provenance.normalizeFacts(facts, "turn"), [
-    { statement: "User requirement", source_kind: "user_answer", source_refs: ["message:1", "clarification-turn:turn"], confidence: 1, confirmed_by_user: true },
-    { statement: "Repository behavior", source_kind: "repository_fact", source_refs: ["repo:src/main.ts", "clarification-turn:turn"], confidence: 0.8, confirmed_by_user: false },
-    { statement: "Document fact", source_kind: "document_fact", source_refs: ["https://example.test/spec", "clarification-turn:turn"], confidence: 1, confirmed_by_user: true },
-  ]);
-  assert.deepEqual(facts, original);
-  assert.deepEqual(provenance.normalizeAssumptions([{ statement: " Possible cause ", confidence: 0 }], "turn"), [
-    { statement: "Possible cause", source_refs: ["clarification-turn:turn"], confidence: 0, requires_user_confirmation: true },
-  ]);
-  assert.throws(() => provenance.normalizeFacts([{ statement: "Guess", source_kind: "runtime_inference" as never }], "turn"),
-    (error) => error instanceof GovernanceError && error.code === "draft_dialogue.fact_source_invalid");
-  for (const confidence of [-0.1, 1.1, NaN, Infinity]) {
-    assert.throws(() => provenance.normalizeAssumptions([{ statement: "Guess", confidence }], "turn"), /置信度/);
-  }
-  assert.throws(() => provenance.normalizeFacts([{ statement: " ", source_kind: "user_answer" }], "turn"), /已知事实/);
-  assert.throws(() => provenance.normalizeAssumptions([{ statement: " " }], "turn"), /假设/);
-});
-
-test("Contract sources retain the pending-confirmation gate and require provenance for populated optional fields", () => {
-  const sources = fields.map(source);
-  provenance.validateSourceShape(sources);
-  provenance.validateContractSources({}, sources);
-  assert.throws(() => provenance.validateContractSources({ constraints: ["local"], required_inputs: ["brief"], promised_outputs: ["result"] }, sources),
-    /constraints、required_inputs、promised_outputs/);
-  provenance.validateContractSources({ constraints: ["local"], required_inputs: ["brief"], promised_outputs: ["result"] },
-    [...sources, source("constraints"), source("required_inputs"), source("promised_outputs")]);
-  assert.throws(() => provenance.validateContractSources({}, [...sources, source("title")]), /重复/);
-  for (const changed of [
-    { ...source("title"), source_refs: [] }, { ...source("title"), confidence: 1.2 },
-    { ...source("title"), status: "confirmed" as never },
-    { ...source("title"), requires_user_confirmation: false as never },
-  ]) assert.throws(() => provenance.validateContractSources({}, [changed, ...sources.slice(1)]), /待用户确认/);
-  assert.throws(() => provenance.validateSourceShape([{ ...source("title"), source_refs: [42] }]), (error) => {
-    assert.ok(error instanceof GovernanceError);
-    assert.equal(error.code, "contract_proposal.field_invalid");
-    assert.equal(error.details.path, "field_sources[0].source_refs[0]");
-    return true;
-  });
-  assert.throws(() => provenance.validateSourceShape([{ ...source("title"), requires_user_confirmation: false }]), /requires_user_confirmation/);
-  assert.throws(() => provenance.validateSourceShape("not sources"), /字段来源对象数组/);
-  assert.throws(() => provenance.validateSourceShape([null]), /field_sources\[0\]/);
 });
 
 test("legacy projections retain sources, minimum confidence, payloads, decisions and distinct state mappings", () => {

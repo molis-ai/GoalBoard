@@ -39,10 +39,8 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
-      "execution.claim-lifecycle.v1",
-      "execution.run-lifecycle.v1",
-      "execution.repository.v1",
-      "execution.recovery.v1"
+      "execution.query.v1",
+      "execution.repository.v1"
     ]
   }
 }

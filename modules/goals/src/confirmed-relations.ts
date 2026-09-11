@@ -1,19 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { ConfirmedRelationBatch } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalsCommandContext } from "./command-support.js";
-import type { GoalLifecycleCommands } from "./lifecycle-commands.js";
 
-/** Relation facts and parent lifecycle for an already-authorized proposal batch. */
+/** Relation facts for an already-authorized proposal batch. */
 export class ConfirmedRelationCommands {
-  constructor(private readonly context: GoalsCommandContext,
-    private readonly lifecycle: Pick<GoalLifecycleCommands<unknown>, "reopenSatisfiedCompoundParent" | "reconcileCompoundAncestors">) {}
+  constructor(private readonly context: GoalsCommandContext) {}
 
   applyConfirmedRelations(input: ConfirmedRelationBatch): Array<{ relation_id: string }> {
     return this.context.repository.immediate(() => {
       const { board_id: boardId, actor_id: actorId, at } = input;
       const repository = this.context.repository;
       const materialized: Array<{ relation_id: string }> = [];
-      const addedPartOf: Array<{ from_goal_id: string; to_goal_id: string }> = [];
       for (const relation of input.relations) {
         const reason = relation.reason || input.reason;
         if (relation.action === "deactivate") {
@@ -44,12 +41,6 @@ export class ConfirmedRelationCommands {
           payload: { proposal_item_id: input.source_item_id, from_goal_id: relation.from_goal_id,
             to_goal_id: relation.to_goal_id, type: relation.type } });
         materialized.push({ relation_id: relationId });
-        if (relation.type === "part_of") addedPartOf.push(relation);
-      }
-      for (const relation of addedPartOf) {
-        if (!this.lifecycle.reopenSatisfiedCompoundParent(boardId, relation.to_goal_id, actorId, at)) {
-          this.lifecycle.reconcileCompoundAncestors(boardId, relation.from_goal_id, actorId, at);
-        }
       }
       return materialized;
     });

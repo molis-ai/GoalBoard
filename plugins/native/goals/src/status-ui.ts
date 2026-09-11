@@ -1,5 +1,5 @@
 import type { UiContribution } from "@adeptify/goalboard-contracts/platform/ui";
-import type { GoalDisplayStatus } from "./execution-validation-contract.js";
+import type { GoalDisplayStatus } from "./tree-order.js";
 import type { GoalPresentationState } from "./tree-order.js";
 import type { GoalsTreeItem } from "./tree-ui-model.js";
 import { visibleGoalStatus } from "./tree-presentation.js";
@@ -12,27 +12,12 @@ export interface GoalsStatusPrimitives {
     icon(name: GoalStatusIcon): string;
 }
 const STATUS_ICONS: Record<GoalPresentationState, GoalStatusIcon> = {
-    clarification_pending: "waiting",
-    clarification_decision_pending: "user",
-    compound_closure_pending: "tree",
-    clarifying: "play",
-    clarification_blocked: "blocked",
-    waiting_children: "tree",
-    execution_pending: "ready",
+    waiting_for_human: "user",
     executing: "play",
     execution_blocked: "blocked",
-    completion_pending: "completed",
-    completion_blocked: "blocked",
-    review_pending: "review",
-    reviewing: "review",
-    review_blocked: "blocked",
-    waiting_for_human: "user",
-    revalidation_pending: "refresh",
-    revalidating: "refresh",
-    revalidation_blocked: "blocked",
-    replaced: "refresh",
-    invalidated: "alert",
+    execution_pending: "ready",
     satisfied: "completed",
+    invalidated: "alert",
     trashed: "archive",
     archived: "archive",
 };
@@ -58,7 +43,7 @@ function createStatusRenderer(primitives: GoalsStatusPrimitives) {
     }
     function renderVisibleGoalStatus(item: Pick<GoalsTreeItem, "status" | "display_status"> & { status_label?: string }, attributes = "", labelAttributes = ""): string {
         const status = visibleGoalStatus(item);
-        if (status === "replaced" || status === "archived" || status === "trashed") {
+        if (status === "archived" || status === "trashed") {
             return renderStatus(status, attributes, labelAttributes);
         }
         if (item.status_label) {
@@ -68,7 +53,7 @@ function createStatusRenderer(primitives: GoalsStatusPrimitives) {
     }
     function visibleGoalStatusIcon(item: Pick<GoalsTreeItem, "status" | "display_status">): string {
         const status = visibleGoalStatus(item);
-        return icon(status === "replaced" || status === "archived" || status === "trashed"
+        return icon(status === "archived" || status === "trashed"
             ? STATUS_ICONS[status]
             : DISPLAY_STATUS_ICONS[status]);
     }

@@ -340,9 +340,9 @@ test("desktop Skill reads GOALBOARD_GOAL_ID and does not auto-claim", () => {
     join(process.cwd(), "skills/goal-advance/references/project-connection.md"),
     "utf8",
   );
-  assert.match(projectConnection, /GOALBOARD_GOAL_ID/);
-  assert.match(projectConnection, /Do not call `select_goal`, `claim`, or `run_start` merely because the terminal exists/);
-  assert.match(projectConnection, /opened this Runtime beside that Goal/);
+  assert.match(projectConnection, /GOALBOARD_GOAL_ID identifies page context/);
+  assert.match(projectConnection, /does not itself authorize doing the work/);
+  assert.match(projectConnection, /never silently retargets the existing terminal/);
 });
 
 test("advance prompt names the Goal and omits the five-chapter contract", () => {
@@ -595,7 +595,7 @@ test("Web and Desktop share one project workbench; Desktop only adds native chro
     assert.match(desktopDecisions, /data-feed-filter-option="source"[^>]*data-feed-filter-value="all"/);
     assert.match(desktopDecisions, /data-feed-filter-option="status"[^>]*data-feed-filter-value="active"/);
     assert.match(desktopDecisions, /data-feed-filter-option="sort"[^>]*data-feed-filter-value="newest"/);
-    assert.match(desktopDecisions, /Inbox Message · Goal 决定/);
+    assert.match(desktopDecisions, /等待你的决定 · GoalBoard/);
     assert.match(browser, /data-mobile-target="tui"/);
     assert.match(browser, /aria-controls="goal-tui-pane"/);
     assert.match(browser, /data-tui-kind="claude-code"/);

@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import type {
   ApplyGoalConcernInput,
   CiteGoalDecisionInput,
-  ContinueGoalEventWorkInput,
-  ContinueGoalEventWorkResult,
   GoalEventProgressResult,
   GoalEventScope,
   GoalEventSystemPayload,
@@ -15,7 +13,6 @@ import type {
   RecordGoalUserDecisionInput,
   RequestGoalDecisionInput,
   RecordGoalNoteInput,
-  ReopenCompletedEventWorkInput,
   ResumeGoalEventWorkInput,
   SetGoalEventAgreementInput,
   SubmitGoalEventClosureInput,
@@ -26,7 +23,6 @@ import { requiredText } from "./event-facts-validation.js";
 import { GoalEventStateEffects } from "./event-state-effects.js";
 import type { GoalEventStateHost } from "./event-state-host.js";
 import { currentEffectiveDecisions } from "./event-state-authorization.js";
-import { syncClosedState } from "./event-state-completion.js";
 import {
   GoalEventStateRepository,
   agreementView,
@@ -50,6 +46,7 @@ export class GoalEventState {
       requireOwnedWritable: this.requireOwnedWritable.bind(this),
       requireLocalScope: this.requireLocalScope.bind(this),
       assertConfigVersion: this.assertConfigVersion.bind(this),
+      assertAgreementVersion: this.assertAgreementVersion.bind(this),
       error: this.error,
     });
   }
@@ -83,6 +80,7 @@ export class GoalEventState {
       applied_decisions: applied,
       current_decisions: currentEffectiveDecisions(applied),
       closure: this.records.latestClosure(boardId, goalId),
+      imported_completion: this.records.latestImportedCompletion(boardId, goalId),
     };
   }
 
@@ -90,7 +88,7 @@ export class GoalEventState {
     board_id: string;
     goal_id: string;
     actor_id: string;
-    source: "intent" | "configuration" | "continue";
+    source: "intent" | "configuration" | "continue" | "migration";
     outcome?: string;
   }): void {
     const at = this.context.now().toISOString();
@@ -115,82 +113,49 @@ export class GoalEventState {
     }
   }
 
-  continueWithEventWork(input: ContinueGoalEventWorkInput): ContinueGoalEventWorkResult {
-    const hash = requestHash({
-      board_id: input.board_id,
-      goal_id: input.goal_id,
-      reopen_completed: input.reopen_completed === true,
+  writeProgress(
+    goal: GoalRecord,
+    actorId: string,
+    actorKind: "user" | "runtime" | null,
+    input: { summary: string; based_on_cursor: number; next_step: string | null; next_actor: string | null },
+  ): Omit<GoalEventProgressResult, "replayed"> {
+    const event = this.insertSystem(goal, actorId, actorKind, "记录当前进展和下一步", {
+      operation: "progress_summary",
+      summary: input.summary,
+      based_on_cursor: input.based_on_cursor,
+      next_step: input.next_step,
+      next_actor: input.next_actor,
     });
-    return this.context.repository.immediate(() => {
-      const replay = this.context.replay<Omit<ContinueGoalEventWorkResult, "replayed">>(
-        input.board_id, input.actor_id, "continue_goal_event_work", input.idempotency_key, hash,
-      );
-      if (replay) return { ...replay, replayed: true };
-
-      const goal = this.host.requireWritableGoal(input.board_id, input.goal_id);
-      if (this.records.isOwner(goal.board_id, goal.goal_id)) {
-        throw this.context.error(
-          "event_owner.already_adopted",
-          "这个 Goal 已经由事件状态服务负责，不能再次转交或覆盖当前效果",
-        );
-      }
-      const completed = goal.fulfillment_state === "satisfied";
-      if (completed && input.reopen_completed !== true) {
-        throw this.context.error(
-          "event_owner.completed_requires_explicit_continue",
-          "已完成的 Goal 需要明确继续，才会转交并开启新一轮工作。读取不会改变归属，也不会清掉原完成事实",
-        );
-      }
-      if (!completed && input.reopen_completed === true) {
-        throw this.context.error(
-          "event_owner.not_completed",
-          "未完成的 Goal 使用事件记录继续即可，不要当作已完成目标重新打开",
-        );
-      }
-      const actorKind = this.host.actorKind(input.actor_kind);
-      this.adoptOwner({
-        board_id: goal.board_id,
-        goal_id: goal.goal_id,
-        actor_id: input.actor_id,
-        source: "continue",
-        outcome: goal.outcome,
-      });
-      if (completed) {
-        syncClosedState(this.records, goal, "open", this.context.now().toISOString());
-      }
-      const event = this.insertSystem(
-        goal,
-        input.actor_id,
-        actorKind,
-        completed ? "明确继续已完成目标，转交事件记录并开启新一轮" : "明确使用事件记录继续这个 Goal",
-        {
-          operation: "event_owner_continued",
-          previous_fulfillment: completed ? "satisfied" : "unmet",
-          reopened: completed,
-          previous_work_status: null,
-        },
-      );
-      const owner = this.records.readOwner(goal.board_id, goal.goal_id)!;
-      const outcome = {
-        owner,
-        work_status: this.records.workStatus(goal.board_id, goal.goal_id),
-        fulfillment_state: this.context.requireGoal(goal.board_id, goal.goal_id).fulfillment_state as "unmet" | "satisfied",
-        recorded: true as const,
+    const summaryId = `gsum-${randomUUID()}`;
+    this.records.insertProgress({
+      summaryId,
+      boardId: goal.board_id,
+      goalId: goal.goal_id,
+      eventId: event.event_id,
+      summary: input.summary,
+      basedOnCursor: input.based_on_cursor,
+      nextStep: input.next_step,
+      nextActor: input.next_actor,
+      actorId,
+      at: event.received_at,
+    });
+    return {
+      event_id: event.event_id,
+      observed_event_cursor: event.journal_seq,
+      recorded: true as const,
+      progress_summary: {
+        summary_id: summaryId,
         event_id: event.event_id,
-        observed_event_cursor: event.journal_seq,
-        reopened: completed,
-      };
-      this.context.remember(
-        goal.board_id,
-        input.actor_id,
-        "continue_goal_event_work",
-        input.idempotency_key,
-        hash,
-        outcome,
-        event.received_at,
-      );
-      return { ...outcome, replayed: false };
-    });
+        summary: input.summary,
+        based_on_cursor: input.based_on_cursor,
+        next_step: input.next_step,
+        next_actor: input.next_actor,
+        recorded_at: event.received_at,
+        actor_id: actorId,
+        stale: false,
+        stale_because_cursor: null,
+      },
+    };
   }
 
   recordProgress(input: RecordGoalProgressSummaryInput): GoalEventProgressResult {
@@ -214,45 +179,12 @@ export class GoalEventState {
       if (!this.facts.hasGoalCursor(goal.board_id, goal.goal_id, input.based_on_cursor)) {
         throw this.context.error("event_progress.cursor_not_on_goal", "摘要游标必须是当前 Goal 的事件，不能用其他 Goal 的更新");
       }
-      const nextStep = input.next_step?.trim() || null;
-      const nextActor = input.next_actor?.trim() || null;
-      const event = this.insertSystem(goal, input.actor_id, actorKind, "记录当前进展和下一步", {
-        operation: "progress_summary",
+      return this.writeProgress(goal, input.actor_id, actorKind, {
         summary,
         based_on_cursor: input.based_on_cursor,
-        next_step: nextStep,
-        next_actor: nextActor,
+        next_step: input.next_step?.trim() || null,
+        next_actor: input.next_actor?.trim() || null,
       });
-      const summaryId = `gsum-${randomUUID()}`;
-      this.records.insertProgress({
-        summaryId,
-        boardId: goal.board_id,
-        goalId: goal.goal_id,
-        eventId: event.event_id,
-        summary,
-        basedOnCursor: input.based_on_cursor,
-        nextStep,
-        nextActor,
-        actorId: input.actor_id,
-        at: event.received_at,
-      });
-      return {
-        event_id: event.event_id,
-        observed_event_cursor: event.journal_seq,
-        recorded: true as const,
-        progress_summary: {
-          summary_id: summaryId,
-          event_id: event.event_id,
-          summary,
-          based_on_cursor: input.based_on_cursor,
-          next_step: nextStep,
-          next_actor: nextActor,
-          recorded_at: event.received_at,
-          actor_id: input.actor_id,
-          stale: false,
-          stale_because_cursor: null,
-        },
-      };
     });
   }
 
@@ -307,10 +239,6 @@ export class GoalEventState {
     });
   }
 
-  reopenCompletedEventWork(input: ReopenCompletedEventWorkInput) {
-    return this.effects.reopenCompletedEventWork(input);
-  }
-
   reassessAfterReports(goal: GoalRecord, actorId: string, actorKind: "user" | "runtime" | null, contradictedIds: string[]): void {
     this.effects.reassessAfterReports(goal, actorId, actorKind, contradictedIds);
   }
@@ -348,6 +276,17 @@ export class GoalEventState {
     }
   }
 
+  private assertAgreementVersion(goal: GoalRecord, expected: number, code: string): void {
+    const current = this.records.latestAgreement(goal.board_id, goal.goal_id)?.version ?? 0;
+    if (expected !== current) {
+      throw this.context.error(
+        code,
+        `当前约定版本已是 ${current}，不能用期望版本 ${expected} 覆盖`,
+        { current_version: current, expected_version: expected },
+      );
+    }
+  }
+
   private requireOwnedWritable(boardId: string, goalId: string): GoalRecord {
     const goal = this.host.requireWritableGoal(boardId, goalId);
     if (!this.records.isOwner(boardId, goalId)) {
@@ -369,7 +308,9 @@ export class GoalEventState {
       const replay = this.context.replay<T>(input.board_id, input.actor_id, operation, input.idempotency_key, hash);
       if (replay) return { ...replay, replayed: true };
       const goal = this.requireOwnedWritable(input.board_id, input.goal_id);
-      if (this.records.workStatus(goal.board_id, goal.goal_id) === "cancelled" && operation !== "resume_goal_event_work") {
+      const cancelled = this.records.workStatus(goal.board_id, goal.goal_id) === "cancelled";
+      const ordinaryRecord = operation === "record_goal_note" || operation === "record_goal_progress";
+      if (cancelled && !ordinaryRecord && operation !== "resume_goal_event_work") {
         throw this.context.error("event_closure.cancelled", "已取消的 Goal 不会被普通记录自动恢复，需要显式继续");
       }
       const outcome = write(goal, this.host.actorKind(input.actor_kind));

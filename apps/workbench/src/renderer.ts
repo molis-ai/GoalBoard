@@ -3,8 +3,6 @@ import { createWorkbenchProjectSettingsPages } from "./project-settings-pages.js
 import { createWorkbenchFocusSections } from "./focus-sections.js";
 import type { GoalBoardWebView } from "./page-view.js";
 import { createWorkbenchSettingsRenderer } from "./settings-renderer.js";
-import { createWorkbenchHumanReviewRenderer } from "./human-review-renderer.js";
-
 import { type GoalsDocumentView as WebGoalView } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchDecisionCenterRenderer } from "./decision-center.js";
 import { decisionTypeCounts } from "@adeptify/goalboard-plugin-goals";
@@ -15,7 +13,6 @@ import { decisionGroupCount } from "@adeptify/goalboard-plugin-goals";
 import { createGoalsDecisionResults } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchGoalsDecisionResultsRenderer } from "./ui-composition.js";
 import { type GoalsDecisionGroup } from "@adeptify/goalboard-plugin-goals";
-import { createWorkbenchGoalsLegacyProposalRenderer } from "./ui-composition.js";
 import { createWorkbenchGoalsFragmentRenderer } from "./goals-fragment-renderer.js";
 import { createWorkbenchGoalsPageRenderer } from "./goals-page-renderer.js";
 import { buildGoalsNavigationItems } from "@adeptify/goalboard-plugin-goals";
@@ -93,9 +90,6 @@ const { recentDecisionResults } = createGoalsDecisionResults(L);
 const renderRecentDecisionResults = createWorkbenchGoalsDecisionResultsRenderer({ translate: L, escapeHtml, icon, formatDate });
 
 type DecisionGoalGroup = GoalsDecisionGroup<WebGoalView>;
-
-const { renderRewireDecision, renderResolvedDependencyHistory, renderContractProposal, renderCandidateDecision } =
-  createWorkbenchGoalsLegacyProposalRenderer({ translate: L, escapeHtml, icon, renderList, renderReference, defaultPolicy: DEFAULT_GOAL_POLICY });
 
 const { renderDecisionGoalLink } =
   createGoalsDecisionPresentation({ translate: L, escapeHtml });
@@ -195,15 +189,15 @@ const { renderGoalMomentum, renderMomentumPlaceholder } = createWorkbenchGoalsMo
 const goalsRelationRenderer = createWorkbenchGoalsRelationRenderer({ translate: L, escapeHtml, icon });
 
 function renderRelations(item: WebGoalView, view: GoalBoardWebView, editable = true): string {
-  return goalsRelationRenderer.renderRelations(item, view, editable, renderResolvedDependencyHistory(item, view));
+  return goalsRelationRenderer.renderRelations(item, view, editable);
 }
 
-const { renderAcceptanceSummary, renderDraftGaps, renderDraftEditor, renderChildProgress, renderContractCoverage } = createWorkbenchGoalsContextRenderer({
+const { renderChildProgress, renderContractCoverage } = createWorkbenchGoalsContextRenderer({
   translate: L, escapeHtml, icon, currentLocale,
   subsectionHeading, explainWorkState, explainParentCompletion,
 });
 
-const { renderRiskDecision, renderRiskWorkbench, renderImpactWorkbench } = createWorkbenchGoalsSafetyRenderer({
+const { renderRiskWorkbench, renderImpactWorkbench } = createWorkbenchGoalsSafetyRenderer({
   translate: L, escapeHtml, formatDate, icon, currentLocale, renderReference, renderList,
 });
 
@@ -211,19 +205,12 @@ const { renderProjectPolicyDocument, renderPolicyEditor } = createWorkbenchGoals
   translate: L, escapeHtml, formatDate, icon, currentLocale, defaultPolicy: DEFAULT_GOAL_POLICY,
 });
 
-const renderHumanReview = createWorkbenchHumanReviewRenderer({ translate: L, escapeHtml, icon, renderAcceptanceSummary });
-
 function decisionGroupModel(group: DecisionGoalGroup, view: GoalBoardWebView): WorkbenchDecisionGroup {
-  return { ownerGoalId: group.ownerGoalId, item: group.item, humanReview: group.humanReview,
-    counts: { goalTree: group.goalTreeProposals.length, contracts: group.contractProposals.length, candidates: group.candidates.length, rewires: group.rewires.length, risks: group.risks.length },
+  return { ownerGoalId: group.ownerGoalId, item: group.item,
+    counts: { goalTree: group.goalTreeProposals.length },
     ownerLinkHtml: renderDecisionGoalLink(group.item),
     content: {
       goalTree: group.goalTreeProposals.map((proposal) => renderGoalTreeProposalDecision(proposal, view)).join(""),
-      rewires: group.rewires.map((rewire) => renderRewireDecision(rewire, view)).join(""),
-      contracts: group.item ? group.contractProposals.map((proposal) => renderContractProposal(proposal, group.item!.goal, view)).join("") : "",
-      candidates: group.candidates.map((candidate) => renderCandidateDecision(candidate, view)).join(""),
-      review: group.humanReview && group.item ? renderHumanReview(group.item, view) : "",
-      risks: group.risks.map((risk) => renderRiskDecision(risk, group.item, view)).join(""),
     },
   };
 }
@@ -318,7 +305,7 @@ const goalsFactorsRenderer = createWorkbenchGoalsFactorsRenderer({ translate: L,
 
 function renderGoalFactors(item: WebGoalView, view: GoalBoardWebView): string {
   return goalsFactorsRenderer(item, {
-    relationsHtml: renderRelations(item, view),
+    relationsHtml: renderRelations(item, view, Boolean(item.event_document?.state.owner)),
     risksHtml: renderRiskWorkbench(item, view, true, false),
     impactsHtml: renderImpactWorkbench(item, true, false),
     policyHtml: renderPolicyEditor(item),
@@ -333,7 +320,7 @@ const { renderTrashGoalDocument } = goalsDocumentRenderer;
 
 function renderCoverageHtml(item: WebGoalView): string {
   if (!item.coverage.length) return "";
-  return `<h3>${L("需求覆盖")}</h3><ul>${item.coverage.map((coverage) =>
+  return `<h3>${L("历史需求覆盖")}</h3><ul>${item.coverage.map((coverage) =>
     `<li><strong>${escapeHtml(coverage.requirement_id)} · ${escapeHtml(coverage.statement)}</strong><small>${escapeHtml(coverage.disposition)}${coverage.reason ? ` · ${escapeHtml(coverage.reason)}` : ""}</small></li>`
   ).join("")}</ul>`;
 }
@@ -345,18 +332,10 @@ function renderInputBindingsHtml(item: WebGoalView): string {
   ).join("")}</div>`;
 }
 
-function renderDraftEditorHtml(item: WebGoalView): string {
-  if (item.goal.definition_state !== "draft" || item.event_work === true) return "";
-  const goalId = escapeHtml(item.goal.goal_id);
-  return `<details class="goal-edit-disclosure" id="goal-definition-${goalId}"><summary>${icon("settings")}<span><strong>${L("修改这条草稿")}</strong><small>${L("补全目标、范围和完成标准；保存后仍要经过确认才能开始。")}</small></span>${icon("chevron-down")}</summary>${renderDraftEditor(item)}</details>`;
-}
-
 function renderGoalDocument(item: WebGoalView, view: GoalBoardWebView, selected: boolean): string {
   return goalsDocumentRenderer.renderGoalDocument(item, {
     activeGoalId: view.snapshot.board.active_goal_id,
     decisionCount: countGoalDecisions(view, item.goal.goal_id),
-    draftGapsHtml: item.event_work === true ? "" : renderDraftGaps(item),
-    draftEditorHtml: renderDraftEditorHtml(item),
     relatedWorkHtml: renderGoalFactors(item, view),
     artifactHtml: item.artifact_embed_html
       ? `<h3>${L("关联结果")}</h3>${item.artifact_embed_html}`

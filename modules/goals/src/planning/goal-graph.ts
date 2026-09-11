@@ -58,23 +58,9 @@ const RELATION_TYPES = new Set<GoalRelationRecord["type"]>([
 ]);
 
 function proposalRelationValues(item: ProposalItem): Record<string, unknown>[] {
+  if (item.kind !== "relation") return [];
   const payload = object(item.payload);
   if (!payload) return [];
-  if (item.kind === "candidate" && item.operation === "update") {
-    const nested = payload.proposed_relations;
-    const values = Array.isArray(nested) ? nested : nested == null ? [] : [nested];
-    const proposedGoal = object(payload.proposed_goal ?? payload.goal);
-    const goalId = String(proposedGoal?.goal_id ?? "").trim();
-    return values
-      .map(object)
-      .filter((value): value is Record<string, unknown> => value != null)
-      .map((relation) => ({
-        ...relation,
-        from_goal_id: relation.from_goal_id === "$new_goal" ? goalId : relation.from_goal_id,
-        to_goal_id: relation.to_goal_id === "$new_goal" ? goalId : relation.to_goal_id,
-      }));
-  }
-  if (item.kind !== "relation" && item.kind !== "dependency") return [];
   const nested = payload.relations ?? payload.relation;
   const values = Array.isArray(nested) ? nested : nested == null ? [payload] : [nested];
   return values.map(object).filter((value): value is Record<string, unknown> => value != null);
@@ -88,14 +74,15 @@ export function validatePlanningProposalGraph(
   const goals = new Map(currentGoals.map((goal) => [goal.goal_id, goal]));
   const changes: PlanningRelationChange[] = [];
   for (const item of items) {
-    if (item.kind === "goal" || item.kind === "contract" || (item.kind === "candidate" && item.operation === "update")) {
+    if (item.kind === "goal") {
       const payload = object(item.payload);
-      const goal = object(payload?.goal ?? payload?.proposed_goal) ?? payload;
+      const goal = object(payload?.goal) ?? payload;
       const goalId = String(goal?.goal_id ?? payload?.goal_id ?? "").trim();
       if (goalId && item.operation !== "deactivate") goals.set(goalId, { goal_id: goalId, trashed_at: null });
     }
+    if (item.kind !== "relation") continue;
     for (const [index, relation] of proposalRelationValues(item).entries()) {
-      const type = String(relation.type ?? (item.kind === "dependency" ? "depends_on" : "")) as GoalRelationRecord["type"];
+      const type = String(relation.type ?? "") as GoalRelationRecord["type"];
       if (!RELATION_TYPES.has(type)) continue;
       const from = String(relation.from_goal_id ?? "").trim();
       const to = String(relation.to_goal_id ?? "").trim();
@@ -217,9 +204,19 @@ function reachable(edges: Map<string, Set<string>>, start: string): Set<string> 
   return found;
 }
 
+export type PlanningWorkStatus = "open" | "completed" | "cancelled";
+
+function currentWorkStatus(
+  goalId: string,
+  currentWork?: ReadonlyMap<string, PlanningWorkStatus>,
+): PlanningWorkStatus {
+  return currentWork?.get(goalId) ?? "open";
+}
+
 export function planningMetrics(
   goals: readonly Pick<GoalRecord, "goal_id" | "fulfillment_state" | "trashed_at">[],
   relations: readonly ActiveRelation[],
+  currentWork?: ReadonlyMap<string, PlanningWorkStatus>,
 ): Map<string, PlanningMetric> {
   const activeGoalIds = new Set(goals.filter((goal) => !goal.trashed_at).map((goal) => goal.goal_id));
   const edges = edgesFor(relations.filter((relation) => relation.state === "active"), "execution");
@@ -247,9 +244,8 @@ export function planningMetrics(
     memo.set(goalId, value);
     return value;
   };
-  const goalsById = new Map(goals.map((goal) => [goal.goal_id, goal]));
   return new Map([...activeGoalIds].map((goalId) => {
-    const unlocks = [...reachable(edges, goalId)].filter((candidate) => goalsById.get(candidate)?.fulfillment_state !== "satisfied").length;
+    const unlocks = [...reachable(edges, goalId)].filter((candidate) => currentWorkStatus(candidate, currentWork) !== "completed").length;
     return [goalId, { goal_id: goalId, topological_level: level.get(goalId) ?? 0, unlock_count: unlocks, longest_downstream_chain: longest(goalId) }];
   }));
 }
@@ -258,6 +254,7 @@ export function analyzeGoalChangeImpact(
   goals: readonly Pick<GoalRecord, "goal_id" | "decomposition_state" | "fulfillment_state" | "trashed_at">[],
   relations: readonly ActiveRelation[],
   changedGoalIds: readonly string[],
+  currentWork?: ReadonlyMap<string, PlanningWorkStatus>,
 ): GoalChangeImpact {
   const active = relations.filter((relation) => relation.state === "active");
   const ancestors = new Map<string, Set<string>>();
@@ -291,8 +288,8 @@ export function analyzeGoalChangeImpact(
     ...affectedDependents,
     ...adjacentDependencies,
   ]);
-  const reusable = goals.filter((goal) => related.has(goal.goal_id) && !goal.trashed_at && goal.fulfillment_state !== "satisfied" && ["abstract", "frontier_open", "closed_leaf"].includes(goal.decomposition_state)).map((goal) => goal.goal_id);
-  const metrics = planningMetrics(goals, active);
+  const reusable = goals.filter((goal) => related.has(goal.goal_id) && !goal.trashed_at && currentWorkStatus(goal.goal_id, currentWork) === "open").map((goal) => goal.goal_id);
+  const metrics = planningMetrics(goals, active, currentWork);
   const reviewOrder = [...related].sort((left, right) => (metrics.get(left)?.topological_level ?? 0) - (metrics.get(right)?.topological_level ?? 0) || left.localeCompare(right));
   return {
     changed_goal_ids: changed,

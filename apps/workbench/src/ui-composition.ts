@@ -3,10 +3,6 @@ import { goalsDecisionResultsUiContribution } from "@adeptify/goalboard-plugin-g
 
 import { createGoalsDecisionResultsWorkbenchRenderer } from "./goals-decision-results-ui.js";
 
-import { goalsLegacyProposalUiContribution } from "@adeptify/goalboard-plugin-goals";
-
-import { createGoalsLegacyProposalWorkbenchRenderer } from "./goals-legacy-proposal-ui.js";
-
 import { goalsProposalUiContribution } from "@adeptify/goalboard-plugin-goals";
 
 import { createGoalsProposalWorkbenchRenderer } from "./goals-proposal-ui.js";
@@ -25,8 +21,6 @@ import type {
 } from "@adeptify/goalboard-contracts/platform/ui";
 
 import type { GoalsApplicationApi } from "@adeptify/goalboard-contracts/modules/goals";
-
-import type { ExecutionValidationApplicationApi } from "@adeptify/goalboard-plugin-goals";
 
 import {
   FEED_UI_CONTRIBUTION_ID,
@@ -81,7 +75,7 @@ import { createGoalsPolicyWorkbenchRenderer } from "./goals-policy-ui.js";
 import { artifactReferenceUiContribution, artifactBrowserUiContribution, ARTIFACT_REFERENCE_UI_CONTRIBUTION_ID, type ArtifactReferenceUiPrimitives } from "@adeptify/goalboard-plugin-artifacts";
 
 
-export type WorkbenchGoalsAdapter<TTransition = unknown> = GoalsApplicationApi<TTransition>;
+export type WorkbenchGoalsAdapter = GoalsApplicationApi;
 
 
 export const WORKBENCH_UI_SLOTS = {
@@ -138,27 +132,15 @@ ${request.body_html}
 
 
 /** Bind Workbench routes to the public Goals Contract without copying Module rules. */
-export function createWorkbenchGoalsAdapter<TTransition>(
-  goals: GoalsApplicationApi<TTransition>,
-): WorkbenchGoalsAdapter<TTransition> {
+export function createWorkbenchGoalsAdapter(
+  goals: GoalsApplicationApi,
+): WorkbenchGoalsAdapter {
   return {
     impacts: goals.impacts,
     commands: goals.commands,
     lifecycle: goals.lifecycle,
     planning: goals.planning,
   };
-}
-
-
-export type WorkbenchExecutionValidationAdapter<TSnapshot = unknown> =
-  ExecutionValidationApplicationApi<TSnapshot>;
-
-
-/** Bind Workbench routes and projections to one execution/review application port. */
-export function createWorkbenchExecutionValidationAdapter<TSnapshot>(
-  application: ExecutionValidationApplicationApi<TSnapshot>,
-): WorkbenchExecutionValidationAdapter<TSnapshot> {
-  return { query: application.query, commands: application.commands };
 }
 
 
@@ -172,7 +154,6 @@ export function createWorkbenchUiHost(): UiHost {
   host.register(artifactBrowserUiContribution);
   host.register(goalsPolicyUiContribution);
   host.register(goalsProposalUiContribution);
-  host.register(goalsLegacyProposalUiContribution);
   host.register(goalsDecisionResultsUiContribution);
   host.register(goalsSafetyUiContribution);
   host.register(goalsRelationUiContribution);
@@ -191,8 +172,6 @@ export function createWorkbenchUiHost(): UiHost {
 const workbenchUiHost = createWorkbenchUiHost();
 
 export const createWorkbenchGoalsDecisionResultsRenderer = createGoalsDecisionResultsWorkbenchRenderer(workbenchUiHost, WORKBENCH_UI_SLOTS.main);
-
-export const createWorkbenchGoalsLegacyProposalRenderer = createGoalsLegacyProposalWorkbenchRenderer(workbenchUiHost, WORKBENCH_UI_SLOTS.main);
 
 export const createWorkbenchGoalsProposalRenderer = createGoalsProposalWorkbenchRenderer(workbenchUiHost, WORKBENCH_UI_SLOTS.main);
 

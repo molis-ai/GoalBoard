@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createGoalCapability } from "@adeptify/goalboard-plugin-goals";
+import { createGoalIntentCapability } from "@adeptify/goalboard-plugin-goals";
 import { onboardingPlanningHint } from "@adeptify/goalboard-app-workbench";
 import { goalBoardHostProjectReference, type GoalBoardLocalHost } from "./project-host.js";
 import { goalBoardOnboardingStatus, dismissGoalBoardOnboarding, completeGoalBoardOnboarding } from "./onboarding.js";
@@ -65,21 +65,17 @@ export function createLocalOnboardingHttp(ports: OnboardingHttpPorts) {
             .replace(/\s+/gu, " ")
             .trim()
             .slice(0, 120) || input.projectName;
-          const createdGoal = (await hostClient.invoke(createGoalCapability, {
+          const createdGoal = (await hostClient.invoke(createGoalIntentCapability, {
             board_id: project.board_id,
-            goal: {
-              title,
-              outcome: input.outcome,
-              why: "把第一次表达的目标保存为可继续澄清的共同事实",
-              business_logic: `${onboardingPlanningHint(input.intentFrame)} 先保存用户想看到的结果，再由用户和 Runtime 共同补全范围、拆分与验收，不把推断直接写成已确认目标树。`,
-              definition_state: "draft",
-              decomposition_state: "abstract",
-              priority: 50,
-              acceptance_criteria: [],
-            },
+            title,
+            outcome: input.outcome,
+            why: "把第一次表达的目标保存为可继续澄清的共同事实",
+            business_logic: `${onboardingPlanningHint(input.intentFrame)} 先保存用户想看到的结果，再由用户和 Runtime 共同补全范围、拆分与验收，不把推断直接写成已确认目标树。`,
+            priority: 50,
             actor_id: "web-user",
+            actor_kind: "user",
             idempotency_key: `onboarding-root-goal-${project.project_id}`,
-            reason: "用户在首次项目引导中确认创建根 Draft Goal",
+            source_kind: "onboarding",
           })).goal;
           const workspace = input.workspacePath
             ? catalog.addWorkspaceProject({
@@ -101,8 +97,6 @@ export function createLocalOnboardingHttp(ports: OnboardingHttpPorts) {
             goal: {
               goal_id: createdGoal.goal_id,
               title: createdGoal.title,
-              definition_state: createdGoal.definition_state,
-              decomposition_state: createdGoal.decomposition_state,
             },
             goal_id: createdGoal.goal_id,
             goal_path: `${projectPath}goals/${encodeURIComponent(createdGoal.goal_id)}`,

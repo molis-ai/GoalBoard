@@ -18,7 +18,7 @@ export const GOALS_RELATION_TYPES: Array<{
   description: string;
 }> = [
   { type: "part_of", label: "属于 / 包含", description: "只改变 Goal Tree 层级，不要求上级先完成" },
-  { type: "depends_on", label: "依赖 / 被依赖", description: "左侧 Goal 必须等待右侧 Goal 完成，是领取与完成门禁" },
+  { type: "depends_on", label: "依赖 / 被依赖", description: "左侧 Goal 必须等待右侧 Goal 完成，才具备收尾所需输入。普通笔记和准备仍可先做。" },
   { type: "conflicts_with", label: "冲突", description: "两项工作无法同时成立，或会相互干扰" },
   { type: "mitigates", label: "缓解", description: "左侧 Goal 用来降低右侧风险或负面影响" },
   { type: "extends", label: "扩展", description: "左侧 Goal 在右侧结果上继续增加能力" },

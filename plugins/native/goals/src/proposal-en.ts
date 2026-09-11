@@ -56,4 +56,6 @@ export const GOALS_PROPOSAL_EN: Record<string, string> = {
   "确认时说明判断依据；退回时写清需要修改的内容": "When confirming, say what the judgment is based on. When sending back, say what needs to change.",
   "说明为什么确认或拒绝这次关系变化": "Say why you confirm or reject this relation change",
   "说明为什么纳入；或写清退回后需要怎样调整": "Say why to take it in, or what should change if you send it back",
+  "已按下方问题预填，可以直接采用，也可以改写": "Prefilled from the issues below; submit as-is or rewrite",
+  "你现在需要做：点击“退回修正”。退回理由已按下方问题预填，可以直接提交，也可以改写。": "What to do now: select “Return for correction.” The return reason is prefilled from the issues below; submit it as-is or rewrite it.",
 };

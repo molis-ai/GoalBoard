@@ -2,9 +2,8 @@ import type { GoalAcceptanceCriterion } from "./goals.js";
 import type {
   ApplyGoalConcernInput,
   CiteGoalDecisionInput,
-  ContinueGoalEventWorkInput,
-  ContinueGoalEventWorkResult,
   GoalEventAgreementResult,
+  GoalEventRequirementCurrentStatus,
   GoalEventClosureResult,
   GoalEventConcernResult,
   GoalEventDecisionRequestResult,
@@ -20,7 +19,6 @@ import type {
   RequestGoalDecisionInput,
   ResumeGoalEventWorkInput,
   RecordGoalNoteInput,
-  ReopenCompletedEventWorkInput,
   SetGoalEventAgreementInput,
   SubmitGoalEventClosureInput,
   GoalEventTrustedDecisionRecord,
@@ -100,11 +98,22 @@ export interface GoalEventRequirementBinding {
   requirement_id: string;
 }
 
-export interface GoalEventRequirementSource {
-  kind: "planning";
-  template_requirement_id: string;
-  methods: GoalEventPlanningMethodRef[];
-}
+export type GoalEventRequirementSource =
+  | {
+      kind: "planning";
+      template_requirement_id: string;
+      methods: GoalEventPlanningMethodRef[];
+    }
+  | { kind: "create_input" }
+  | {
+      kind: "imported_acceptance_criterion";
+      decision_method: string;
+      pass_condition: string;
+    }
+  | {
+      kind: "imported_human_approval";
+      policy_binding_ids: string[];
+    };
 
 export interface GoalEventExtraRequirement {
   requirement_id: string;
@@ -113,6 +122,10 @@ export interface GoalEventExtraRequirement {
   created_in_config_version: number;
   actor_id: string;
   source?: GoalEventRequirementSource;
+  human_decision_required: boolean;
+  current_status: GoalEventRequirementCurrentStatus;
+  revision: number;
+  support_valid_after_seq: number;
 }
 
 export interface GoalEventTypeDefinitionInput {
@@ -129,6 +142,7 @@ export interface GoalEventExtraRequirementInput {
   requirement_id: string;
   statement: string;
   bound_type_id?: string;
+  human_decision_required?: boolean;
   source?: GoalEventRequirementSource;
 }
 
@@ -142,7 +156,6 @@ export interface ConfigureGoalEventsInput {
   types?: GoalEventTypeDefinitionInput[];
   adopted_planning?: GoalEventAdoptedPlanningRef[];
   requirement_bindings?: GoalEventRequirementBinding[];
-  new_requirements?: GoalEventExtraRequirementInput[];
 }
 
 export interface GoalEventConfigView {
@@ -177,6 +190,12 @@ export interface ReportGoalWorkEventInput {
   judgments?: GoalEventJudgmentInput[];
 }
 
+export interface GoalEventReportProgressInput {
+  summary: string;
+  next_step?: string;
+  next_actor?: string;
+}
+
 export interface ReportGoalEventsInput {
   board_id: string;
   goal_id: string;
@@ -184,6 +203,7 @@ export interface ReportGoalEventsInput {
   actor_kind?: "user" | "runtime";
   idempotency_key: string;
   events: ReportGoalWorkEventInput[];
+  progress?: GoalEventReportProgressInput;
 }
 
 export interface GoalWorkEventJudgment {
@@ -237,10 +257,19 @@ export type GoalWorkEventRecord =
   | GoalReportWorkEventRecord
   | GoalSystemWorkEventRecord;
 
-export interface ReportGoalEventsResult {
+export interface ReportGoalEventsRecordedResult {
   events: GoalReportWorkEventRecord[];
   observed_event_cursor: number;
   replayed: boolean;
+}
+
+export interface ReportGoalEventsResult extends ReportGoalEventsRecordedResult {
+  goal_event_cursor: number;
+  work_status: GoalEventWorkStateView["work_status"];
+  gaps: GoalEventWorkGap[];
+  progress_summary: GoalEventWorkStateView["progress_summary"];
+  completion_effect: boolean;
+  can_record: boolean;
 }
 
 export interface GoalEventAdoptedPlanningRequest {
@@ -263,22 +292,38 @@ export interface ConfigureGoalEventsApplicationInput {
   actor_id: string;
   actor_kind?: "user" | "runtime";
   expected_version: number;
+  expected_agreement_version?: number;
   idempotency_key: string;
   types?: GoalEventTypeDefinitionInput[];
   adopted_planning?: GoalEventAdoptedPlanningRequest[];
   adopt_default_requirement_ids?: string[];
   requirement_bindings?: GoalEventRequirementBinding[];
-  new_requirements?: GoalEventExtraRequirementInput[];
+}
+
+export const goalIntentSourceKinds = ["web", "onboarding", "feed", "runtime", "tree"] as const;
+export type GoalIntentSourceKind = (typeof goalIntentSourceKinds)[number];
+
+export interface CreateGoalIntentRequirementInput {
+  requirement_id?: string;
+  statement: string;
+  human_decision_required?: boolean;
 }
 
 export interface CreateGoalIntentInput {
   board_id: string;
   title: string;
   outcome?: string;
+  why?: string;
+  business_logic?: string;
+  priority?: number;
   goal_id?: string;
   actor_id: string;
   actor_kind?: "user" | "runtime";
   idempotency_key: string;
+  parent_goal_id?: string;
+  dependency_goal_ids?: string[];
+  requirements?: CreateGoalIntentRequirementInput[];
+  source_kind?: GoalIntentSourceKind;
 }
 
 export interface CreateGoalIntentResult {
@@ -287,9 +332,6 @@ export interface CreateGoalIntentResult {
     board_id: string;
     title: string;
     outcome: string;
-    definition_state: "draft";
-    decomposition_state: "abstract";
-    fulfillment_state: "unmet";
   };
   replayed: boolean;
   observed_event_cursor: number;
@@ -314,26 +356,14 @@ export interface GoalEventWorkGap {
   human_decision_required: boolean;
 }
 
-export interface GoalEventProtocolBoundary {
-  kind: "event_work" | "legacy_claim_run";
-  note: string;
-  claim_or_run_required: boolean;
-}
-
 export interface GoalEventStateView {
   board_id: string;
   goal_id: string;
   intent: {
     title: string;
-    outcome: string;
-    definition_state: "draft" | "accepted";
-    created_as_draft: boolean;
-  };
-  current_agreement: {
-    definition_state: "draft" | "accepted";
-    decomposition_state: string;
-    fulfillment_state: string;
-    outcome: string;
+    why: string;
+    business_logic: string;
+    source_kind: GoalIntentSourceKind | "migration" | null;
   };
   config: GoalEventConfigView;
   requirements: GoalEventRequirementStatus[];
@@ -343,7 +373,6 @@ export interface GoalEventStateView {
   /** Max work-event journal_seq on this Goal; 0 when the Goal has no work events yet. */
   goal_event_cursor: number;
   event_list_next_cursor: number | null;
-  protocol: GoalEventProtocolBoundary;
   owner: GoalEventWorkStateView["owner"];
   work_status: GoalEventWorkStateView["work_status"];
   agreement: GoalEventWorkStateView["agreement"];
@@ -353,8 +382,37 @@ export interface GoalEventStateView {
   applied_decisions: GoalEventWorkStateView["applied_decisions"];
   current_decisions: GoalEventWorkStateView["current_decisions"];
   closure: GoalEventWorkStateView["closure"];
+  imported_completion: GoalEventWorkStateView["imported_completion"];
+  can_record: boolean;
   recorded_not_completed: boolean;
   completion_effect: boolean;
+}
+
+export interface GoalEventDirectoryItem {
+  goal_id: string;
+  title: string;
+  work_status: GoalEventWorkStateView["work_status"];
+  completion_effect: boolean;
+  can_record: boolean;
+  next_hint: string;
+  unmet_requirement_count: number;
+  pending_decision_count: number;
+  blocking_concern_count: number;
+  updated_at: string;
+}
+
+export interface GoalEventDirectoryQuery {
+  board_id: string;
+  work_status?: GoalEventWorkStateView["work_status"];
+  limit?: number;
+  /** List pagination cursor `updated_at|goal_id`, not a journal/event cursor. */
+  after_cursor?: string;
+}
+
+export interface GoalEventDirectoryPage {
+  goals: GoalEventDirectoryItem[];
+  next_cursor: string | null;
+  observed_event_cursor: number;
 }
 
 export interface ResolvedPlanningEventAdoption {
@@ -424,11 +482,12 @@ export interface GoalEventRequirementStatus {
   goal_id: string;
   statement: string;
   origin: {
-    kind: "acceptance_criterion" | "goal_event_requirement";
+    kind: "goal_event_requirement" | "imported_acceptance_criterion" | "imported_human_approval" | "create_input";
     decision_method?: GoalAcceptanceCriterion["decision_method"];
     pass_condition?: string;
     config_version?: number;
-    planning?: GoalEventRequirementSource;
+    planning?: Extract<GoalEventRequirementSource, { kind: "planning" }>;
+    policy_binding_ids?: string[];
   };
   bound_type_ids: string[];
   human_decision_required: boolean;
@@ -452,7 +511,7 @@ export interface GoalEventFactsApi {
     input: ConfigureGoalEventsApplicationInput,
     resolveAdoption: (boardId: string, requested: GoalEventAdoptedPlanningRequest[]) => ResolvedPlanningEventAdoption,
   ): ConfigureGoalEventsResult;
-  report(input: ReportGoalEventsInput): ReportGoalEventsResult;
+  report(input: ReportGoalEventsInput): ReportGoalEventsRecordedResult;
   readConfig(boardId: string, goalId: string): GoalEventConfigView;
   listEvents(boardId: string, goalId: string, query?: GoalEventListQuery): GoalEventListPage;
   listLatestEvents(boardId: string, goalId: string, query?: GoalEventHistoryQuery): GoalEventHistoryPage;
@@ -460,6 +519,9 @@ export interface GoalEventFactsApi {
   listLatestReports(boardId: string, goalId: string, query?: GoalEventLatestReportsQuery): GoalEventLatestReports;
   readEvent(boardId: string, goalId: string, eventId: string): GoalWorkEventRecord;
   readCurrentRequirements(boardId: string, goalId: string): GoalEventRequirementStatus[];
+  /** Persisted createIntent channel; independent of timeline pagination. Null when no intent_created fact exists. */
+  readIntentSourceKind(boardId: string, goalId: string): GoalIntentSourceKind | null;
+  readObservedEventCursor(boardId: string): number;
   isEventStateOwner(boardId: string, goalId: string): boolean;
   readWorkState(boardId: string, goalId: string): GoalEventWorkStateView;
   runImmediate<T>(operation: () => T): T;
@@ -467,12 +529,21 @@ export interface GoalEventFactsApi {
     board_id: string;
     goal_id: string;
     actor_id: string;
-    source: "intent" | "configuration" | "continue";
+    source: "intent" | "configuration" | "continue" | "migration";
     outcome?: string;
   }): void;
-  continueWithEventWork(input: ContinueGoalEventWorkInput): ContinueGoalEventWorkResult;
+  replayIntent(boardId: string, actorId: string, idempotencyKey: string, hash: string): CreateGoalIntentResult | null;
+  rememberIntent(boardId: string, actorId: string, idempotencyKey: string, hash: string, result: CreateGoalIntentResult, at: string): void;
+  recordIntentArtifacts(input: {
+    board_id: string;
+    goal_id: string;
+    actor_id: string;
+    actor_kind?: "user" | "runtime";
+    source_kind?: GoalIntentSourceKind;
+    outcome?: string;
+    requirements?: CreateGoalIntentRequirementInput[];
+  }): void;
   recordNote(input: RecordGoalNoteInput): GoalEventMutationResult;
-  reopenCompletedEventWork(input: ReopenCompletedEventWorkInput): GoalEventResumeResult;
   recordProgress(input: RecordGoalProgressSummaryInput): GoalEventProgressResult;
   applyConcern(input: ApplyGoalConcernInput): GoalEventConcernResult;
   requestDecision(input: RequestGoalDecisionInput): GoalEventDecisionRequestResult;

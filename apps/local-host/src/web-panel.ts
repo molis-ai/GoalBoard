@@ -72,7 +72,7 @@ export function createLocalPanelHttp(ports: PanelHttpPorts) {
         spawn: (panel, sessionId) => desktopPanelSpawn(catalog, panel, webUrl, sessionId),
       })),
       readGoal: (goalId) => {
-        const goal = coordinator.goalQueries.readGoalContract(boardId, goalId).goal;
+        const goal = coordinator.goalQueries.getGoal(boardId, goalId);
         const event_work = coordinator.goalEvents.isEventStateOwner(boardId, goalId);
         const state = event_work ? coordinator.goalEvents.readState(boardId, goalId) : null;
         const event_facts = state
@@ -94,7 +94,7 @@ export function createLocalPanelHttp(ports: PanelHttpPorts) {
           materializer: createContextMaterializer(createContextLedger(coordinator.store.db, {
             authorize: (access) => access.scope.kind === "personal" && access.scope.id === boardId,
           })),
-          readGoal: () => coordinator.goalQueries.readGoalContract(boardId, goalId).goal,
+          readGoal: () => coordinator.goalQueries.getGoal(boardId, goalId),
           readItem: (id) => {
             try { return feed.getItem(boardId, id); }
             catch (error) {

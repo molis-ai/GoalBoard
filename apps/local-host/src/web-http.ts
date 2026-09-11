@@ -13,7 +13,9 @@ export function sendLocalWebJson(response: ServerResponse, status: number, value
 export type LocalMutationState = "in_flight" | "complete";
 
 function isEventCommandReplayPath(pathname: string): boolean {
-  return /(?:^|\/)api\/goals\/[^/]+\/event-(?:configure|report|progress|concern|decision-request|decision|agree|close|resume|continue|note)$/.test(pathname);
+  return /(?:^|\/)api\/goals\/[^/]+\/event-(?:configure|report|progress|concern|decision-request|decision|agree|close|resume|continue|note)$/.test(pathname)
+    || /(?:^|\/)api\/goals$/.test(pathname)
+    || /(?:^|\/)api\/goal-tree-proposals\/[^/]+\/decision$/.test(pathname);
 }
 
 function localHostname(value: string): boolean {

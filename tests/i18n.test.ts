@@ -61,10 +61,8 @@ test("every static renderer label has an English translation", () => {
 
 test("every work state explains what it means, what to do, and how to continue in both languages", () => {
   const states: GoalPresentationState[] = [
-    "clarification_pending", "clarification_decision_pending", "compound_closure_pending", "clarifying", "clarification_blocked", "waiting_children",
-    "execution_pending", "executing", "execution_blocked", "completion_pending", "completion_blocked", "review_pending", "reviewing",
-    "review_blocked", "waiting_for_human", "revalidation_pending", "revalidating", "revalidation_blocked",
-    "replaced", "invalidated", "satisfied", "trashed", "archived",
+    "waiting_for_human", "executing", "execution_blocked", "execution_pending",
+    "satisfied", "invalidated", "trashed", "archived",
   ];
   for (const state of states) {
     const zh = explainWorkState(state);
@@ -78,15 +76,14 @@ test("every work state explains what it means, what to do, and how to continue i
 });
 
 test("work state labels stay concise and professional", () => {
-  assert.equal(explainWorkState("clarifying").label, "目标澄清中");
-  assert.equal(explainWorkState("clarification_decision_pending").label, "待你确认");
-  assert.equal(explainWorkState("compound_closure_pending").label, "待确认父目标");
-  assert.equal(explainWorkState("execution_blocked").label, "执行受阻");
-  assert.equal(explainWorkState("completion_pending").label, "待完成");
-  assert.equal(explainWorkState("completion_blocked").label, "完成受阻");
-  assert.equal(explainWorkState("review_pending").label, "待复核");
-  assert.equal(explainWorkState("waiting_for_human").label, "等待你验收");
+  assert.equal(explainWorkState("waiting_for_human").label, "需要你决定");
+  assert.equal(explainWorkState("executing").label, "正在推进");
+  assert.equal(explainWorkState("execution_blocked").label, "可记录，尚不可完成");
+  assert.equal(explainWorkState("execution_pending").label, "可记录");
   assert.equal(explainWorkState("satisfied").label, "已完成");
+  assert.equal(explainWorkState("invalidated").label, "已取消");
+  assert.equal(explainWorkState("trashed").label, "回收站");
+  assert.equal(explainWorkState("archived").label, "已归档");
 });
 
 test("all five decision types start with the user's question and explain missing evidence", () => {

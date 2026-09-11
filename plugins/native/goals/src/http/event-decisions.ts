@@ -6,6 +6,19 @@ export async function handleGoalEventDecisionHttp(context: GoalsHttpContext): Pr
   const match = context.pathname.match(/^\/api\/goals\/([^/]+)\/event-decision$/);
   if (context.method !== "POST" || !match) return false;
   const body = await context.readBody();
+  const allowed = new Set([
+    "idempotency_key", "request_id", "selected_option_id", "conclusion",
+    "accepts_requirements", "effects", "authorized_change", "scope",
+  ]);
+  const unexpected = Object.keys(body).filter((key) => !allowed.has(key));
+  if (unexpected.length) {
+    context.respond(400, {
+      error: `不能使用未许可字段：${unexpected.join("、")}`,
+      code: "event_http.unexpected_field",
+      details: { fields: unexpected },
+    });
+    return true;
+  }
   const conclusion = typeof body.conclusion === "string" ? body.conclusion.trim() : "";
   if (!conclusion) {
     context.respond(400, { error: "用户决定需要结论" });
@@ -24,6 +37,9 @@ export async function handleGoalEventDecisionHttp(context: GoalsHttpContext): Pr
       conclusion,
       accepts_requirements: body.accepts_requirements === true ? true : body.accepts_requirements === false ? false : undefined,
       effects: Array.isArray(body.effects) ? body.effects as never : undefined,
+      authorized_change: body.authorized_change && typeof body.authorized_change === "object"
+        ? body.authorized_change as never
+        : undefined,
       scope: body.scope && typeof body.scope === "object" ? body.scope as Record<string, unknown> as never : undefined,
     });
     context.changed();

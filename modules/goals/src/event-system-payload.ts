@@ -1,8 +1,11 @@
 import {
+  goalEventDecisionPurposes,
   goalEventSystemOperations,
+  type GoalEventAgreementChange,
   type GoalEventConcernStatus,
   type GoalEventDecisionEffect,
   type GoalEventDecisionOption,
+  type GoalEventDecisionPurpose,
   type GoalEventScope,
   type GoalEventSystemPayload,
   type GoalEventUnmetReason,
@@ -51,6 +54,8 @@ export function parseGoalEventSystemPayload(raw: Record<string, unknown>): GoalE
         question: text(raw.question),
         options: Array.isArray(raw.options) ? raw.options as GoalEventDecisionOption[] : [],
         scope: asScope(raw.scope),
+        purpose: asPurpose(raw.purpose),
+        proposed_change: asChange(raw.proposed_change),
       };
     case "user_decision":
       return {
@@ -63,6 +68,7 @@ export function parseGoalEventSystemPayload(raw: Record<string, unknown>): GoalE
         accepts_requirements: raw.accepts_requirements === true,
         effects: Array.isArray(raw.effects) ? raw.effects as GoalEventDecisionEffect[] : [],
         scope: asScope(raw.scope),
+        authorized_change: asChange(raw.authorized_change),
         config_version: Number(raw.config_version) || 0,
         agreement_version: Number(raw.agreement_version) || 0,
       };
@@ -78,6 +84,7 @@ export function parseGoalEventSystemPayload(raw: Record<string, unknown>): GoalE
         outcome: text(raw.outcome),
         version: Number(raw.version) || 0,
         config_version: Number(raw.config_version) || 0,
+        change: asChange(raw.change) ?? {},
       };
     case "closure_submitted":
       return {
@@ -119,6 +126,22 @@ export function parseGoalEventSystemPayload(raw: Record<string, unknown>): GoalE
         operation,
         body: text(raw.body),
       };
+    case "intent_created":
+      return {
+        operation,
+        source_kind: asSourceKind(raw.source_kind),
+      };
+    case "legacy_completion_imported":
+      return {
+        operation,
+        journal_type: nullable(raw.journal_type),
+        journal_seq: raw.journal_seq == null ? null : Number(raw.journal_seq),
+        journal_at: nullable(raw.journal_at),
+        evidence_ids: asStringArray(raw.evidence_ids),
+        review_ids: asStringArray(raw.review_ids),
+        contract_accepted_at: nullable(raw.contract_accepted_at),
+        contract_accepted_by: nullable(raw.contract_accepted_by),
+      };
     default:
       return emptyProgress();
   }
@@ -148,6 +171,18 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((item) => String(item)) : [];
 }
 
+function asPurpose(value: unknown): GoalEventDecisionPurpose {
+  if (typeof value === "string" && (goalEventDecisionPurposes as readonly string[]).includes(value)) {
+    return value as GoalEventDecisionPurpose;
+  }
+  return "suggestion";
+}
+
+function asChange(value: unknown): GoalEventAgreementChange | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as GoalEventAgreementChange;
+}
+
 function asScope(value: unknown): GoalEventScope {
   const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -166,4 +201,11 @@ function asConcernStatus(value: unknown): GoalEventConcernStatus {
 function asWorkStatus(value: unknown, fallback: GoalEventWorkStatus): GoalEventWorkStatus {
   if (value === "open" || value === "completed" || value === "cancelled") return value;
   return fallback;
+}
+
+function asSourceKind(value: unknown): "web" | "onboarding" | "feed" | "runtime" | "tree" {
+  if (value === "web" || value === "onboarding" || value === "feed" || value === "runtime" || value === "tree") {
+    return value;
+  }
+  return "web";
 }

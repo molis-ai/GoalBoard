@@ -34,8 +34,6 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       article.querySelectorAll("[data-event-form]").forEach((form) => { form.hidden = true; });
       const sheet = article.querySelector("[data-event-sheet]");
       if (sheet) sheet.hidden = false;
-      const continueForm = article.querySelector('[data-event-form="continue"]');
-      if (continueForm && !reading.reader && !reading.form) continueForm.hidden = false;
     };
     const showDetail = (showing) => {
       root()?.querySelector("[data-goal-layout]")?.classList.toggle("is-showing-detail", showing);
@@ -146,9 +144,9 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
 
     const formPath = (kind) => ({
       report: "/event-report", note: "/event-note", type: "/event-configure", "type-edit": "/event-configure",
-      requirement: "/event-configure", adopt: "/event-configure", progress: "/event-progress",
+      requirement: "/event-agree", adopt: "/event-configure", progress: "/event-progress",
       concern: "/event-concern", decision: "/event-decision", closure: "/event-close",
-      resume: "/event-resume", continue: "/event-continue", agreement: "/event-agree",
+      resume: "/event-resume", agreement: "/event-agree",
     }[kind] || "/event-report");
 
     const buildPayload = (form, kind, article) => {
@@ -165,23 +163,31 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       }
       if (kind === "note") return { body: text("note") };
       if (kind === "type" || kind === "type-edit") {
-        const requirement = form.querySelector('[name="add_requirement"]')?.checked
-          ? [{ requirement_id: text("new_requirement_id"), statement: text("requirement_statement"), bound_type_id: text("type_id") }] : [];
         return {
           expected_version: Number(form.dataset.configVersion || article.dataset.configVersion || 0),
           types: [{ type_id: text("type_id"), version: Number(text("version") || 1), name: text("name"), purpose: text("purpose"), semantic_family: text("semantic_family") || undefined, fields: typeFields(form) }],
-          new_requirements: requirement,
         };
       }
       if (kind === "requirement") {
-        return { expected_version: Number(form.dataset.configVersion || article.dataset.configVersion || 0), new_requirements: [{ requirement_id: text("requirement_id"), statement: text("statement"), bound_type_id: text("bound_type_id") || undefined }] };
+        return {
+          expected_config_version: Number(form.dataset.configVersion || article.dataset.configVersion || 0),
+          expected_agreement_version: Number(form.dataset.agreementVersion || article.dataset.agreementVersion || 0),
+          new_requirements: [{
+            requirement_id: text("requirement_id"),
+            statement: text("statement"),
+            bound_type_id: text("bound_type_id") || undefined,
+            human_decision_required: form.querySelector('[name="human_decision_required"]')?.checked === true,
+          }],
+        };
       }
       if (kind === "adopt") {
         const selected = form.querySelector('[name="method_id"] option:checked');
+        const defaults = checkedValues(form, "adopt_default_requirement_ids");
         return {
           expected_version: Number(form.dataset.configVersion || article.dataset.configVersion || 0),
+          ...(defaults.length ? { expected_agreement_version: Number(form.dataset.agreementVersion || article.dataset.agreementVersion || 0) } : {}),
           adopted_planning: text("method_id") ? [{ method_id: text("method_id"), version: Number(selected?.dataset.version || 1), source: selected?.dataset.source || "built_in" }] : [],
-          adopt_default_requirement_ids: checkedValues(form, "adopt_default_requirement_ids"),
+          adopt_default_requirement_ids: defaults,
         };
       }
       if (kind === "progress") return { summary: text("summary"), next_step: text("next_step") || undefined, next_actor: text("next_actor") || undefined, based_on_cursor: Number(data.get("based_on_cursor") || article.dataset.goalEventCursor || 0) };
@@ -199,6 +205,16 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         return payload;
       }
       if (kind === "decision") {
+        const agreementChoice = form.querySelector('[name="agreement_change_decision"]:checked')?.value;
+        if (form.querySelector('[name="agreement_change_decision"]')) {
+          return {
+            request_id: text("request_id") || undefined,
+            conclusion: text("conclusion"),
+            effects: agreementChoice === "authorize"
+              ? [{ kind: "authorize_agreement_change" }]
+              : [{ kind: "deny_action", action: "set_agreement" }],
+          };
+        }
         const pendingAction = form.dataset.pendingAction || text("action");
         const effects = [...form.querySelectorAll('[name="effect"]:checked')].map((input) => {
           if (input.value === "authorize_action" || input.value === "deny_action") return { kind: input.value, action: pendingAction || undefined };
@@ -206,11 +222,32 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         });
         return { request_id: text("request_id") || undefined, selected_option_id: text("selected_option_id") || undefined, conclusion: text("conclusion"), effects, scope: { requirement_ids: checkedValues(form, "requirement_ids"), concern_ids: checkedValues(form, "concern_ids"), action: pendingAction || null } };
       }
-      if (kind === "closure" || kind === "agreement") {
-        return { kind: text("kind"), result: text("result") || undefined, reason: text("reason"), outcome: text("outcome") || undefined, expected_config_version: Number(data.get("expected_config_version")), expected_agreement_version: Number(data.get("expected_agreement_version")) };
+      if (kind === "agreement") {
+        const revise_requirements = [];
+        const retire_requirement_ids = [];
+        form.querySelectorAll("[data-requirement-edit]").forEach((row) => {
+          const requirementId = row.querySelector('[name="requirement_id"]')?.value.trim();
+          if (!requirementId) return;
+          if (row.querySelector('[name="retire_requirement"]')?.checked) {
+            retire_requirement_ids.push(requirementId);
+            return;
+          }
+          const statement = row.querySelector('[name="requirement_statement"]')?.value.trim();
+          const human = row.querySelector('[name="human_decision_required"]')?.checked === true;
+          revise_requirements.push({ requirement_id: requirementId, statement, human_decision_required: human });
+        });
+        return {
+          outcome: text("outcome") || undefined,
+          expected_config_version: Number(data.get("expected_config_version")),
+          expected_agreement_version: Number(data.get("expected_agreement_version")),
+          ...(revise_requirements.length ? { revise_requirements } : {}),
+          ...(retire_requirement_ids.length ? { retire_requirement_ids } : {}),
+        };
       }
-      if (kind === "resume") return { reason: text("reason"), resume_kind: text("resume_kind") };
-      if (kind === "continue") return { reopen_completed: text("reopen_completed") === "true" };
+      if (kind === "closure") {
+        return { kind: text("kind"), result: text("result") || undefined, reason: text("reason"), expected_config_version: Number(data.get("expected_config_version")), expected_agreement_version: Number(data.get("expected_agreement_version")) };
+      }
+      if (kind === "resume") return { reason: text("reason") };
       return {};
     };
 
@@ -226,6 +263,13 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       if ((kind === "type" || kind === "type-edit") && !typeFields(form).length) {
         if (status) { status.hidden = false; status.textContent = L("至少保留一个字段。"); }
         return;
+      }
+      if (kind === "decision" && form.querySelector('[name="agreement_change_decision"]')) {
+        const choice = form.querySelector('[name="agreement_change_decision"]:checked')?.value;
+        if (choice !== "authorize" && choice !== "deny") {
+          if (status) { status.hidden = false; status.textContent = L("必须选择批准或拒绝这一份约定变更"); }
+          return;
+        }
       }
       const key = form.dataset.idempotencyKey || (globalThis.crypto?.randomUUID?.() || (String(Date.now()) + Math.random()));
       form.dataset.idempotencyKey = key;
@@ -273,6 +317,34 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
           fieldError(form, body.details?.field_id, body.error || L("保存失败"));
           if (status) { status.hidden = false; status.textContent = body.error || L("保存失败"); }
           return;
+        }
+        if (kind === "type" && form.querySelector('[name="add_requirement"]')?.checked) {
+          const extraData = new FormData(form);
+          const extraStatement = String(extraData.get("requirement_statement") || "").trim();
+          if (!extraStatement) {
+            if (status) { status.hidden = false; status.textContent = L("类型已登记，但完成要求没有写上。"); }
+            return;
+          }
+          const extraKey = key + ":req";
+          const extraRes = await fetch(route("/api/goals/" + encodeURIComponent(currentGoal) + "/event-agree"), {
+            method: "POST", headers: { ...jsonHeaders(), "x-goalboard-idempotency-key": extraKey },
+            body: JSON.stringify({
+              expected_config_version: Number(body.config?.version ?? form.dataset.configVersion ?? 0),
+              expected_agreement_version: Number(form.dataset.agreementVersion || article.dataset.agreementVersion || 0),
+              new_requirements: [{
+                requirement_id: String(extraData.get("new_requirement_id") || "").trim(),
+                statement: extraStatement,
+                bound_type_id: String(extraData.get("type_id") || "").trim() || undefined,
+              }],
+              idempotency_key: extraKey,
+            }),
+          });
+          const extraBody = await extraRes.json().catch(() => ({}));
+          if (!extraRes.ok) {
+            fieldError(form, extraBody.details?.field_id, extraBody.error || L("保存失败"));
+            if (status) { status.hidden = false; status.textContent = extraBody.error || L("类型已登记，但完成要求没有写上。"); }
+            return;
+          }
         }
         form.dataset.writeReceipt = body.event_id || "recorded";
         if (body.unmet_reasons?.length && body.completion_applied === false && status) {
@@ -377,6 +449,7 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
           if (config) config.value = String(state.config?.version ?? 0);
           if (agreement) agreement.value = String(state.agreement?.version ?? 0);
           form.dataset.configVersion = String(state.config?.version ?? 0);
+          form.dataset.agreementVersion = String(state.agreement?.version ?? 0);
           delete form.dataset.idempotencyKey;
           const box = article.querySelector("[data-event-conflict]");
           if (box) {

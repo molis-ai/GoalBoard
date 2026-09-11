@@ -4,8 +4,6 @@ export { decisionTypeCounts } from "@adeptify/goalboard-plugin-goals";
 
 export { buildDecisionGroups, pendingDecisionCount, decisionGroupCount, goalTreeProposalNeedsDecision, createGoalsDecisionResults, type GoalsDecisionGroup, type GoalsDecisionEvent } from "@adeptify/goalboard-plugin-goals";
 
-export { candidateOwnerGoalId, resolvedProposalGoalId } from "@adeptify/goalboard-plugin-goals";
-
 export { allGoalViews, findGoalView } from "@adeptify/goalboard-plugin-goals";
 
 export { createWorkbenchGoalsPageRenderer } from "./goals-page-renderer.js";
@@ -26,7 +24,7 @@ export { PROJECT_OPERATIONS_STYLES, PROJECT_OPERATIONS_CLIENT_SCRIPT } from "@ad
 
 export type { ProjectOperationsProject, ProjectOperationsData, ProjectOperationsSlice, ProjectSessionRecord, ProjectWorkspaceRecord } from "@adeptify/goalboard-plugin-work";
 
-export { createGoalActionPresenter, createGoalStateExplainer, goalPresentationState, GOAL_DISPLAY_STATUSES, type GoalPresentationState } from "@adeptify/goalboard-plugin-goals";
+export { createGoalActionPresenter, createGoalStateExplainer, GOAL_DISPLAY_STATUSES, type GoalPresentationState } from "@adeptify/goalboard-plugin-goals";
 
 export { PLANNING_SETTINGS_STYLES, type GoalsPlanningPrimitives } from "@adeptify/goalboard-plugin-goals";
 
@@ -47,7 +45,7 @@ export { visibleGoalStatus, partOfChildViews, activeOutgoingDependsOn, goalWorkS
 
 export { GOALS_RELATION_LABELS } from "@adeptify/goalboard-plugin-goals";
 
-export { goalRiskStateEffect, goalRiskHasUserAction, RISK_STATE_LABELS, RISK_TREATMENT_LABELS, GOAL_TREE_STATUS_ORDER, sortGoalTreeItems, type GoalsSafetyRisk } from "@adeptify/goalboard-plugin-goals";
+export { goalRiskStateEffect, RISK_STATE_LABELS, RISK_TREATMENT_LABELS, GOAL_TREE_STATUS_ORDER, sortGoalTreeItems, type GoalsSafetyRisk } from "@adeptify/goalboard-plugin-goals";
 
 export { mergeGoalPolicyFormValues, type GoalsPolicyBinding, type GoalsPolicyItem } from "@adeptify/goalboard-plugin-goals";
 
@@ -77,7 +75,7 @@ export { EN } from "./i18n/en.js";
 export {
   EXECUTION_EVIDENCE_KIND_LABELS,
   EXECUTION_EVIDENCE_RESULT_LABELS,
-} from "./execution-validation-ui.js";
+} from "./human-review-renderer.js";
 
 
 export const packageDescriptor = {
@@ -93,7 +91,6 @@ export const packageDescriptor = {
     "workbench.ui-slots.v1",
     "workbench.feed-composition.v1",
     "workbench.goals-command-adapter.v1",
-    "workbench.execution-validation-adapter.v1",
     "workbench.work-composition.v1", "workbench.goals-policy-composition.v1", "workbench.goals-safety-composition.v1", "workbench.goals-relation-composition.v1", "workbench.goals-tree-composition.v1", "workbench.goals-momentum-composition.v1", "workbench.goals-document-composition.v1", "workbench.goals-context-composition.v1", "workbench.goals-planning-composition.v1", "workbench.goals-status-composition.v1", "workbench.goals-factors-composition.v1", "workbench.goals-dialogs-composition.v1", "workbench.goals-document-routes.v1",
   ],
 } as const;

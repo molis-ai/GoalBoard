@@ -141,13 +141,13 @@ function renderTreeStatusFilter(items: readonly GoalsTreeItem[]): string {
     const status = visibleGoalStatus(item);
     counts.set(status, (counts.get(status) ?? 0) + 1);
   }
-  const options = [...GOAL_DISPLAY_STATUSES, "replaced", "archived", "trashed"]
+  const options = [...GOAL_DISPLAY_STATUSES, "archived", "trashed"]
     .filter((status): status is GoalVisibleStatus => (counts.get(status as GoalVisibleStatus) ?? 0) > 0);
   return `<section class="tree-filter" id="tree-status-filter" data-tree-filter hidden aria-label="${L("按状态筛选")}">
     <header><strong>${L("按状态筛选")}</strong><button type="button" data-clear-status-filter disabled>${L("清除")}</button></header>
     <p>${L("可同时选择多个状态；会与关键词搜索一起生效。")}</p>
     <div class="tree-filter-options" role="group" aria-label="${L("Goal 状态")}">
-      ${options.length ? options.map((status) => `<label class="tree-filter-option"><input type="checkbox" value="${status}" data-status-filter><span>${status === "replaced" || status === "archived" || status === "trashed" ? renderStatus(status) : renderActionStatus(status)}</span><small>${counts.get(status)}</small></label>`).join("") : `<p class="empty-row">${L("当前没有可筛选的 Goal。")}</p>`}
+      ${options.length ? options.map((status) => `<label class="tree-filter-option"><input type="checkbox" value="${status}" data-status-filter><span>${status === "archived" || status === "trashed" ? renderStatus(status) : renderActionStatus(status)}</span><small>${counts.get(status)}</small></label>`).join("") : `<p class="empty-row">${L("当前没有可筛选的 Goal。")}</p>`}
     </div>
     <p class="tree-filter-summary" data-tree-filter-summary aria-live="polite">${L("显示全部状态")}</p>
   </section>`;

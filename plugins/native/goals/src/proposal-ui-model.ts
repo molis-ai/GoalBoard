@@ -1,11 +1,13 @@
-import type { GoalDecompositionValidationContext } from "@adeptify/goalboard-module-goals";
 import type { GoalsDecisionPresentationPrimitives } from "./decision-common-ui.js";
 
 export interface GoalsProposalView {
   goals: Array<{ goal: { goal_id: string; title: string } }>;
   archived_goals: Array<{ goal: { goal_id: string; title: string } }>;
   events: Array<{ object_id: string; type: string; at: string }>;
-  snapshot: GoalDecompositionValidationContext;
+  snapshot?: {
+    goals?: ReadonlyArray<{ goal_id: string }>;
+    relations?: ReadonlyArray<{ from_goal_id?: string; to_goal_id?: string; type?: string; state?: string }>;
+  };
 }
 export interface GoalsProposalUiPrimitives extends GoalsDecisionPresentationPrimitives {
   icon(name: "tree" | "chevron-down" | "blocked" | "check"): string;

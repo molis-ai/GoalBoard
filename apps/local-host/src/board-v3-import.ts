@@ -14,5 +14,6 @@ export function importV3Board(
     query: store.goalsQuery,
     initializeBoard: input => coordinator.initializeBoard(input),
     commands: coordinator.goals.commands,
+    adoptOwner: input => coordinator.goalEvents.adoptOwner(input),
   }, legacy, input);
 }

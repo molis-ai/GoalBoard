@@ -39,10 +39,9 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
-      "governance.review-obligations.v1",
-      "governance.reviews.v1",
       "governance.proposals.v1",
-      "governance.decisions.v1"
+      "governance.decisions.v1",
+      "governance.event-decisions.v1"
     ]
   }
 }

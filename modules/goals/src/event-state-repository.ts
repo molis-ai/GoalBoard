@@ -1,4 +1,5 @@
 import type {
+  GoalEventAgreementChange,
   GoalEventAgreementView,
   GoalEventAppliedDecisionView,
   GoalEventClosureView,
@@ -7,7 +8,9 @@ import type {
   GoalEventDecisionCommitment,
   GoalEventDecisionEffect,
   GoalEventDecisionOption,
+  GoalEventDecisionPurpose,
   GoalEventDecisionRequestView,
+  GoalEventImportedCompletion,
   GoalEventProgressSummaryView,
   GoalEventScope,
   GoalEventStateOwnerView,
@@ -57,7 +60,7 @@ export class GoalEventStateRepository {
     boardId: string;
     goalId: string;
     actorId: string;
-    source: "intent" | "configuration" | "continue";
+    source: "intent" | "configuration" | "continue" | "migration";
     at: string;
   }): void {
     this.db.prepare(`
@@ -229,15 +232,21 @@ export class GoalEventStateRepository {
     question: string;
     options: GoalEventDecisionOption[];
     scope: GoalEventScope;
+    purpose: GoalEventDecisionPurpose;
+    proposedChange: GoalEventAgreementChange | null;
+    commitment: GoalEventDecisionCommitment | null;
     at: string;
   }): void {
     this.db.prepare(`
       INSERT INTO goal_event_decision_requests (
-        request_id, board_id, goal_id, event_id, question, options_json, scope_json, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        request_id, board_id, goal_id, event_id, question, options_json, scope_json,
+        purpose, proposed_change_json, commitment_json, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
     `).run(
       input.requestId, input.boardId, input.goalId, input.eventId, input.question,
-      sqliteJson(input.options), sqliteJson(input.scope), input.at,
+      sqliteJson(input.options), sqliteJson(input.scope), input.purpose,
+      input.proposedChange == null ? null : sqliteJson(input.proposedChange),
+      input.commitment == null ? null : sqliteJson(input.commitment), input.at,
     );
   }
 
@@ -273,6 +282,7 @@ export class GoalEventStateRepository {
     effects: GoalEventDecisionEffect[];
     scope: GoalEventScope;
     commitment: GoalEventDecisionCommitment;
+    authorizedChange: GoalEventAgreementChange | null;
     configVersion: number | null;
     agreementVersion: number | null;
     actorId: string;
@@ -283,12 +293,13 @@ export class GoalEventStateRepository {
       INSERT INTO goal_event_applied_decisions (
         decision_id, board_id, goal_id, governance_decision_id, request_id, event_id,
         selected_option_id, conclusion, accepts_requirements, effects_json, scope_json,
-        commitment_json, config_version, agreement_version, actor_id, authority_source, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        commitment_json, authorized_change_json, config_version, agreement_version, actor_id, authority_source, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.decisionId, input.boardId, input.goalId, input.governanceDecisionId, input.requestId,
       input.eventId, input.selectedOptionId, input.conclusion, input.acceptsRequirements ? 1 : 0,
       sqliteJson(input.effects), sqliteJson(input.scope), sqliteJson(input.commitment),
+      input.authorizedChange == null ? null : sqliteJson(input.authorizedChange),
       input.configVersion, input.agreementVersion, input.actorId, input.authoritySource, input.at,
     );
   }
@@ -392,6 +403,31 @@ export class GoalEventStateRepository {
     );
   }
 
+  latestImportedCompletion(boardId: string, goalId: string): GoalEventImportedCompletion | null {
+    const row = this.db.prepare(`
+      SELECT payload_json, received_at FROM goal_work_events
+      WHERE board_id = ? AND goal_id = ? AND kind = 'system'
+        AND payload_json LIKE '%"legacy_completion_imported"%'
+      ORDER BY journal_seq DESC LIMIT 1
+    `).get(boardId, goalId) as Row | undefined;
+    if (!row) return null;
+    const payload = rowJson<Record<string, unknown>>(row.payload_json, {});
+    return {
+      source: "legacy_fulfillment",
+      imported_at: rowText(row.received_at),
+      label: "迁入的历史完成",
+      historical: {
+        journal_type: payload.journal_type == null ? null : String(payload.journal_type),
+        journal_seq: payload.journal_seq == null ? null : Number(payload.journal_seq),
+        journal_at: payload.journal_at == null ? null : String(payload.journal_at),
+        evidence_ids: Array.isArray(payload.evidence_ids) ? payload.evidence_ids.map(String) : [],
+        review_ids: Array.isArray(payload.review_ids) ? payload.review_ids.map(String) : [],
+        contract_accepted_at: payload.contract_accepted_at == null ? null : String(payload.contract_accepted_at),
+        contract_accepted_by: payload.contract_accepted_by == null ? null : String(payload.contract_accepted_by),
+      },
+    };
+  }
+
   latestClosure(boardId: string, goalId: string): GoalEventClosureView | null {
     const row = this.db.prepare(`
       SELECT c.* FROM goal_event_closures c
@@ -481,6 +517,9 @@ function mapDecisionRequest(row: Row): GoalEventDecisionRequestView {
     question: rowText(row.question),
     options: rowJson(row.options_json, []),
     scope: rowJson(row.scope_json, EMPTY_SCOPE),
+    purpose: (row.purpose == null ? "suggestion" : rowText(row.purpose)) as GoalEventDecisionPurpose,
+    proposed_change: row.proposed_change_json == null ? null : rowJson<GoalEventAgreementChange | null>(row.proposed_change_json, null),
+    commitment: row.commitment_json == null ? null : rowJson<GoalEventDecisionCommitment>(row.commitment_json, { outcome: "", requirements: [] }),
     status: rowText(row.status) as GoalEventDecisionRequestView["status"],
     created_at: rowText(row.created_at),
   };
@@ -497,6 +536,7 @@ function mapAppliedDecision(row: Row): GoalEventAppliedDecisionView {
     effects: rowJson<GoalEventDecisionEffect[]>(row.effects_json, []),
     scope: rowJson(row.scope_json, EMPTY_SCOPE),
     commitment: rowJson<GoalEventDecisionCommitment>(row.commitment_json, { outcome: "", requirements: [] }),
+    authorized_change: row.authorized_change_json == null ? null : rowJson<GoalEventAgreementChange | null>(row.authorized_change_json, null),
     config_version: row.config_version == null ? null : Number(row.config_version),
     agreement_version: row.agreement_version == null ? null : Number(row.agreement_version),
     actor_id: rowText(row.actor_id),
@@ -515,7 +555,7 @@ function mapClosure(row: Row): GoalEventClosureView {
     recorded: true,
     completion_applied: Number(row.completion_applied) === 1,
     expected_config_version: Number(row.expected_config_version),
-    expected_agreement_version: row.expected_agreement_version == null ? null : Number(row.expected_agreement_version),
+    expected_agreement_version: Number(row.expected_agreement_version ?? 0),
     config_version: row.config_version == null ? null : Number(row.config_version),
     agreement_version: row.agreement_version == null ? null : Number(row.agreement_version),
     unmet_reasons: rowJson(row.unmet_reasons_json, []),

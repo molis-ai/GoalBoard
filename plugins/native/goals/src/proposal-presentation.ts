@@ -1,6 +1,5 @@
 import type { GoalTreeProposalRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { RiskRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import { PRODUCT_PATH_AREA_LABELS, readDecompositionReview, readLeafReadiness, TASK_CONTEXT_LABELS, type ProductPathArea } from "@adeptify/goalboard-module-goals";
 import { goalTreeRiskDescription } from "./proposal-item-validation.js";
 import { GOALS_RELATION_LABELS as RELATION_LABELS } from "./relation-presentation.js";
 import { RISK_TREATMENT_LABELS } from "./risk-presentation.js";
@@ -54,63 +53,14 @@ function goalTreeProposalItemCopy(
     const goal = goalTreeGoalPayload(payload);
     const title = String(goal.title ?? proposedGoalName(goal.goal_id, view));
     const outcome = String(goal.outcome ?? "").trim();
-    const review = readDecompositionReview(goal.decomposition_review);
-    const readiness = readLeafReadiness(goal.leaf_readiness);
-    const readinessFacts = readiness == null
-      ? []
-      : [
-          readiness.verdict === "ready"
-            ? L("为什么可以直接执行：只交付并验收「{deliverable}」。", {
-                deliverable: readiness.primary_deliverable || L("尚未写明主要结果"),
-              })
-            : L("这条 Goal 仍需继续拆分，不能直接开始。"),
-          ...readiness.output_coverage.map((entry) => entry.role === "primary"
-            ? L("主要结果：{output}。{reason}", { output: entry.promised_output, reason: entry.reason })
-            : entry.role === "supporting"
-              ? L("配套产物：{output}。{reason}", { output: entry.promised_output, reason: entry.reason })
-              : L("需要另拆：{output}。{reason}", { output: entry.promised_output, reason: entry.reason })),
-          ...readiness.split_candidates
-            .filter((candidate) => candidate.decision === "keep")
-            .map((candidate) => L("保留在当前 Goal：{work}。{reason}", {
-              work: candidate.work_item,
-              reason: candidate.reason,
-            })),
-        ];
-    const reviewFacts = review == null
-      ? []
-      : [
-          ...((review.method_pack_ids ?? []).length
-            ? [L("规划方法：{methods}", { methods: review.method_pack_ids!.join("、") })]
-            : []),
-          ...(review.task_context == null
-            ? []
-            : [L("任务类型：{context}", { context: L(TASK_CONTEXT_LABELS[review.task_context]) })]),
-          review.status === "complete"
-            ? L("拆解判断：通用结果链和当前任务的必要路径已交代完整")
-            : L("拆解判断：这轮先暂停，后面还要继续拆"),
-          ...review.coverage.map((entry) => {
-            const area = L(PRODUCT_PATH_AREA_LABELS[entry.area as ProductPathArea] ?? entry.area);
-            if (entry.disposition === "not_applicable") {
-              return L("{area}：不适用。{reason}", { area, reason: entry.reason });
-            }
-            const owners = entry.goal_ids
-              .map((goalId) => proposedGoalName(goalId, view, proposal))
-              .map((name) => `「${name}」`)
-              .join("、");
-            return L("{area}：由 {owners} 负责。{reason}", {
-              area,
-              owners: owners || L("尚未指定 Goal"),
-              reason: entry.reason,
-            });
-          }),
-          ...(review.status === "paused"
-            ? [L("下一步：{nextStep}", { nextStep: review.next_step || L("尚未写明") })]
-            : []),
-        ];
+    const why = String(goal.why ?? "").trim();
     return {
       title: L("{operation} Goal「{title}」", { operation, title }),
       detail: outcome || item.reason,
-      facts: [...readinessFacts, ...reviewFacts],
+      facts: [
+        ...(why ? [L("为什么：{why}", { why })] : []),
+        ...(outcome ? [L("要达成：{outcome}", { outcome })] : []),
+      ],
     };
   }
   if (item.kind === "relation" || item.kind === "dependency") {

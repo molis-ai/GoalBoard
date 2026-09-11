@@ -8,30 +8,14 @@ type RuntimeSessionLifecycle = {
 
 function runtimeSessionLifecycleEvent(name: string): RuntimeSessionLifecycle | null {
   switch (name) {
-    case "goalboard_v1_select_goal":
-      return { actorId: "goalboard:select-goal", kind: "status", label: "选择 Goal" };
-    case "goalboard_v1_run_start":
-      return { actorId: "goalboard:run-start", kind: "status", label: "开始执行" };
-    case "goalboard_v1_run_report":
-      return { actorId: "goalboard:run-report", kind: "status", label: "更新执行状态" };
-    case "goalboard_v1_evidence_submit":
-      return { actorId: "goalboard:evidence", kind: "artifact", label: "提交 Evidence" };
-    case "goalboard_v1_review_submit":
-      return { actorId: "goalboard:review", kind: "approval", label: "提交 Review" };
-    case "goalboard_v1_complete":
-      return { actorId: "goalboard:complete", kind: "status", label: "评估 Goal 完成状态" };
-    case "goalboard_v1_revalidate":
-      return { actorId: "goalboard:revalidate", kind: "status", label: "重新验证 Goal" };
-    case "goalboard_v1_rework_request":
-      return { actorId: "goalboard:rework", kind: "status", label: "请求返工" };
-    case "goalboard_v1_release":
-      return { actorId: "goalboard:claim-release", kind: "status", label: "释放 Goal" };
     case "goalboard_v1_goal_intent_create":
       return { actorId: "goalboard:goal-intent", kind: "status", label: "保存 Goal 意图" };
     case "goalboard_v1_event_configure":
       return { actorId: "goalboard:event-configure", kind: "status", label: "登记 Goal 事件配置" };
     case "goalboard_v1_event_report":
       return { actorId: "goalboard:event-report", kind: "status", label: "上报 Goal 工作事实" };
+    case "goalboard_v1_event_note":
+      return { actorId: "goalboard:event-note", kind: "status", label: "记录 Goal 笔记" };
     case "goalboard_v1_event_progress":
       return { actorId: "goalboard:event-progress", kind: "status", label: "记录 Goal 进展摘要" };
     case "goalboard_v1_event_concern":
@@ -45,7 +29,7 @@ function runtimeSessionLifecycleEvent(name: string): RuntimeSessionLifecycle | n
     case "goalboard_v1_event_close":
       return { actorId: "goalboard:event-close", kind: "status", label: "提交 Goal 收尾" };
     case "goalboard_v1_event_resume":
-      return { actorId: "goalboard:event-resume", kind: "status", label: "继续已取消的 Goal" };
+      return { actorId: "goalboard:event-resume", kind: "status", label: "继续 Goal" };
     default:
       return null;
   }
@@ -99,7 +83,7 @@ function lifecycleGoalId(
 }
 
 function lifecycleResultId(result: Record<string, unknown>): string | null {
-  for (const key of ["run_id", "claim_id", "evidence_id", "review_id"]) {
+  for (const key of ["event_id", "run_id", "claim_id", "evidence_id", "review_id"]) {
     const value = findLifecycleText(result, key);
     if (value) return value;
   }
@@ -124,7 +108,6 @@ export function mcpRuntimeSessionActivity(name: string, arguments_: Record<strin
   if (!lifecycle) return null;
   let result: Record<string, unknown>;
   try { result = JSON.parse(response) as Record<string, unknown>; } catch { return null; }
-  if (name === "goalboard_v1_select_goal" && result.allowed !== true) return null;
   const goalId = lifecycleGoalId(arguments_, result);
   if (!goalId) return null;
   const payload = asRecord(arguments_.payload);

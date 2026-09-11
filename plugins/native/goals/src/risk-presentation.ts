@@ -1,5 +1,4 @@
 import type { RiskRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import type { GoalsSafetyView } from "./safety-ui-model.js";
 
 export const RISK_STATE_LABELS: Record<RiskRecord["state"], string> = {
   open: "待处理",
@@ -28,25 +27,17 @@ export function goalRiskStateEffect(
   blockingMode: RiskRecord["blocking_mode"],
   state: RiskRecord["state"],
 ): string {
-  const active = state === "open" || state === "triggered";
-  if (!active) {
-    return blockingMode === "invalidate_on_trigger"
-      ? L("当前不再使 Goal 失效；若此前触发，关联 Goal 必须重新验证。")
-      : L("当前状态不再施加领取或完成门禁。");
-  }
-  if (blockingMode === "claim") return L("当前会阻止新的执行工具领取所有关联 Goal。");
-  if (blockingMode === "completion") return L("当前会阻止所有关联 Goal 被标记为完成。");
-  if (blockingMode === "invalidate_on_trigger") {
-    return state === "triggered"
-      ? L("风险已发生，所有关联 Goal 立即失效。")
-      : L("风险仍待处理；一旦标记为已经发生，所有关联 Goal 会失效。");
-  }
-  return L("这是一条持续观察的事实，不直接阻塞领取或完成。");
-}
-
-
-/** Consume returned user actions; never reconstruct decision eligibility. */
-export function goalRiskHasUserAction(risk: RiskRecord, view: GoalsSafetyView): boolean {
-  return [...view.goals, ...view.archived_goals].some(item => item.action_projection.actions.some(action =>
-    action.actor === "user" && action.target_type === "risk" && action.target_id === risk.risk_id));
+  const recorded = blockingMode === "claim"
+    ? L("当时记录为阻止领取")
+    : blockingMode === "completion"
+      ? L("当时记录为阻止完成")
+      : blockingMode === "invalidate_on_trigger"
+        ? state === "triggered"
+          ? L("当时记录为触发后使 Goal 失效，且已标记为已发生")
+          : L("当时记录为触发后使 Goal 失效")
+        : L("当时记录为持续观察，不直接阻塞领取或完成");
+  const status = state === "open" || state === "triggered"
+    ? L("历史状态仍为开放或已发生")
+    : L("历史状态已结束");
+  return `${status}；${recorded}。${L("这是历史事实。当前可以记录事实、查看要求，或阅读原始历史。")}`;
 }

@@ -6,6 +6,7 @@ import { seedDemoBoard, DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../../apps/desktop/launchers/web/server.js";
+import { insertHistoricalEvidence } from "../historical-sql-fixture.js";
 
 const directory = mkdtempSync(join(tmpdir(), "goalboard-ar3-browser-"));
 const databasePath = join(directory, "fixture.db");
@@ -21,10 +22,17 @@ coordinator.goals.commands.createGoal(DEMO_BOARD_ID, {
     pass_condition: "读到原始中文内容", required_evidence: ["artifact"] }],
 }, { actor_id: "fixture-user", idempotency_key: "fixture-goal" });
 for (const [key, locator] of [["file", "project://result.txt"], ["opaque", "artifact://opaque-reference-ar3"], ["external", "https://example.com/report"]]) {
-  coordinator.executionValidation.commands.submitEvidence({
-    board_id: DEMO_BOARD_ID, goal_id: "AR3-REFERENCE", actor_id: "fixture-user", criterion_ids: ["AR3-REF-C1"],
-    kind: "artifact", locator, result: "inconclusive", locator_context: { project_root: directory, workspace_id: "fixture-workspace" },
-    idempotency_key: `fixture-${key}`,
+  insertHistoricalEvidence(store.db, {
+    evidence_id: `fixture-${key}`,
+    board_id: DEMO_BOARD_ID,
+    goal_id: "AR3-REFERENCE",
+    producer_actor_id: "fixture-user",
+    criterion_ids: ["AR3-REF-C1"],
+    kind: "artifact",
+    locator,
+    result: "inconclusive",
+    locator_workspace_id: "fixture-workspace",
+    locator_workspace_root: directory,
   });
 }
 for (const [artifact_id, version, title] of [

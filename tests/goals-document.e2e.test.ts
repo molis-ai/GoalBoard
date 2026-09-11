@@ -7,7 +7,7 @@ import { GOALS_DOCUMENT_CLIENT_FACTORY_SCRIPT } from "@adeptify/goalboard-plugin
 import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
-test("Goal document tabs retry lazy loading, restore selection, and open the draft editor from the primary action", { timeout: 60_000 }, async (t) => {
+test("Goal document tabs retry lazy loading, restore selection, and keep the current event document", { timeout: 60_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;

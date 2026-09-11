@@ -5,16 +5,16 @@ const GOALS_RELATION_PREVIEW_SCRIPT = `    const updateRelationPreviews = () => 
       const parentPreview = form.querySelector("[data-parent-preview]");
       if (parentPreview) {
         parentPreview.textContent = parent?.value
-          ? "关系预览：新 Goal → 属于 → 「" + (parent.dataset.goalName || parent.textContent) + "」。这是目录层级，不需要等待它完成。"
-          : "关系预览：新 Goal 将作为独立 Goal 出现在 Tree 中。";
+          ? L("关系预览：新 Goal → 属于 → 「{name}」。这是目录层级，不需要等待它完成。", { name: parent.dataset.goalName || parent.textContent })
+          : L("关系预览：新 Goal 将作为独立 Goal 出现在 Tree 中。");
       }
       const dependencies = [...form.querySelectorAll('[name="dependency_goal_ids"]:checked')];
       const dependencyPreview = form.querySelector("[data-dependency-preview]");
       if (dependencyPreview) {
         const names = dependencies.map((input) => "「" + (input.dataset.goalName || input.value) + "」");
         dependencyPreview.textContent = names.length
-          ? "关系预览：新 Goal → 依赖 → " + names.join(currentLocale() === "en" ? ", " : "、") + "；这些 Goal 完成前不能领取或完成新 Goal。"
-          : "关系预览：当前没有执行前置，Goal 可以独立推进。";
+          ? L("关系预览：新 Goal → 依赖 → {names}；这些 Goal 完成前，新 Goal 还不能收尾。普通笔记和准备仍可先做。", { names: names.join(currentLocale() === "en" ? ", " : "、") })
+          : L("关系预览：当前没有执行前置，Goal 可以独立推进。");
       }
     };
 

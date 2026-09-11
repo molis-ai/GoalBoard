@@ -1,6 +1,5 @@
 import { goalRelationTypes, type CreateGoalInput, type GoalRecord, type GoalRelationRecord, type GoalsCommandApi, type GoalsQueryApi } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalTreeProposalItemRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
-import { readDecompositionReview } from "@adeptify/goalboard-module-goals";
 
 type GoalTreeProposalItemShape = Pick<GoalTreeProposalItemRecord, "item_id" | "kind" | "operation" | "payload">;
 const GOAL_RELATION_TYPES = new Set<GoalRelationRecord["type"]>(goalRelationTypes);
@@ -189,9 +188,6 @@ export class GoalTreeInputReader {
       ...(decompositionState == null
         ? {}
         : { decomposition_state: decompositionState as CreateGoalInput["decomposition_state"] }),
-      ...(readDecompositionReview(raw.decomposition_review) == null
-        ? {}
-        : { decomposition_review: readDecompositionReview(raw.decomposition_review)! }),
       ...(typeof raw.priority === "number" ? { priority: raw.priority } : {}),
       acceptance_criteria: acceptance,
     };

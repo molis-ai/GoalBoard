@@ -3,7 +3,6 @@ export type { GoalTreeSemanticReview } from "@adeptify/goalboard-contracts/modul
 import type { GoalTreeProposalCheckResult } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 export type { GoalTreeProposalCheckResult } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { GoalTreeProposalRecord, GoalTreeProposalSubmitInput, GoalTreeProposalCheckInput, GoalTreeProposalDecideInput } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
-import type { ActionTransitionReceipt } from "./execution-validation-contract.js";
 
 export interface GoalTreeProposalListQuery {
   board_id: string;
@@ -17,9 +16,7 @@ export interface GoalTreeProposalListResult {
   proposals: GoalTreeProposalRecord[];
 }
 
-
-export type GoalTreeProposalDecisionResult = StoredGoalTreeDecisionResult<ActionTransitionReceipt>;
-
+export type GoalTreeProposalDecisionResult = StoredGoalTreeDecisionResult<never>;
 
 export interface GoalTreeApplicationApi {
   submitGoalTreeProposal(input: GoalTreeProposalSubmitInput): { proposal: GoalTreeProposalRecord; replayed: boolean; observed_event_cursor: number };

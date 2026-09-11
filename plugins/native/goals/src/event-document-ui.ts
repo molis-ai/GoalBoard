@@ -17,8 +17,9 @@ export function renderGoalEventDocument(
   const doc = context.eventDocument;
   const goal = item.goal;
   const goalId = escapeHtml(goal.goal_id);
+  const owned = isEventStateOwner(item, doc);
   const state = doc?.state;
-  const judgment = currentJudgment(state, L, doc, item);
+  const judgment = currentJudgment(state, L, doc);
   const stale = state?.progress_summary?.stale
     ? `<span class="overview-timestamp">${L("摘要尚未跟上更新")}</span>`
     : state?.progress_summary
@@ -31,9 +32,7 @@ export function renderGoalEventDocument(
         ? `<button class="document-action" type="button" data-goal-archive="true" data-goal-id="${goalId}">${icon("archive")}<span>${L("归档 Goal")}</span></button>`
         : context.activeGoalId === goal.goal_id
           ? `<span class="document-action document-action--current" role="status">${icon("target")}<span>${L("当前 Goal")}</span></span>`
-          : goal.definition_state === "accepted"
-            ? `<button class="document-action document-action--quiet" type="button" data-set-active-goal data-goal-id="${goalId}">${icon("target")}<span>${L("设为当前 Goal")}</span></button>`
-            : ""}
+          : `<button class="document-action document-action--quiet" type="button" data-set-active-goal data-goal-id="${goalId}">${icon("target")}<span>${L("设为当前 Goal")}</span></button>`}
     ${goal.archived_at ? "" : `<button class="document-action document-action--danger" type="button" data-open-goal-trash data-goal-id="${goalId}" data-goal-title="${escapeHtml(goal.title)}">${icon("archive")}<span>${L("移入回收站")}</span></button>`}
   </div></details>`;
   const modeSwitch = !goal.archived_at && !goal.trashed_at
@@ -58,11 +57,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <div class="header-actions">${modeSwitch}
           <button type="button" class="button secondary" data-event-reader="planning">${L("工作规划")}</button>
           <button type="button" class="button secondary" data-event-reader="description">${L("目标说明")}</button>
-          ${legacyDraftEditorAvailable(item, doc)
-            ? `<button type="button" class="button secondary" data-open-goal-edit>${L("修改草稿")}</button>`
-            : ""}
-          <button type="button" class="button" data-event-form-open="note">${L("补充一条")}</button>
-          ${doc?.transfer.kind === "resume_cancelled" || doc?.transfer.kind === "reopen_event_completed"
+          ${owned ? `<button type="button" class="button" data-event-form-open="note">${L("补充一条")}</button>` : ""}
+          ${owned && (doc?.transfer.kind === "resume_cancelled" || doc?.transfer.kind === "reopen_event_completed")
             ? `<button type="button" class="button primary" data-event-form-open="resume">${doc.transfer.kind === "resume_cancelled" ? L("显式继续") : L("继续此目标")}</button>` : ""}
           ${moreActions}
         </div>
@@ -108,44 +104,43 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <section class="reader" data-event-reader-root hidden>
           <header class="reader-header"><button type="button" class="text-button" data-event-back>${L("返回所选事件")}</button><h2 data-reader-title></h2></header>
           <div class="reader-content" data-reader-content>
-            ${doc ? forms.renderPlanning(doc) : ""}
+            ${doc ? forms.renderPlanning(doc, owned) : ""}
             ${renderDescription(doc, item, context, L, escapeHtml)}
-            ${renderRequirements(doc, item, context, L, escapeHtml)}
+            ${renderRequirements(doc, item, context, L, escapeHtml, owned)}
           </div>
         </section>
-        ${doc ? forms.renderTypeForm(doc) : ""}
-        ${doc ? forms.renderTypeEditForms(doc) : ""}
-        ${doc ? doc.types.map((type) => forms.renderReportForm(doc, type)).join("") : ""}
-        ${doc ? forms.renderRequirementForm(doc) : ""}
-        ${doc ? forms.renderAdoptForm(doc) : ""}
-        ${state ? forms.renderAgreementForm(state) : ""}
-        ${state ? forms.renderProgressForm(state) : ""}
-        ${state ? forms.renderConcernForm(state) : ""}
-        ${state ? forms.renderDecisionForm(state) : ""}
-        ${state ? forms.renderClosureForm(state) : ""}
-        ${doc ? forms.renderResumeForm(doc) : ""}
-        ${doc ? forms.renderContinueForm(doc) : ""}
-        ${forms.renderNoteForm()}
+        ${owned && doc ? forms.renderTypeForm(doc) : ""}
+        ${owned && doc ? forms.renderTypeEditForms(doc) : ""}
+        ${owned && doc ? doc.types.map((type) => forms.renderReportForm(doc, type)).join("") : ""}
+        ${owned && doc ? forms.renderRequirementForm(doc) : ""}
+        ${owned && doc ? forms.renderAdoptForm(doc) : ""}
+        ${owned && state ? forms.renderAgreementForm(state) : ""}
+        ${owned && state ? forms.renderProgressForm(state) : ""}
+        ${owned && state ? forms.renderConcernForm(state) : ""}
+        ${owned && state ? forms.renderDecisionForm(state) : ""}
+        ${owned && state ? forms.renderClosureForm(state) : ""}
+        ${owned && doc ? forms.renderResumeForm(doc) : ""}
+        ${owned ? forms.renderNoteForm() : ""}
         <p class="event-conflict" data-event-conflict hidden></p>
       </section>
     </div>
   </article>`;
 }
 
-function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocumentUiPrimitives["translate"], doc?: GoalEventDocumentView | null, item?: GoalsDocumentItem) {
+function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocumentUiPrimitives["translate"], doc?: GoalEventDocumentView | null) {
   if (!state) {
     return { title: L("正在读取当前事实"), pill: L("载入中"), tone: "", lead: L("顶部始终显示当前状态，不会因为点开历史而退回。"), done: L("尚未载入。"), next: L("载入后显示下一步。"), owner: "", risk: L("载入后显示风险。") };
   }
   if (!state.owner) {
     return {
       title: L("仍按原来源阅读"),
-      pill: state.current_agreement.fulfillment_state === "satisfied" ? L("已完成") : L("未转交"),
-      tone: state.current_agreement.fulfillment_state === "satisfied" ? "green" : "amber",
-      lead: L("可以阅读全部历史。使用新版事件写入前需要明确转交到事件记录。"),
+      pill: state.completion_effect ? L("已完成") : L("可阅读"),
+      tone: state.completion_effect ? "green" : "amber",
+      lead: L("可以阅读全部历史。"),
       done: state.latest_reports[0]?.title || L("原结果和材料按原来源展示。"),
-      next: item?.main_action_label || item?.action_summary || L("明确继续后，普通新写入才进入事件服务。"),
+      next: L("阅读原来的说明、要求和历史。这里不能写入。"),
       owner: "",
-      risk: state.gaps.map((item) => item.statement).join("；") || L("读取不会改变归属。"),
+      risk: state.gaps.map((gap) => gap.statement).join("；") || L("读取不会改变归属。"),
     };
   }
   if (state.work_status === "completed") {
@@ -153,7 +148,7 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
       title: L("已有完成结论"),
       pill: L("已完成"),
       tone: "green",
-      lead: state.closure?.result || state.agreement.outcome || L("完成结论来自显式收尾，不是记录数。"),
+      lead: state.imported_completion?.label || state.closure?.result || state.agreement.outcome || L("完成结论来自显式收尾，不是记录数。"),
       done: state.closure?.result || L("见完成事件。"),
       next: L("如需新一轮工作，使用继续此目标。"),
       owner: "",
@@ -231,10 +226,6 @@ function isEventStateOwner(item: GoalsDocumentItem, doc: GoalEventDocumentView |
   return Boolean(doc?.state.owner) || item.event_work === true;
 }
 
-function legacyDraftEditorAvailable(item: GoalsDocumentItem, doc: GoalEventDocumentView | null | undefined): boolean {
-  return item.goal.definition_state === "draft" && !isEventStateOwner(item, doc);
-}
-
 function originalDefinitionLine(
   label: string,
   values: readonly string[] | undefined,
@@ -266,8 +257,6 @@ function renderDescription(
     ${originalDefinitionLine("需要的输入", d?.required_inputs ?? item.goal.required_inputs, L, escapeHtml)}
     ${originalDefinitionLine("承诺的输出", d?.promised_outputs ?? item.goal.promised_outputs, L, escapeHtml)}
     ${context.coverageHtml}
-    ${context.draftGapsHtml}
-    ${context.draftEditorHtml}
     ${context.relatedWorkHtml}
   </div>`;
 }
@@ -303,6 +292,7 @@ function renderRequirements(
   context: GoalsDocumentContext,
   L: GoalsDocumentUiPrimitives["translate"],
   escapeHtml: GoalsDocumentUiPrimitives["escapeHtml"],
+  owned = false,
 ): string {
   const rows = doc?.state.requirements ?? [];
   const original = item.goal.acceptance_criteria ?? [];
@@ -314,7 +304,8 @@ function renderRequirements(
         : requirement.current_report
           ? `${L("报告者")} ${escapeHtml(requirement.current_report.actor_id)} · ${L("未独立核对")}`
           : requirement.human_decision_required ? L("需要用户验收") : "";
-      return `<li><button type="button" class="text-button" data-locate-event="${escapeHtml(requirement.current_report?.event_id ?? "")}" data-bound-type="${escapeHtml(requirement.bound_type_ids[0] ?? "")}">${escapeHtml(requirement.statement)}</button><small>${requirement.currently_satisfied ? L("当前满足") : L("尚未满足")}${source ? ` · ${source}` : ""}</small></li>`;
+      const boundType = owned ? escapeHtml(requirement.bound_type_ids[0] ?? "") : "";
+      return `<li><button type="button" class="text-button" data-locate-event="${escapeHtml(requirement.current_report?.event_id ?? "")}"${boundType ? ` data-bound-type="${boundType}"` : ""}>${escapeHtml(requirement.statement)}</button><small>${requirement.currently_satisfied ? L("当前满足") : L("尚未满足")}${source ? ` · ${source}` : ""}</small></li>`;
     }).join("")}</ul>` : `<p>${L("还没有完成要求。")}</p>`}
     ${renderOriginalCriteria(original, L, escapeHtml)}
     ${context.artifactHtml}

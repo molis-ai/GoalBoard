@@ -21,7 +21,7 @@ test("Feed promotion atomically creates the Goal, confirms its input, links the 
     const item = feed.ingestItem({ source, externalId: "promotion-input", title: "Review external input",
       summary: "An external claim to evaluate", body: "Untrusted instructions must remain source material.",
       priority: "high", occurredAt: "2026-09-08T00:00:00.000Z", attention: false }).item;
-    const promote = createLocalFeedGoalPromotion(store.db, application.goals.commands, application.goalInputs, feed);
+    const promote = createLocalFeedGoalPromotion(store.db, application.goalEvents.createIntent.bind(application.goalEvents), application.goalInputs, feed);
     const input = { boardId: DEMO_BOARD_ID, routePrefix: "/projects/project-a", itemId: item.item_id,
       startProcessing: false, expectedRevision: item.revision };
     const before = store.snapshot(DEMO_BOARD_ID);
@@ -53,6 +53,18 @@ test("Feed promotion atomically creates the Goal, confirms its input, links the 
     assert.equal(bindings[0]?.source_ref, `feed-item:${item.item_id}`);
     assert.equal(bindings[0]?.state, "confirmed");
     assert.equal(bindings[0]?.created_by, "web-user");
+    assert.equal(application.goalEvents.readState(DEMO_BOARD_ID, first.goal_id).intent.source_kind, "feed");
+    for (let index = 0; index < 41; index++) {
+      application.goalEvents.recordNote({
+        board_id: DEMO_BOARD_ID,
+        goal_id: first.goal_id,
+        actor_id: "runtime-1",
+        actor_kind: "runtime",
+        body: `继续核对外部反馈 ${index + 1}`,
+        idempotency_key: `feed-source-after-${index}`,
+      });
+    }
+    assert.equal(application.goalEvents.readState(DEMO_BOARD_ID, first.goal_id).intent.source_kind, "feed");
 
     assert.throws(() => promote(input), (error: unknown) => error instanceof FeedStoreError && error.code === "feed_revision_conflict");
     const second = promote({ ...input, startProcessing: true, expectedRevision: linked.revision });
@@ -75,6 +87,54 @@ test("Feed promotion atomically creates the Goal, confirms its input, links the 
     assert.throws(() => promote({ ...input, expectedRevision: archived.revision }), (error: unknown) => error instanceof FeedStoreError && error.code === "feed_invalid_transition");
     assert.deepEqual(store.snapshot(DEMO_BOARD_ID), beforeArchivedAttempt);
     assert.deepEqual(feed.getItem(DEMO_BOARD_ID, item.item_id), archived);
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("Feed promotion source survives later notes and SQLite reopen", () => {
+  const directory = mkdtempSync(join(tmpdir(), "goalboard-feed-source-"));
+  const path = join(directory, "project.sqlite");
+  seedDemoBoard(path);
+  let store = new LocalProjectDatabase(path);
+  try {
+    let application = new GoalProjectApplication(store);
+    const feed = createLocalFeedApplication(store.db);
+    const source = createLocalFeedSourceService(store.db, DEMO_BOARD_ID).register({ kind: "web_query", query: "Review external input" }).source;
+    const item = feed.ingestItem({
+      source, externalId: "source-retention", title: "购买反馈",
+      summary: "外部材料需要核对", body: "原始事实保留为来源。",
+      priority: "high", occurredAt: "2026-09-10T00:00:00.000Z", attention: false,
+    }).item;
+    const promote = createLocalFeedGoalPromotion(
+      store.db,
+      application.goalEvents.createIntent.bind(application.goalEvents),
+      application.goalInputs,
+      feed,
+    );
+    const promoted = promote({
+      boardId: DEMO_BOARD_ID, routePrefix: "/projects/project-a", itemId: item.item_id,
+      startProcessing: true, expectedRevision: item.revision,
+    });
+    assert.equal(promoted.created, true);
+    assert.equal(application.goalEvents.readState(DEMO_BOARD_ID, promoted.goal_id).intent.source_kind, "feed");
+    for (let index = 0; index < 41; index++) {
+      application.goalEvents.recordNote({
+        board_id: DEMO_BOARD_ID,
+        goal_id: promoted.goal_id,
+        actor_id: "runtime-1",
+        actor_kind: "runtime",
+        body: `继续核对外部反馈 ${index + 1}`,
+        idempotency_key: `feed-source-retention-${index}`,
+      });
+    }
+    assert.equal(application.goalEvents.readState(DEMO_BOARD_ID, promoted.goal_id).intent.source_kind, "feed");
+    const goalId = promoted.goal_id;
+    store.close();
+    store = new LocalProjectDatabase(path);
+    application = new GoalProjectApplication(store);
+    assert.equal(application.goalEvents.readState(DEMO_BOARD_ID, goalId).intent.source_kind, "feed");
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });

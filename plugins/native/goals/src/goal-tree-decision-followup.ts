@@ -1,14 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { goalRelationTypes, type GoalRelationRecord, type GoalsQueryApi, type GoalsPlanningApi } from "@adeptify/goalboard-contracts/modules/goals";
-import type { GovernanceApplicationApi, GoalTreeSemanticReview, GoalTreeProposalRecord, GoalTreeProposalItemRecord, GoalTreeProposalDecisionAuthority } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
+import type { GoalsQueryApi, GoalsPlanningApi } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GovernanceApplicationApi, GoalTreeSemanticReview, GoalTreeProposalRecord, GoalTreeProposalDecisionAuthority } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { NormalizedGoalTreeProposalDecision } from "./goal-tree-decision-inputs.js";
 import type { NormalizedGoalTreeProposalItem } from "./proposal-normalizer.js";
 import type { GoalTreeQueryApplication } from "./goal-tree-query.js";
 import type { GoalTreeInputReader } from "./goal-tree-inputs.js";
-const GOAL_RELATION_TYPES = new Set<GoalRelationRecord["type"]>(goalRelationTypes);
-function asText(value: unknown): string { return value == null ? "" : String(value); }
 
-/** Preserve proposal revisions and close only equivalent historical relation proposals. */
+/** Preserve proposal revisions under the original Goal Tree records. */
 export class GoalTreeDecisionFollowup {
   constructor(private readonly ports: {
     goals: { query: Pick<GoalsQueryApi, "getRelation" | "listRelations">; planning: Pick<GoalsPlanningApi, "analyzeChange"> };
@@ -69,6 +67,7 @@ export class GoalTreeDecisionFollowup {
       root_goal_id: proposal.root_goal_id,
       submitted_by: runtimeActorId ?? authority.actor_id,
       discovered_in_run_id: proposal.discovered_in_run_id,
+      submitted_session_id: proposal.submitted_session_id,
       state: "pending",
       version,
       supersedes_proposal_id: proposal.proposal_id,
@@ -107,104 +106,5 @@ export class GoalTreeDecisionFollowup {
       supersedes_item_ids: revisions.map(item => item.item_id), at,
     });
     return this.ports.query.readNative(boardId, proposalId);
-  }
-
-  private goalTreeRelationChanges(
-    boardId: string,
-    item: GoalTreeProposalItemRecord,
-  ): Array<{
-    action: "add" | "deactivate";
-    from_goal_id: string;
-    to_goal_id: string;
-    type: GoalRelationRecord["type"];
-    key: string;
-  }> {
-    const payload = this.ports.inputs.goalTreePayloadRecord(item.payload, "关系条目 payload");
-    const nested = payload.rewire && typeof payload.rewire === "object" && !Array.isArray(payload.rewire)
-      ? payload.rewire as Record<string, unknown>
-      : payload.proposal && typeof payload.proposal === "object" && !Array.isArray(payload.proposal)
-        ? payload.proposal as Record<string, unknown>
-        : payload;
-    const formalGoalId = String(nested.formal_goal_id ?? payload.formal_goal_id ?? "").trim();
-    return this.ports.inputs.goalTreeRelationEntries(item).map((raw) => {
-      const normalized = this.ports.inputs.normalizeGoalTreeRelation(item, raw);
-      const stored = normalized.relation_id
-        ? this.ports.goals.query.getRelation(boardId, normalized.relation_id)
-        : undefined;
-      const replaceFormalGoal = (value: string) => value.replace("$new_goal", formalGoalId);
-      const fromGoalId = replaceFormalGoal(normalized.from_goal_id || asText(stored?.from_goal_id));
-      const toGoalId = replaceFormalGoal(normalized.to_goal_id || asText(stored?.to_goal_id));
-      const type = (normalized.type ?? (stored ? asText(stored.type) : "")) as GoalRelationRecord["type"];
-      if (!fromGoalId || !toGoalId || !GOAL_RELATION_TYPES.has(type)) {
-        throw this.ports.errorFactory(
-          "goal_tree_proposal.relation_required",
-          "关系变更缺少可用于兼容核对的起点、终点或类型",
-        );
-      }
-      return {
-        action: normalized.action,
-        from_goal_id: fromGoalId,
-        to_goal_id: toGoalId,
-        type,
-        key: JSON.stringify([normalized.action, fromGoalId, toGoalId, type]),
-      };
-    });
-  }
-
-  reconcileEquivalentLegacyRewires(
-    boardId: string,
-    nativeProposalId: string,
-    appliedRelationItems: GoalTreeProposalItemRecord[],
-    actorId: string,
-    at: string,
-  ): void {
-    if (appliedRelationItems.length === 0) return;
-    const nativeChanges = appliedRelationItems.flatMap((item) => this.goalTreeRelationChanges(boardId, item));
-    const nativeKeys = nativeChanges.map((change) => change.key).sort();
-    if (nativeKeys.length === 0) return;
-    const snapshot = this.ports.governance.query.snapshot(boardId);
-    const activeRelationKeys = new Set(this.ports.goals.query.listRelations(boardId)
-      .filter(relation => relation.state === "active")
-      .map(relation => JSON.stringify([relation.from_goal_id, relation.to_goal_id, relation.type])));
-    const legacyViews = new Map(
-      this.ports.governance.provenance.legacyProposalView(snapshot)
-        .filter((proposal) => proposal.origin === "legacy_rewire")
-        .map((proposal) => [proposal.proposal_id, proposal]),
-    );
-    for (const rewire of snapshot.rewires) {
-      if (rewire.state !== "pending") continue;
-      if ((rewire.proposal.impacts?.length ?? 0) > 0 || (rewire.proposal.risks?.length ?? 0) > 0) continue;
-      const legacyView = legacyViews.get(`legacy-rewire:${rewire.rewire_id}`);
-      const legacyItem = legacyView?.items[0];
-      if (!legacyItem) continue;
-      const legacyChanges = this.goalTreeRelationChanges(boardId, legacyItem);
-      const legacyKeys = legacyChanges.map((change) => change.key).sort();
-      if (legacyKeys.length !== nativeKeys.length || legacyKeys.some((key, index) => key !== nativeKeys[index])) {
-        continue;
-      }
-      const canonicalStateMatches = legacyChanges.every((change) => {
-        const active = activeRelationKeys.has(JSON.stringify([change.from_goal_id, change.to_goal_id, change.type]));
-        return change.action === "add" ? active : !active;
-      });
-      if (!canonicalStateMatches) continue;
-      const impact = {
-        ...rewire.impact,
-        proposed_changes_applied: true,
-        superseded_by_goal_tree_proposal_id: nativeProposalId,
-        supersession_reason: "同一关系变更已由用户确认的 native Goal Tree Proposal 落地",
-      };
-      const updated = this.ports.governance.records.transitionRewire(
-        boardId,
-        rewire.rewire_id,
-        "applied",
-        { impact },
-        at,
-      );
-      if (!updated) continue;
-      this.ports.governance.records.recordEquivalentRewireSupersession({
-        board_id: boardId, rewire_id: rewire.rewire_id, actor_id: actorId, goal_tree_proposal_id: nativeProposalId,
-        relation_changes: legacyChanges.map(({ key: _key, ...change }) => change), at,
-      });
-    }
   }
 }

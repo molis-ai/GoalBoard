@@ -80,16 +80,10 @@ export function createCapsuleItemProjection(L: WorkbenchRendererPorts["locale"][
   }
 
   function primaryBlocker(item: WebGoalView): { message: string; remediation: string | null } {
-    const reason = item.reasons.find((candidate) => candidate.severity === "blocker") ?? item.reasons[0];
-    const run = item.active_claim == null
-      ? null
-      : item.runs.find((candidate) =>
-          candidate.claim_id === item.active_claim?.claim_id &&
-          (candidate.state === "started" || candidate.state === "blocked"),
-        ) ?? null;
+    const run = newestRun(item);
     return {
-      message: reason?.message?.trim() || run?.block_reason?.trim() || L("打开目标详情查看具体原因"),
-      remediation: reason?.remediation?.trim() || null,
+      message: run?.block_reason?.trim() || L("打开目标详情查看具体原因"),
+      remediation: null,
     };
   }
 
@@ -129,15 +123,15 @@ export function createCapsuleItemProjection(L: WorkbenchRendererPorts["locale"][
     });
   }
 
-  function activeTone(action: WebGoalView["action_projection"]["primary_action"]): CapsuleStateKind {
-    return action?.kind === "review" || action?.kind === "revalidate" ? "checking" : "working";
+  function activeTone(item: WebGoalView): CapsuleStateKind {
+    return item.display_status === "waiting_user" || item.status.includes("review") ? "checking" : "working";
   }
 
   function activeItem(view: GoalBoardWebView, item: WebGoalView): CapsuleGoalItem {
     const run = newestRun(item);
     return itemBase(view, item, {
       tab_kind: "in_progress",
-      kind: activeTone(item.action_projection.primary_action),
+      kind: activeTone(item),
       status_label: item.status_label,
       status_since: run?.started_at ?? null,
       current: item.action_summary,

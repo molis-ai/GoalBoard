@@ -2,6 +2,7 @@ import type {
   ConfigureGoalEventsInput,
   GoalEventConfigurationPayload,
   GoalEventExtraRequirement,
+  GoalEventExtraRequirementInput,
   GoalEventTypeDefinition,
   GoalRecord,
   ReportGoalWorkEventInput,
@@ -9,7 +10,7 @@ import type {
 import type { GoalsCommandContext } from "./command-support.js";
 import type { GoalEventFactsRepository } from "./event-facts-repository.js";
 import {
-  assertAdditiveTypeVersion,
+  assertNextTypeVersion,
   normalizeBinding,
   normalizeJudgments,
   normalizeNewRequirement,
@@ -61,7 +62,7 @@ export class GoalEventFactsConfig {
       if (type.version !== latest.version + 1) {
         throw this.context.error("event_config.type_version_gap", `类型 ${type.type_id} 的下一版本必须是 ${latest.version + 1}`);
       }
-      assertAdditiveTypeVersion(this.error, latest, type);
+      assertNextTypeVersion(this.error, latest, type);
       this.records.insertType({ boardId: goal.board_id, goalId: goal.goal_id, type, createdAt: at, configVersion, actorId: input.actor_id });
       added.push(type);
     }
@@ -70,21 +71,15 @@ export class GoalEventFactsConfig {
 
   applyRequirements(
     goal: GoalRecord,
-    input: ConfigureGoalEventsInput,
+    rawRequirements: GoalEventExtraRequirementInput[],
+    actorId: string,
     addedTypes: GoalEventTypeDefinition[],
     configVersion: number,
     at: string,
   ) {
-    const added: Array<{
-      requirement_id: string;
-      statement: string;
-      bound_type_id?: string;
-      created_in_config_version: number;
-      actor_id: string;
-      source?: GoalEventExtraRequirement["source"];
-    }> = [];
+    const added: GoalEventExtraRequirement[] = [];
     const seen = new Set<string>();
-    for (const raw of input.new_requirements ?? []) {
+    for (const raw of rawRequirements) {
       const requirement = normalizeNewRequirement(this.error, raw);
       if (seen.has(requirement.requirement_id)) {
         throw this.context.error("event_config.duplicate_requirement", `同一配置不能重复新增要求: ${requirement.requirement_id}`);
@@ -98,15 +93,25 @@ export class GoalEventFactsConfig {
         throw this.context.error("event_config.requirement_exists", `要求 ID 已存在: ${requirement.requirement_id}`);
       }
       if (requirement.bound_type_id) this.requireTypeOnGoal(goal, requirement.bound_type_id, addedTypes);
+      const stored: GoalEventExtraRequirement = {
+        requirement_id: requirement.requirement_id,
+        statement: requirement.statement,
+        bound_type_id: requirement.bound_type_id,
+        created_in_config_version: configVersion,
+        actor_id: actorId,
+        source: requirement.source,
+        human_decision_required: requirement.human_decision_required === true,
+        current_status: "active",
+        revision: 1,
+        support_valid_after_seq: 0,
+      };
       this.records.insertRequirement({
-        ...requirement,
+        ...stored,
         board_id: goal.board_id,
         goal_id: goal.goal_id,
         created_at: at,
-        created_in_config_version: configVersion,
-        actor_id: input.actor_id,
       });
-      added.push({ ...requirement, created_in_config_version: configVersion, actor_id: input.actor_id, source: requirement.source });
+      added.push(stored);
     }
     return added;
   }

@@ -118,7 +118,7 @@ export * from "./web-project-settings.js";
 export * from "./web-project-presentation.js";
 export { importV3Board } from "./board-v3-import.js";
 export * from "./project-host.js";
-export { importV3Capability, projectResumeFactsCapability, trashedGoalsCapability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability } from "@adeptify/goalboard-plugin-goals";
+export { importV3Capability, projectResumeFactsCapability, trashedGoalsCapability, initializeBoardCapability, snapshotBoardCapability, createGoalCapability, createGoalIntentCapability } from "@adeptify/goalboard-plugin-goals";
 export type { CreateGoalCapabilityInput, ImportV3CapabilityInput } from "@adeptify/goalboard-plugin-goals";
 export { runLocalPluginDevelopment } from "./local-plugin-development.js";
 export { createLocalOnboardingHttp } from "./web-onboarding.js";

@@ -1,30 +1,23 @@
-import type { GoalDisplayStatus, GoalWorkState } from "./execution-validation-contract.js";
+export type GoalDisplayStatus = "continue" | "in_progress" | "waiting_user" | "waiting" | "blocked" | "completed";
 
-export type GoalPresentationState = GoalWorkState | "clarification_decision_pending" | "compound_closure_pending";
+export type GoalPresentationState =
+  | "waiting_for_human"
+  | "executing"
+  | "execution_blocked"
+  | "execution_pending"
+  | "satisfied"
+  | "invalidated"
+  | "trashed"
+  | "archived";
 
 /** Goal Tree sibling order: work you can pick up, then in-flight, then blocked, then parked. */
 export const GOAL_TREE_STATUS_ORDER: readonly GoalPresentationState[] = [
-  "completion_pending",
+  "waiting_for_human",
   "execution_pending",
   "executing",
-  "review_pending",
-  "reviewing",
-  "waiting_for_human",
-  "revalidation_pending",
-  "revalidating",
-  "clarification_decision_pending",
-  "compound_closure_pending",
-  "clarification_pending",
-  "clarifying",
   "execution_blocked",
-  "completion_blocked",
-  "review_blocked",
-  "revalidation_blocked",
-  "clarification_blocked",
-  "waiting_children",
-  "replaced",
-  "invalidated",
   "satisfied",
+  "invalidated",
   "archived",
   "trashed",
 ];

@@ -10,7 +10,7 @@ import { createSessionContentStore } from "@adeptify/goalboard-module-private-wo
 
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import {
-  createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference,
+  createGoalBoardLocalHost, createGoalIntentCapability, goalBoardHostProjectReference,
   snapshotBoardCapability,
 } from "@adeptify/goalboard-app-local-host";
 
@@ -25,11 +25,10 @@ test("offline Home restore preserves Project, Goal history, Artifact versions an
     const reference = goalBoardHostProjectReference({ databasePath: project.database_path, boardId: project.board_id });
     const host = createGoalBoardLocalHost({ instanceId: "backup-source" });
     try {
-      await host.client(reference).invoke(createGoalCapability, {
-        board_id: project.board_id, actor_id: "user", idempotency_key: "backup-goal",
-        goal: { goal_id: "retained-goal", title: "保留交接正文", outcome: "恢复后继续工作",
-          why: "不能只恢复空壳", business_logic: "保留正文、关系、版本和历史",
-          definition_state: "draft", decomposition_state: "abstract", priority: 50, acceptance_criteria: [] },
+      await host.client(reference).invoke(createGoalIntentCapability, {
+        board_id: project.board_id, actor_id: "user", actor_kind: "user", idempotency_key: "backup-goal",
+        goal_id: "retained-goal", title: "保留交接正文", outcome: "恢复后继续工作",
+        why: "不能只恢复空壳", business_logic: "保留正文、关系、版本和历史", priority: 50,
       });
     } finally { await host.close(); }
 

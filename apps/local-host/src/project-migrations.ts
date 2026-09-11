@@ -55,6 +55,7 @@ import {
   migrateReviewContractRevisionColumn,
   migrateRuntimeDialogueAuthority,
   migrateGoalEventTrustedDecisions,
+  migrateGoalTreeSubmittedSession,
   type GovernanceSqliteDatabase,
 } from "@adeptify/goalboard-module-governance-collaboration";
 import {
@@ -64,9 +65,13 @@ import {
   migrateGoalEventFactsSchema,
   migrateGoalEventStateSchema,
   migrateGoalEventOwnerContinueSource,
+  migrateGoalEventAgreementChange,
+  migrateGoalEventWorkflow,
   GOAL_EVENT_STATE_SCHEMA_SQL,
   ensureGoalEventRequirementSourceColumn,
+  ensureGoalEventRequirementCurrentColumns,
   ensureGoalEventDecisionAuthorizationColumns,
+  ensureGoalEventAgreementChangeColumns,
   migrateGoalLifecycleState,
   migratePlanningMethodPacksSchema,
   migrateGoalTrashSchema,
@@ -144,7 +149,11 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
       schema.recordMigration(31, new Date().toISOString());
       schema.recordMigration(32, new Date().toISOString());
       schema.recordMigration(33, new Date().toISOString());
+      schema.recordMigration(34, new Date().toISOString());
+      schema.recordMigration(35, new Date().toISOString());
+      schema.recordMigration(36, new Date().toISOString());
       });
+      migrateGoalEventTrustedDecisions(storage.db as unknown as GovernanceSqliteDatabase);
       return;
     }
 
@@ -292,7 +301,9 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
       migrateGoalEventFactsSchema(storage.db as unknown as GoalLifecycleMigrationDatabase);
     }
     ensureGoalEventRequirementSourceColumn(storage.db);
+    ensureGoalEventRequirementCurrentColumns(storage.db);
     ensureGoalEventDecisionAuthorizationColumns(storage.db);
+    ensureGoalEventAgreementChangeColumns(storage.db);
     const goalEventStateApplied = schema.hasMigration(33);
     const eventStateOwnersTable = schema.hasTable("goal_event_state_owners");
     if (!goalEventStateApplied || !eventStateOwnersTable) {
@@ -301,6 +312,15 @@ export function migrateLocalProjectDatabase(storage: LocalSqliteStorage): void {
     const ownerContinueApplied = schema.hasMigration(34);
     if (!ownerContinueApplied) {
       migrateGoalEventOwnerContinueSource(storage.db as unknown as GoalLifecycleMigrationDatabase);
+    }
+    const agreementChangeApplied = schema.hasMigration(35);
+    if (!agreementChangeApplied) {
+      migrateGoalEventAgreementChange(storage.db as unknown as GoalLifecycleMigrationDatabase);
+    }
+    migrateGoalTreeSubmittedSession(storage.db as unknown as GovernanceSqliteDatabase);
+    const workflowApplied = schema.hasMigration(36);
+    if (!workflowApplied) {
+      migrateGoalEventWorkflow(storage.db as unknown as GoalLifecycleMigrationDatabase);
     }
     migrateGoalEventTrustedDecisions(storage.db as unknown as GovernanceSqliteDatabase);
   }

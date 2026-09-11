@@ -44,8 +44,19 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
-      "goals.proposal-ui.v1",
-      "goals.execution-validation-application.v1", "goals.policy-ui.v1", "goals.safety-ui.v1", "goals.relation-ui.v1", "goals.tree-ui.v1", "goals.momentum-ui.v1", "goals.document-ui.v1", "goals.context-ui.v1", "goals.planning-ui.v1", "goals.status-ui.v1", "goals.factors-ui.v1", "goals.dialogs-ui.v1", "goals.document-routes.v1"
+      "goals.event-application.v1",
+      "goals.policy-ui.v1",
+      "goals.safety-ui.v1",
+      "goals.relation-ui.v1",
+      "goals.tree-ui.v1",
+      "goals.momentum-ui.v1",
+      "goals.document-ui.v1",
+      "goals.context-ui.v1",
+      "goals.planning-ui.v1",
+      "goals.status-ui.v1",
+      "goals.factors-ui.v1",
+      "goals.dialogs-ui.v1",
+      "goals.document-routes.v1"
     ]
   }
 }

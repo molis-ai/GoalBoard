@@ -6,6 +6,7 @@ import type {
   GoalEventAppliedDecisionView,
   GoalEventClosureResult,
   GoalEventConcernResult,
+  GoalEventDecisionCommitment,
   GoalEventDecisionOption,
   GoalEventDecisionRequestResult,
   GoalEventDecisionResult,
@@ -15,12 +16,20 @@ import type {
   GoalRecord,
   RecordGoalUserDecisionInput,
   RequestGoalDecisionInput,
-  ReopenCompletedEventWorkInput,
   ResumeGoalEventWorkInput,
-  SetGoalEventAgreementInput,
   SubmitGoalEventClosureInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 import { requestHash } from "./command-support.js";
+import {
+  affectedExistingRequirementIds,
+  compactChange,
+  isEmptyChange,
+  normalizeAgreementChange,
+  requiredDecisionPurpose,
+  requiredVersion,
+  toWireChange,
+} from "./event-agreement-change.js";
+import { GoalEventStateAgreement } from "./event-state-agreement.js";
 import { requiredText } from "./event-facts-validation.js";
 import type { GoalEventStateRepository } from "./event-state-repository.js";
 import { agreementView, emptyScope, scopeIsSubset } from "./event-state-repository.js";
@@ -29,16 +38,19 @@ import type { GoalsCommandContext } from "./command-support.js";
 import type { GoalEventFactsRepository } from "./event-facts-repository.js";
 import { GoalEventConcerns } from "./event-state-concerns.js";
 import {
+  agreementChangeCommitmentCurrent,
   laterComparableDecision,
-  normalizeTrustedDecision,
   requiredClosureKind,
+  resolveRecordedDecision,
   scopedRequirementCommitmentsMatch,
+  snapshotAgreementChangeCommitment,
   snapshotCommitment,
 } from "./event-state-authorization.js";
 import { completionUnmetReasons, syncClosedState } from "./event-state-completion.js";
 
 export class GoalEventStateEffects {
   private readonly concerns: GoalEventConcerns;
+  private readonly agreement: GoalEventStateAgreement;
 
   constructor(
     private readonly context: GoalsCommandContext,
@@ -48,6 +60,7 @@ export class GoalEventStateEffects {
     private readonly core: GoalEventStateCore,
   ) {
     this.concerns = new GoalEventConcerns(context, facts, records, core);
+    this.agreement = new GoalEventStateAgreement(context, records, host, core);
   }
 
   applyConcern(input: ApplyGoalConcernInput): GoalEventConcernResult {
@@ -60,12 +73,37 @@ export class GoalEventStateEffects {
       goal_id: input.goal_id,
       question: input.question,
       options: input.options,
+      purpose: input.purpose,
+      proposed_change: input.proposed_change ?? null,
       scope: input.scope ?? null,
     });
     return this.core.mutate(input, "request_goal_decision", hash, (goal, actorKind) => {
       const question = requiredText(this.core.error, input.question, "event_decision.question_required", "决定请求需要具体问题");
       const options = normalizeOptions(this.core.error, input.options);
-      const scope = this.core.requireLocalScope(goal, input.scope);
+      const purpose = requiredDecisionPurpose(this.core.error, input.purpose);
+      const requirements = this.host.readCurrentRequirements(goal.board_id, goal.goal_id);
+      const currentOutcome = this.records.latestAgreement(goal.board_id, goal.goal_id)?.outcome || goal.outcome.trim();
+      let proposedChange = input.proposed_change
+        ? toWireChange(compactChange(normalizeAgreementChange(this.core.error, input.proposed_change), requirements, currentOutcome))
+        : null;
+      let commitment: GoalEventDecisionCommitment | null = null;
+      if (purpose === "agreement_change") {
+        if (!proposedChange) {
+          throw this.context.error("event_decision.missing_proposed_change", "约定变更请求必须带上可审阅的具体变化");
+        }
+        const canonical = compactChange(normalizeAgreementChange(this.core.error, proposedChange), requirements, currentOutcome);
+        if (isEmptyChange(canonical, currentOutcome)) {
+          throw this.context.error("event_agreement.no_changes", "需要补充结果说明、新增、修订或退休要求");
+        }
+        proposedChange = toWireChange(canonical);
+        commitment = snapshotAgreementChangeCommitment(canonical, requirements, currentOutcome);
+      } else if (input.proposed_change) {
+        throw this.context.error("event_decision.unexpected_proposed_change", "只有约定变更请求才能附带具体变化");
+      }
+      const requestedScope = input.scope ?? (purpose === "agreement_change"
+        ? { action: "set_agreement", requirement_ids: proposedChange ? affectedExistingRequirementIds(normalizeAgreementChange(this.core.error, proposedChange)) : [] }
+        : undefined);
+      const scope = this.core.requireLocalScope(goal, requestedScope);
       if (emptyScope(scope)) {
         throw this.context.error("event_decision.scope_required", "决定请求需要明确的作用范围");
       }
@@ -76,6 +114,8 @@ export class GoalEventStateEffects {
         question,
         options,
         scope,
+        purpose,
+        proposed_change: proposedChange,
       });
       this.records.insertDecisionRequest({
         requestId,
@@ -85,6 +125,9 @@ export class GoalEventStateEffects {
         question,
         options,
         scope,
+        purpose,
+        proposedChange,
+        commitment,
         at: event.received_at,
       });
       return {
@@ -97,6 +140,9 @@ export class GoalEventStateEffects {
           question,
           options,
           scope,
+          purpose,
+          proposed_change: proposedChange,
+          commitment,
           status: "pending",
           created_at: event.received_at,
         },
@@ -146,6 +192,7 @@ export class GoalEventStateEffects {
       conclusion: input.conclusion,
       accepts_requirements: input.accepts_requirements ?? null,
       effects: input.effects ?? null,
+      authorized_change: input.authorized_change ?? null,
       scope: input.scope ?? null,
       authority_source: input.authority.authority_source,
       actor_id: input.authority.actor_id,
@@ -156,27 +203,69 @@ export class GoalEventStateEffects {
       );
       if (replay) return { ...replay, replayed: true };
       const goal = this.core.requireOwnedWritable(input.board_id, input.goal_id);
-      const scope = this.core.requireLocalScope(goal, input.scope);
+      const request = input.request_id
+        ? this.records.getDecisionRequest(goal.board_id, goal.goal_id, input.request_id)
+        : null;
+      if (input.request_id && !request) {
+        throw this.context.error("event_decision.request_not_found", "决定请求不存在或不属于当前 Goal");
+      }
+      const scope = this.core.requireLocalScope(goal, input.scope ?? request?.scope);
       if (emptyScope(scope)) {
         throw this.context.error("event_decision.scope_required", "可信决定需要明确的作用范围，空范围不能扩大权限");
       }
-      const normalized = normalizeTrustedDecision(this.core.error, input, scope);
-      const recorded = persistGovernance({ ...input, effects: normalized.effects, accepts_requirements: normalized.accepts_requirements, scope });
+      const resolved = resolveRecordedDecision(this.core.error, input, request, scope);
+      const requirements = this.host.readCurrentRequirements(goal.board_id, goal.goal_id);
+      const agreement = this.records.latestAgreement(goal.board_id, goal.goal_id);
+      const outcome = agreement?.outcome || goal.outcome.trim();
+      if (
+        request?.purpose === "agreement_change"
+        && resolved.effects.some((effect) => effect.kind === "authorize_agreement_change")
+      ) {
+        const proposed = compactChange(
+          normalizeAgreementChange(this.core.error, request.proposed_change ?? {}),
+          requirements,
+          outcome,
+        );
+        if (!agreementChangeCommitmentCurrent(request.commitment, requirements, outcome, proposed)) {
+          throw this.context.error(
+            "event_decision.stale_commitment",
+            "原约定或受影响要求已经变化，不能批准这份过期请求",
+          );
+        }
+      }
+      const recorded = persistGovernance({
+        ...input,
+        effects: resolved.effects,
+        accepts_requirements: resolved.accepts_requirements,
+        authorized_change: resolved.authorized_change ?? undefined,
+        scope: resolved.scope,
+      });
       if (recorded.board_id !== goal.board_id || recorded.goal_id !== goal.goal_id) {
         throw this.context.error("event_decision.cross_goal_reference", "可信决定不属于当前 Goal");
       }
       if (recorded.request_id) {
-        const request = this.records.getDecisionRequest(goal.board_id, goal.goal_id, recorded.request_id);
-        if (!request) throw this.context.error("event_decision.request_not_found", "决定请求不存在或不属于当前 Goal");
-        if (recorded.selected_option_id && !request.options.some((option) => option.option_id === recorded.selected_option_id)) {
+        const existingRequest = this.records.getDecisionRequest(goal.board_id, goal.goal_id, recorded.request_id);
+        if (!existingRequest) throw this.context.error("event_decision.request_not_found", "决定请求不存在或不属于当前 Goal");
+        if (recorded.selected_option_id && !existingRequest.options.some((option) => option.option_id === recorded.selected_option_id)) {
           throw this.context.error("event_decision.option_not_found", "所选选项不在该决定请求中");
         }
       }
       const conclusion = requiredText(this.core.error, recorded.conclusion, "event_decision.conclusion_required", "用户决定需要结论");
-      const requirements = this.host.readCurrentRequirements(goal.board_id, goal.goal_id);
-      const agreement = this.records.latestAgreement(goal.board_id, goal.goal_id);
-      const outcome = agreement?.outcome || goal.outcome.trim();
-      const commitment = snapshotCommitment(requirements, outcome, scope);
+      const commitmentScope = resolved.authorized_change
+        ? {
+            ...resolved.scope,
+            requirement_ids: affectedExistingRequirementIds(normalizeAgreementChange(this.core.error, resolved.authorized_change)),
+          }
+        : resolved.scope;
+      const commitment = request?.purpose === "agreement_change" && request.commitment
+        ? request.commitment
+        : resolved.authorized_change
+          ? snapshotAgreementChangeCommitment(
+              compactChange(normalizeAgreementChange(this.core.error, resolved.authorized_change), requirements, outcome),
+              requirements,
+              outcome,
+            )
+          : snapshotCommitment(requirements, outcome, commitmentScope);
       const configVersion = this.host.configVersion(goal.board_id, goal.goal_id);
       const agreementVersion = agreement?.version ?? 0;
       const decisionId = `gdec-${randomUUID()}`;
@@ -187,9 +276,10 @@ export class GoalEventStateEffects {
         request_id: recorded.request_id,
         selected_option_id: recorded.selected_option_id,
         conclusion,
-        accepts_requirements: normalized.accepts_requirements,
-        effects: normalized.effects,
-        scope,
+        accepts_requirements: resolved.accepts_requirements,
+        effects: resolved.effects,
+        scope: resolved.scope,
+        authorized_change: resolved.authorized_change,
         config_version: configVersion,
         agreement_version: agreementVersion,
       });
@@ -202,10 +292,11 @@ export class GoalEventStateEffects {
         eventId: event.event_id,
         selectedOptionId: recorded.selected_option_id,
         conclusion,
-        acceptsRequirements: normalized.accepts_requirements,
-        effects: normalized.effects,
-        scope,
+        acceptsRequirements: resolved.accepts_requirements,
+        effects: resolved.effects,
+        scope: resolved.scope,
         commitment,
+        authorizedChange: resolved.authorized_change,
         configVersion,
         agreementVersion,
         actorId: recorded.actor_id,
@@ -213,23 +304,25 @@ export class GoalEventStateEffects {
         at: event.received_at,
       });
       if (recorded.request_id) this.records.markRequestDecided(recorded.request_id);
-      if (scope.requirement_ids.length) {
+      const requirementEffect = resolved.effects.some((effect) => effect.kind === "accept_requirements" || effect.kind === "reject_requirements")
+        || (resolved.accepts_requirements && resolved.scope.requirement_ids.length > 0);
+      if (requirementEffect && resolved.scope.requirement_ids.length) {
         this.records.insertConclusions({
           boardId: goal.board_id,
           goalId: goal.goal_id,
-          requirementIds: scope.requirement_ids,
+          requirementIds: resolved.scope.requirement_ids,
           decisionId,
           actorId: recorded.actor_id,
-          verdict: normalized.accepts_requirements ? "accepted" : "rejected",
+          verdict: resolved.accepts_requirements || resolved.effects.some((effect) => effect.kind === "accept_requirements") ? "accepted" : "rejected",
           at: event.received_at,
           journalSeq: event.journal_seq,
         });
       }
       if (this.records.workStatus(goal.board_id, goal.goal_id) === "completed") {
-        const rejected = !normalized.accepts_requirements && scope.requirement_ids.length > 0;
-        const deniedComplete = normalized.effects.some((effect) => effect.kind === "deny_action" && effect.action === "complete");
+        const rejected = resolved.effects.some((effect) => effect.kind === "reject_requirements") && resolved.scope.requirement_ids.length > 0;
+        const deniedComplete = resolved.effects.some((effect) => effect.kind === "deny_action" && effect.action === "complete");
         if (rejected || deniedComplete) {
-          this.reopenCompletion(goal, recorded.actor_id, "user", scope.requirement_ids, "后续用户拒绝使当前完成不再成立");
+          this.reopenCompletion(goal, recorded.actor_id, "user", resolved.scope.requirement_ids, "后续用户拒绝使当前完成不再成立");
         }
       }
       const outcomeResult = {
@@ -243,81 +336,10 @@ export class GoalEventStateEffects {
     });
   }
 
-  setAgreement(input: SetGoalEventAgreementInput): GoalEventAgreementResult {
-    const hash = requestHash({
-      board_id: input.board_id,
-      goal_id: input.goal_id,
-      expected_config_version: input.expected_config_version ?? null,
-      expected_agreement_version: input.expected_agreement_version ?? null,
-      outcome: input.outcome ?? null,
-      new_requirements: input.new_requirements ?? [],
-    });
-    return this.core.mutate(input, "set_goal_event_agreement", hash, (goal, actorKind) => {
-      const current = this.records.latestAgreement(goal.board_id, goal.goal_id);
-      const currentAgreementVersion = current?.version ?? 0;
-      const expectedAgreement = Number.isInteger(input.expected_agreement_version)
-        ? input.expected_agreement_version!
-        : input.expected_config_version;
-      if (!Number.isInteger(expectedAgreement)) {
-        throw this.context.error("event_agreement.expected_version_required", "约定更新需要 expected_agreement_version");
-      }
-      if (expectedAgreement !== currentAgreementVersion) {
-        throw this.context.error(
-          "event_agreement.stale_version",
-          `当前约定版本已是 ${currentAgreementVersion}，不能用期望版本 ${expectedAgreement} 覆盖`,
-          { current_version: currentAgreementVersion, expected_version: expectedAgreement },
-        );
-      }
-      if (Number.isInteger(input.expected_agreement_version) && Number.isInteger(input.expected_config_version)) {
-        this.core.assertConfigVersion(goal, input.expected_config_version!);
-      }
-      const proposed = input.outcome?.trim();
-      const acceptedOutcome = goal.definition_state === "accepted" ? goal.outcome.trim() : "";
-      if (acceptedOutcome && proposed && proposed !== acceptedOutcome) {
-        throw this.context.error("event_agreement.cannot_lower", "已有 accepted 结果约定不能被补充说明覆盖或降低");
-      }
-      if (current?.outcome && proposed && proposed !== current.outcome && acceptedOutcome) {
-        throw this.context.error("event_agreement.cannot_lower", "已有结果约定不能被补充说明覆盖或降低");
-      }
-      const nextOutcome = proposed || current?.outcome || goal.outcome.trim();
-      if (!nextOutcome && !(input.new_requirements?.length)) {
-        throw this.context.error("event_agreement.no_changes", "需要补充结果说明或追加要求");
-      }
-      this.host.addRequirements(input, goal);
-      const nextVersion = currentAgreementVersion + 1;
-      const event = this.core.insertSystem(goal, input.actor_id, actorKind, "更新当前结果约定", {
-        operation: "agreement_set",
-        outcome: nextOutcome,
-        version: nextVersion,
-        config_version: this.host.configVersion(goal.board_id, goal.goal_id),
-      });
-      this.records.insertAgreement({
-        boardId: goal.board_id,
-        goalId: goal.goal_id,
-        version: nextVersion,
-        outcome: nextOutcome,
-        actorId: input.actor_id,
-        at: event.received_at,
-        eventId: event.event_id,
-      });
-      if (!goal.outcome.trim() && goal.definition_state === "draft") {
-        this.context.repository.db.prepare("UPDATE goals SET outcome = ?, updated_at = ? WHERE goal_id = ?")
-          .run(nextOutcome, event.received_at, goal.goal_id);
-      }
-      const requirements = this.host.readCurrentRequirements(goal.board_id, goal.goal_id);
-      const refreshed = this.context.requireGoal(goal.board_id, goal.goal_id);
-      return {
-        event_id: event.event_id,
-        observed_event_cursor: event.journal_seq,
-        recorded: true as const,
-        agreement: agreementView(
-          this.records.latestAgreement(goal.board_id, goal.goal_id),
-          requirements.length,
-          refreshed.outcome,
-        ),
-      };
-    });
+  setAgreement(input: Parameters<GoalEventStateAgreement["setAgreement"]>[0]): GoalEventAgreementResult {
+    return this.agreement.setAgreement(input);
   }
+
 
   submitClosure(input: SubmitGoalEventClosureInput): GoalEventClosureResult {
     const kind = requiredClosureKind(this.core.error, input.kind);
@@ -328,7 +350,7 @@ export class GoalEventStateEffects {
       result: input.result ?? null,
       reason: input.reason,
       expected_config_version: input.expected_config_version,
-      expected_agreement_version: input.expected_agreement_version ?? null,
+      expected_agreement_version: input.expected_agreement_version,
     });
     return this.context.repository.immediate(() => {
       const replay = this.context.replay<Omit<GoalEventClosureResult, "replayed">>(
@@ -336,15 +358,21 @@ export class GoalEventStateEffects {
       );
       if (replay) return { ...replay, replayed: true };
       const goal = this.core.requireOwnedWritable(input.board_id, input.goal_id);
-      this.core.assertConfigVersion(goal, input.expected_config_version);
-      const agreementVersion = this.records.latestAgreement(goal.board_id, goal.goal_id)?.version ?? 0;
-      if (Number.isInteger(input.expected_agreement_version) && input.expected_agreement_version !== agreementVersion) {
-        throw this.context.error(
-          "event_closure.stale_version",
-          `当前约定版本已是 ${agreementVersion}，不能用期望版本 ${input.expected_agreement_version} 覆盖`,
-          { current_version: agreementVersion, expected_version: input.expected_agreement_version },
-        );
-      }
+      const expectedConfig = requiredVersion(
+        this.core.error,
+        input.expected_config_version,
+        "event_closure.expected_config_version_required",
+        "正式收尾需要 expected_config_version",
+      );
+      const expectedAgreement = requiredVersion(
+        this.core.error,
+        input.expected_agreement_version,
+        "event_closure.expected_agreement_version_required",
+        "正式收尾需要 expected_agreement_version",
+      );
+      this.core.assertConfigVersion(goal, expectedConfig);
+      this.core.assertAgreementVersion(goal, expectedAgreement, "event_closure.stale_version");
+      const agreementVersion = expectedAgreement;
       const status = this.records.workStatus(goal.board_id, goal.goal_id);
       if (status === "cancelled") {
         throw this.context.error("event_closure.cancelled", "已取消的 Goal 需要显式继续后才能再收尾");
@@ -432,35 +460,6 @@ export class GoalEventStateEffects {
     });
   }
 
-  reopenCompletedEventWork(input: ReopenCompletedEventWorkInput): GoalEventResumeResult {
-    const hash = requestHash({
-      board_id: input.board_id,
-      goal_id: input.goal_id,
-      reason: input.reason,
-    });
-    return this.core.mutate(input, "reopen_completed_event_work", hash, (goal, actorKind) => {
-      const previous = this.records.workStatus(goal.board_id, goal.goal_id);
-      if (previous !== "completed") {
-        throw this.context.error("event_reopen.not_completed", "只有已完成的事件 Goal 才能开启新一轮工作");
-      }
-      const reason = requiredText(this.core.error, input.reason, "event_reopen.reason_required", "继续已完成目标需要说明理由");
-      this.records.supersedeAppliedClosures(goal.board_id, goal.goal_id, reason);
-      const event = this.core.insertSystem(goal, input.actor_id, actorKind, "明确继续已完成目标，开启新一轮工作", {
-        operation: "completion_reopened",
-        requirement_ids: [],
-        reason,
-        previous_work_status: previous,
-      });
-      syncClosedState(this.records, goal, "open", event.received_at);
-      return {
-        event_id: event.event_id,
-        observed_event_cursor: event.journal_seq,
-        recorded: true as const,
-        work_status: "open" as const,
-      };
-    });
-  }
-
   resumeWork(input: ResumeGoalEventWorkInput): GoalEventResumeResult {
     const hash = requestHash({
       board_id: input.board_id,
@@ -468,16 +467,29 @@ export class GoalEventStateEffects {
       reason: input.reason,
     });
     return this.core.mutate(input, "resume_goal_event_work", hash, (goal, actorKind) => {
-      const previous = this.records.workStatus(goal.board_id, goal.goal_id);
-      if (previous !== "cancelled") {
-        throw this.context.error("event_resume.not_cancelled", "只有已取消的 Goal 才能显式继续");
-      }
       const reason = requiredText(this.core.error, input.reason, "event_resume.reason_required", "重新继续需要说明理由");
-      const event = this.core.insertSystem(goal, input.actor_id, actorKind, "显式继续已取消的 Goal", {
-        operation: "work_resumed",
-        reason,
-        previous_work_status: previous,
-      });
+      const previous = this.records.workStatus(goal.board_id, goal.goal_id);
+      if (previous === "open") {
+        throw this.context.error("event_resume.already_open", "当前已在进行，无须重开");
+      }
+      if (previous !== "completed" && previous !== "cancelled") {
+        throw this.context.error("event_resume.not_resumable", "只有已完成或已取消的 Goal 才能显式继续");
+      }
+      if (previous === "completed") {
+        this.records.supersedeAppliedClosures(goal.board_id, goal.goal_id, reason);
+      }
+      const event = previous === "completed"
+        ? this.core.insertSystem(goal, input.actor_id, actorKind, "明确继续已完成目标，开启新一轮工作", {
+          operation: "completion_reopened",
+          requirement_ids: [],
+          reason,
+          previous_work_status: previous,
+        })
+        : this.core.insertSystem(goal, input.actor_id, actorKind, "显式继续已取消的 Goal", {
+          operation: "work_resumed",
+          reason,
+          previous_work_status: previous,
+        });
       syncClosedState(this.records, goal, "open", event.received_at);
       return {
         event_id: event.event_id,
@@ -488,11 +500,18 @@ export class GoalEventStateEffects {
     });
   }
 
-  reassessAfterReports(goal: GoalRecord, actorId: string, actorKind: "user" | "runtime" | null, contradictedIds: string[]): void {
+  reassessAfterReports(goal: GoalRecord, actorId: string, actorKind: "user" | "runtime" | null, judgedIds: string[]): void {
     if (!this.records.isOwner(goal.board_id, goal.goal_id)) return;
     if (this.records.workStatus(goal.board_id, goal.goal_id) !== "completed") return;
-    if (contradictedIds.length === 0) return;
-    this.reopenCompletion(goal, actorId, actorKind, contradictedIds, `相关反证更新了要求 ${contradictedIds.join("、")} 的当前差距`);
+    const closure = this.records.latestClosure(goal.board_id, goal.goal_id);
+    if (!closure || !closure.completion_applied || closure.superseded) return;
+    if (judgedIds.length === 0) return;
+    const current = this.host.readCurrentRequirements(goal.board_id, goal.goal_id);
+    const unsatisfied = current
+      .filter((item) => judgedIds.includes(item.requirement_id) && !item.currently_satisfied)
+      .map((item) => item.requirement_id);
+    if (unsatisfied.length === 0) return;
+    this.reopenCompletion(goal, actorId, actorKind, unsatisfied, `相关判断更新了要求 ${unsatisfied.join("、")} 的当前差距`);
   }
 
   assertReusable(goal: GoalRecord, decision: GoalEventAppliedDecisionView, requested: GoalEventScope): void {

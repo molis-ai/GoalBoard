@@ -157,6 +157,18 @@ class McpClient {
   }
 }
 
+async function withMcpClient<T>(
+  child: ChildProcessWithoutNullStreams,
+  run: (client: McpClient) => Promise<T>,
+): Promise<T> {
+  const client = new McpClient(child);
+  try {
+    return await run(client);
+  } finally {
+    await client.close();
+  }
+}
+
 test("packed release completes fresh install, Web setup, Runtime dialogue, restart, removal, and upgrade", async () => {
   await withTemporaryDirectory(async (directory) => {
     const repository = process.cwd();
@@ -302,22 +314,22 @@ test("packed release completes fresh install, Web setup, Runtime dialogue, resta
         "utf8",
       );
       assert.match(installedSkill, /Never require a fixed phrase or verbatim repetition/);
-      assert.match(installedSkill, /Offer visualization only when it helps/);
-      assert.match(installedSkill, /Omit `lease_seconds` by default/);
+      assert.match(installedSkill, /goalboard_v1_event_resume/);
+      assert.match(installedSkill, /Planning is optional/);
       const installedExecution = await readFile(
         join(userHome, ".codex", "skills", "goal-advance", "references", "execution.md"),
         "utf8",
       );
-      assert.match(installedExecution, /locator_status/);
-      assert.match(installedExecution, /unverified/i);
-      assert.match(installedExecution, /goalboard_v1_evidence_correct/);
+      assert.match(installedExecution, /goalboard_v1_event_note/);
+      assert.match(installedExecution, /goalboard_v1_event_report/);
+      assert.match(installedExecution, /goalboard_v1_event_resume/);
       const installedPlanning = await readFile(
         join(userHome, ".codex", "skills", "goal-advance", "references", "planning.md"),
         "utf8",
       );
-      assert.match(installedPlanning, /The planning loop/);
-      assert.match(installedPlanning, /consumer_goal depends_on provider_goal/);
-      assert.match(installedPlanning, /vertical outcome unit/);
+      assert.match(installedPlanning, /Plan useful outcomes and real dependencies/);
+      assert.match(installedPlanning, /goalboard_v1_goal_tree_propose/);
+      assert.match(installedPlanning, /Only that real consumption justifies consumer depends_on provider/);
       const installedIndustryMethod = await readFile(
         join(userHome, ".codex", "skills", "goal-advance", "methods", "industries", "industry-education.md"),
         "utf8",
@@ -359,99 +371,125 @@ test("packed release completes fresh install, Web setup, Runtime dialogue, resta
         GOALBOARD_WEB_URL: origin,
         PWD: directory,
       };
-      const firstMcp = new McpClient(spawn(process.execPath, [installation.launchers.mcp], {
+      const originalNoteBody = "当前 Runtime 在对话内推进工作，Web 不是必经步骤。";
+      const createdGoal = await withMcpClient(spawn(process.execPath, [installation.launchers.mcp], {
         cwd: directory,
         env: mcpEnvironment,
         stdio: ["pipe", "pipe", "pipe"],
-      }));
-      await firstMcp.initialize();
-      const installedToolList = await firstMcp.request("tools/list", {});
-      const installedTools = (installedToolList.result as {
-        tools: Array<{
-          name: string;
-          description?: string;
-          inputSchema?: { properties?: Record<string, { description?: string; maximum?: number }> };
-        }>;
-      }).tools;
-      assert.ok(installedTools.some((tool) => tool.name === "goalboard_v1_evidence_correct"));
-      assert.match(
-        installedTools.find((tool) => tool.name === "goalboard_v1_evidence_submit")?.description ?? "",
-        /Markdown anchor.*UNVERIFIED/,
-      );
-      for (const toolName of [
-        "goalboard_v1_select_goal",
-        "goalboard_v1_draft_dialogue_start",
-        "goalboard_v1_draft_dialogue_resume",
-        "goalboard_v1_claim",
-      ]) {
-        const lease = installedTools.find((tool) => tool.name === toolName)?.inputSchema?.properties?.lease_seconds;
-        assert.match(lease?.description ?? "", /动态策略.*max_lease_seconds/);
-        assert.equal(lease?.maximum, undefined);
-      }
-      const templates = await firstMcp.request("resources/templates/list", {});
-      assert.deepEqual((templates.result as { resourceTemplates: unknown[] }).resourceTemplates, []);
-      const unresolved = await firstMcp.call("goalboard_v1_context_resolve", {}) as {
-        status: string;
-        connection: null;
-        context: { workspace: { canonical_path: string } };
-      };
-      assert.equal(unresolved.status, "unbound");
-      assert.equal(unresolved.connection, null);
-      assert.equal(unresolved.context.workspace.canonical_path, await realpath(directory));
-      const bound = await firstMcp.call("goalboard_v1_context_bind", {
-        project_id: created.project.project_id,
-        actor_id: "runtime-codex",
-        user_confirmed: true,
-      }) as { connection: { board_id: string } };
-      const started = await firstMcp.call("goalboard_v1_draft_dialogue_start", {
-        board_id: bound.connection.board_id,
-        actor_id: "runtime-codex",
-        rough_idea: "让用户在当前 Runtime 中通过自然语言维护 GoalBoard。",
-        idempotency_key: "fresh-install-draft-start",
-      }) as { goal: { goal_id: string }; run: { run_id: string }; work_state: { work_state: string } };
-      assert.equal(started.work_state.work_state, "clarifying");
-      const contract = await firstMcp.call("goalboard_v1_contract", {
-        board_id: bound.connection.board_id,
-        goal_id: started.goal.goal_id,
-      }) as { goal_url: string };
-      assert.equal(
-        contract.goal_url,
-        `${origin}/projects/${encodeURIComponent(created.project.project_id)}/goals/${encodeURIComponent(started.goal.goal_id)}`,
-      );
-      const turn = await firstMcp.call("goalboard_v1_draft_dialogue_turn", {
-        board_id: bound.connection.board_id,
-        goal_id: started.goal.goal_id,
-        run_id: started.run.run_id,
-        actor_id: "runtime-codex",
-        user_message: "Goal 只派发任务，当前 Runtime 负责继续对话并持久化澄清结果。",
-        current_understanding: "当前 Runtime 在对话内推进 Draft，Web 不是必经步骤。",
-        known_facts: [{ statement: "Web 不是必经步骤。", source_kind: "user_answer", confirmed_by_user: true }],
-        next_question: "澄清完成后需要拆成哪些叶子 Goal？",
-        idempotency_key: "fresh-install-draft-turn",
-      }) as { dialogue: { next_question: string } };
-      assert.match(turn.dialogue.next_question, /叶子 Goal/);
-      await firstMcp.close();
+      }), async (firstMcp) => {
+        await firstMcp.initialize();
+        const installedToolList = await firstMcp.request("tools/list", {});
+        const installedTools = (installedToolList.result as {
+          tools: Array<{
+            name: string;
+            description?: string;
+          }>;
+        }).tools;
+        const installedNames = installedTools.map((tool) => tool.name);
+        for (const name of [
+          "goalboard_v1_goal_intent_create",
+          "goalboard_v1_event_note",
+          "goalboard_v1_goal_state",
+          "goalboard_v1_event_resume",
+        ]) {
+          assert.ok(installedNames.includes(name), name);
+        }
+        for (const name of [
+          "goalboard_v1_evidence_correct",
+          "goalboard_v1_evidence_submit",
+          "goalboard_v1_select_goal",
+          "goalboard_v1_draft_dialogue_start",
+          "goalboard_v1_draft_dialogue_resume",
+          "goalboard_v1_claim",
+        ]) {
+          assert.ok(!installedNames.includes(name), name);
+        }
+        const rejected = await firstMcp.request("tools/call", {
+          name: "goalboard_v1_evidence_correct",
+          arguments: { evidence_id: "missing", correction: "should not dispatch" },
+        });
+        const rejectedResult = (rejected.result ?? {}) as McpToolResult;
+        assert.equal(rejectedResult.isError, true);
+        assert.match(rejectedResult.content?.[0]?.text ?? "", /未知|unknown|evidence_correct/i);
+        const templates = await firstMcp.request("resources/templates/list", {});
+        assert.deepEqual((templates.result as { resourceTemplates: unknown[] }).resourceTemplates, []);
+        const unresolved = await firstMcp.call("goalboard_v1_context_resolve", {}) as {
+          status: string;
+          connection: null;
+          context: { workspace: { canonical_path: string } };
+        };
+        assert.equal(unresolved.status, "unbound");
+        assert.equal(unresolved.connection, null);
+        assert.equal(unresolved.context.workspace.canonical_path, await realpath(directory));
+        const bound = await firstMcp.call("goalboard_v1_context_bind", {
+          project_id: created.project.project_id,
+          actor_id: "runtime-codex",
+          user_confirmed: true,
+        }) as { connection: { board_id: string; project_id: string } };
+        assert.equal(bound.connection.project_id, created.project.project_id);
+        assert.ok(bound.connection.board_id);
+        const started = await firstMcp.call("goalboard_v1_goal_intent_create", {
+          title: "让用户在当前 Runtime 中通过自然语言维护 GoalBoard。",
+          outcome: "当前 Runtime 负责继续对话并持久化工作结果。",
+          idempotency_key: "fresh-install-intent",
+        }) as { goal: { goal_id: string }; replayed: boolean };
+        assert.equal(started.replayed, false);
+        const note = await firstMcp.call("goalboard_v1_event_note", {
+          goal_id: started.goal.goal_id,
+          body: originalNoteBody,
+          idempotency_key: "fresh-install-note",
+        }) as { event_id: string; recorded: boolean; replayed?: boolean };
+        assert.equal(note.recorded, true);
+        const state = await firstMcp.call("goalboard_v1_goal_state", {
+          goal_id: started.goal.goal_id,
+        }) as { work_status: string; goal_url: string };
+        assert.equal(state.work_status, "open");
+        assert.equal(
+          state.goal_url,
+          `${origin}/projects/${encodeURIComponent(created.project.project_id)}/goals/${encodeURIComponent(started.goal.goal_id)}`,
+        );
+        return { goalId: started.goal.goal_id, noteId: note.event_id };
+      });
 
-      const restartedMcp = new McpClient(spawn(process.execPath, [installation.launchers.mcp], {
+      await withMcpClient(spawn(process.execPath, [installation.launchers.mcp], {
         cwd: directory,
         env: mcpEnvironment,
         stdio: ["pipe", "pipe", "pipe"],
-      }));
-      await restartedMcp.initialize();
-      const restored = await restartedMcp.call("goalboard_v1_context_resolve", {}) as {
-        status: string;
-        connection: { project_id: string; board_id: string };
-      };
-      assert.equal(restored.status, "bound");
-      assert.equal(restored.connection.project_id, created.project.project_id);
-      const resumed = await restartedMcp.call("goalboard_v1_draft_dialogue_resume", {
-        board_id: restored.connection.board_id,
-        goal_id: started.goal.goal_id,
-        actor_id: "runtime-codex",
-        idempotency_key: "fresh-install-draft-resume",
-      }) as { dialogue: { next_question: string } };
-      assert.match(resumed.dialogue.next_question, /叶子 Goal/);
-      await restartedMcp.close();
+      }), async (restartedMcp) => {
+        await restartedMcp.initialize();
+        const restored = await restartedMcp.call("goalboard_v1_context_resolve", {}) as {
+          status: string;
+          connection: { project_id: string; board_id: string };
+        };
+        assert.equal(restored.status, "bound");
+        assert.equal(restored.connection.project_id, created.project.project_id);
+        const replayedIntent = await restartedMcp.call("goalboard_v1_goal_intent_create", {
+          title: "让用户在当前 Runtime 中通过自然语言维护 GoalBoard。",
+          outcome: "当前 Runtime 负责继续对话并持久化工作结果。",
+          idempotency_key: "fresh-install-intent",
+        }) as { replayed: boolean; goal: { goal_id: string } };
+        assert.equal(replayedIntent.replayed, true);
+        assert.equal(replayedIntent.goal.goal_id, createdGoal.goalId);
+        const replayedNote = await restartedMcp.call("goalboard_v1_event_note", {
+          goal_id: createdGoal.goalId,
+          body: originalNoteBody,
+          idempotency_key: "fresh-install-note",
+        }) as { replayed: boolean; event_id: string };
+        assert.equal(replayedNote.replayed, true);
+        assert.equal(replayedNote.event_id, createdGoal.noteId);
+        const listed = await restartedMcp.call("goalboard_v1_event_list", {
+          goal_id: createdGoal.goalId,
+          limit: 20,
+        }) as { events: Array<{ event_id: string; kind: string; payload?: { operation?: string; body?: string } }> };
+        const notes = listed.events.filter((event) => event.kind === "system" && event.payload?.operation === "observation_note");
+        assert.equal(notes.length, 1);
+        assert.equal(notes[0]?.payload?.body, originalNoteBody);
+        const rejectedOld = await restartedMcp.request("tools/call", {
+          name: "goalboard_v1_draft_dialogue_resume",
+          arguments: { goal_id: createdGoal.goalId },
+        });
+        assert.equal(((rejectedOld.result ?? {}) as McpToolResult).isError, true);
+      });
 
       const genericEnvironment = {
         ...environment,
@@ -461,24 +499,24 @@ test("packed release completes fresh install, Web setup, Runtime dialogue, resta
         GOALBOARD_WEB_URL: origin,
         PWD: directory,
       };
-      const genericMcp = new McpClient(spawn(process.execPath, [installation.launchers.mcp], {
+      await withMcpClient(spawn(process.execPath, [installation.launchers.mcp], {
         cwd: directory,
         env: genericEnvironment,
         stdio: ["pipe", "pipe", "pipe"],
-      }));
-      await genericMcp.initialize();
-      const genericSessionA = { sessionId: "generic-session-a" };
-      const genericSuggested = await genericMcp.call("goalboard_v1_context_resolve", {}, genericSessionA);
-      assert.equal(genericSuggested.status, "bound");
-      assert.equal(genericSuggested.connection.project_id, created.project.project_id);
-      const freshGenericSession = await genericMcp.call(
-        "goalboard_v1_context_resolve",
-        {},
-        { sessionId: "generic-session-b" },
-      );
-      assert.equal(freshGenericSession.status, "bound");
-      assert.equal(freshGenericSession.connection.project_id, created.project.project_id);
-      await genericMcp.close();
+      }), async (genericMcp) => {
+        await genericMcp.initialize();
+        const genericSessionA = { sessionId: "generic-session-a" };
+        const genericSuggested = await genericMcp.call("goalboard_v1_context_resolve", {}, genericSessionA);
+        assert.equal(genericSuggested.status, "bound");
+        assert.equal(genericSuggested.connection.project_id, created.project.project_id);
+        const freshGenericSession = await genericMcp.call(
+          "goalboard_v1_context_resolve",
+          {},
+          { sessionId: "generic-session-b" },
+        );
+        assert.equal(freshGenericSession.status, "bound");
+        assert.equal(freshGenericSession.connection.project_id, created.project.project_id);
+      });
 
       const removePlanResponse = await securePost(origin, token, "/api/settings/runtimes/codex/plan", { action: "remove" });
       assert.equal(removePlanResponse.status, 200);

@@ -1,27 +1,40 @@
-import type { GoalFactsView, ImpactBindingRecord, ProjectGuidanceView, GoalsActorWrite, GoalsBoardRecord, GoalContractRevisionRecord, CoverageContractRevisionRecord, PlanningMethodPack, ProjectGuidanceEntryRecord } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GoalFactsView, ImpactBindingRecord, ProjectGuidanceView, GoalsActorWrite, GoalsBoardRecord, GoalContractRevisionRecord, CoverageContractRevisionRecord, PlanningMethodPack, ProjectGuidanceEntryRecord, GoalRecord, GoalRelationRecord, RiskRecord, GoalRiskLinkRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { ExecutionClaimRecord, ExecutionRunRecord } from "@adeptify/goalboard-contracts/modules/execution";
 import type { EvidenceRecord, EvidenceCorrectionRecord } from "@adeptify/goalboard-contracts/modules/evidence-verification";
 import type { ReviewObligationRecord, ReviewRecord, CandidateGoalRecord, ContractProposalRecord, RewireRecord, ClarificationSessionRecord, ClarificationTurnRecord, GoalTreeProposalRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { HostCapabilityDefinition } from "@adeptify/goalboard-contracts/platform/app-host";
-import type { GoalWorkStateView, GoalActionProjection, ExecutionValidationSnapshot } from "./execution-validation-contract.js";
+import type { StoredModuleEvent } from "@adeptify/goalboard-contracts/platform/storage";
 
 /** Existing full project snapshot; every record is defined by its fact owner. */
-export interface BoardSnapshot extends ExecutionValidationSnapshot {
+export interface BoardSnapshot {
+  cursor: number;
   board: GoalsBoardRecord;
+  goals: GoalRecord[];
+  relations: GoalRelationRecord[];
   impacts: ImpactBindingRecord[];
+  risks: RiskRecord[];
+  goal_risks: GoalRiskLinkRecord[];
+  claims: ExecutionClaimRecord[];
+  runs: ExecutionRunRecord[];
+  evidence: EvidenceRecord[];
   evidence_corrections: EvidenceCorrectionRecord[];
+  review_obligations: ReviewObligationRecord[];
+  reviews: ReviewRecord[];
   goal_contract_revisions: GoalContractRevisionRecord[];
   coverage_contract_revisions: CoverageContractRevisionRecord[];
+  lifecycle_events: StoredModuleEvent[];
+  candidates: CandidateGoalRecord[];
+  contract_proposals: ContractProposalRecord[];
+  rewires: RewireRecord[];
   clarification_sessions: ClarificationSessionRecord[];
   clarification_turns: ClarificationTurnRecord[];
   planning_method_packs: PlanningMethodPack[];
   project_guidance: ProjectGuidanceEntryRecord[];
+  goal_tree_proposals: GoalTreeProposalRecord[];
 }
 
-/** Public entry contract: Goal facts enriched by the existing execution and governance owners. */
+/** Public entry contract: Goal facts plus historical owner records. */
 export interface GoalContractView extends GoalFactsView {
-  work_state: GoalWorkStateView;
-  action_projection: GoalActionProjection;
   impacts: ImpactBindingRecord[];
   claims: ExecutionClaimRecord[];
   runs: ExecutionRunRecord[];

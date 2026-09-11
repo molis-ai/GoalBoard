@@ -2,13 +2,15 @@ import type { GoalLifecycleMigrationDatabase } from "./migrations.js";
 
 export const GOAL_EVENT_STATE_MIGRATION_ID = 33;
 export const GOAL_EVENT_OWNER_CONTINUE_MIGRATION_ID = 34;
+export const GOAL_EVENT_AGREEMENT_CHANGE_MIGRATION_ID = 35;
+export const GOAL_EVENT_WORKFLOW_MIGRATION_ID = 36;
 
 export const GOAL_EVENT_STATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS goal_event_state_owners (
     board_id TEXT NOT NULL REFERENCES boards(board_id) ON DELETE CASCADE,
     goal_id TEXT NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
     owner TEXT NOT NULL CHECK (owner = 'event_work'),
-    source TEXT NOT NULL CHECK (source IN ('intent', 'configuration', 'continue')),
+    source TEXT NOT NULL CHECK (source IN ('intent', 'configuration', 'continue', 'migration')),
     adopted_at TEXT NOT NULL,
     adopted_by TEXT NOT NULL,
     PRIMARY KEY (goal_id)
@@ -70,6 +72,9 @@ export const GOAL_EVENT_STATE_SCHEMA_SQL = `
     question TEXT NOT NULL,
     options_json TEXT NOT NULL,
     scope_json TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'suggestion' CHECK (purpose IN ('suggestion', 'requirement_acceptance', 'action', 'agreement_change')),
+    proposed_change_json TEXT,
+    commitment_json TEXT,
     status TEXT NOT NULL CHECK (status IN ('pending', 'decided')),
     created_at TEXT NOT NULL
   );
@@ -89,6 +94,7 @@ export const GOAL_EVENT_STATE_SCHEMA_SQL = `
     effects_json TEXT NOT NULL DEFAULT '[]',
     scope_json TEXT NOT NULL,
     commitment_json TEXT NOT NULL DEFAULT '{"outcome":"","requirements":[]}',
+    authorized_change_json TEXT,
     config_version INTEGER,
     agreement_version INTEGER,
     actor_id TEXT NOT NULL,
@@ -122,7 +128,7 @@ export const GOAL_EVENT_STATE_SCHEMA_SQL = `
     reason TEXT NOT NULL,
     completion_applied INTEGER NOT NULL CHECK (completion_applied IN (0, 1)),
     expected_config_version INTEGER NOT NULL,
-    expected_agreement_version INTEGER,
+    expected_agreement_version INTEGER NOT NULL DEFAULT 0,
     config_version INTEGER,
     agreement_version INTEGER,
     unmet_reasons_json TEXT NOT NULL DEFAULT '[]',
@@ -176,6 +182,37 @@ export function ensureGoalEventDecisionAuthorizationColumns(db: {
   if (closureColumns.length && !closureColumns.some((column) => column.name === "expected_agreement_version")) {
     db.exec("ALTER TABLE goal_event_closures ADD COLUMN expected_agreement_version INTEGER");
   }
+}
+
+export function ensureGoalEventAgreementChangeColumns(db: {
+  prepare(sql: string): { all(): unknown[] };
+  exec(sql: string): unknown;
+}): void {
+  const requestColumns = db.prepare("PRAGMA table_info(goal_event_decision_requests)").all() as Array<{ name: string }>;
+  if (requestColumns.length && !requestColumns.some((column) => column.name === "purpose")) {
+    db.exec("ALTER TABLE goal_event_decision_requests ADD COLUMN purpose TEXT NOT NULL DEFAULT 'suggestion'");
+  }
+  if (requestColumns.length && !requestColumns.some((column) => column.name === "proposed_change_json")) {
+    db.exec("ALTER TABLE goal_event_decision_requests ADD COLUMN proposed_change_json TEXT");
+  }
+  if (requestColumns.length && !requestColumns.some((column) => column.name === "commitment_json")) {
+    db.exec("ALTER TABLE goal_event_decision_requests ADD COLUMN commitment_json TEXT");
+  }
+  const decisionColumns = db.prepare("PRAGMA table_info(goal_event_applied_decisions)").all() as Array<{ name: string }>;
+  if (decisionColumns.length && !decisionColumns.some((column) => column.name === "authorized_change_json")) {
+    db.exec("ALTER TABLE goal_event_applied_decisions ADD COLUMN authorized_change_json TEXT");
+  }
+}
+
+export function migrateGoalEventAgreementChange(
+  db: GoalLifecycleMigrationDatabase,
+  now: () => Date = () => new Date(),
+): void {
+  db.transaction(() => {
+    ensureGoalEventAgreementChangeColumns(db);
+    db.prepare("INSERT OR IGNORE INTO schema_migrations (migration_id, applied_at) VALUES (?, ?)")
+      .run(GOAL_EVENT_AGREEMENT_CHANGE_MIGRATION_ID, now().toISOString());
+  }).immediate();
 }
 
 function expandWorkEventKinds(db: GoalLifecycleMigrationDatabase): void {

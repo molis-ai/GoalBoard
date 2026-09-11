@@ -7,6 +7,7 @@ import {
   type CreateGoalIntentInput,
   type RecordGoalProgressSummaryInput,
   type RecordGoalUserDecisionInput,
+  type RecordGoalNoteInput,
   type ReportGoalEventsInput,
   type ReportGoalWorkEventInput,
   type RequestGoalDecisionInput,
@@ -15,6 +16,7 @@ import {
   type SubmitGoalEventClosureInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 import { createGoalEventEntryClient, hostEventDecisionAuthority } from "@adeptify/goalboard-plugin-goals";
+import { mcpWebUrl } from "./goal-presentation.js";
 import type { LocalHostProjectClient } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { McpPresentationErrorFactory } from "./query-presentation.js";
 
@@ -22,6 +24,7 @@ const WRITE_TOOLS = new Set([
   "goalboard_v1_goal_intent_create",
   "goalboard_v1_event_configure",
   "goalboard_v1_event_report",
+  "goalboard_v1_event_note",
   "goalboard_v1_event_progress",
   "goalboard_v1_event_concern",
   "goalboard_v1_event_decision_request",
@@ -34,15 +37,21 @@ const WRITE_TOOLS = new Set([
 
 const ALLOWED_KEYS: Record<string, readonly string[]> = {
   goalboard_v1_goal_intent_create: [
-    "database_path", "board_id", "actor_id", "actor_kind", "title", "outcome", "goal_id", "idempotency_key",
+    "database_path", "board_id", "actor_id", "actor_kind", "title", "outcome", "why", "business_logic",
+    "priority", "goal_id", "parent_goal_id", "dependency_goal_ids", "requirements", "source_kind", "idempotency_key",
   ],
+  goalboard_v1_goal_list: ["database_path", "board_id", "work_status", "limit", "after_cursor"],
   goalboard_v1_goal_state: ["database_path", "board_id", "goal_id"],
   goalboard_v1_event_configure: [
-    "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "expected_version", "idempotency_key",
-    "types", "adopted_planning", "adopt_default_requirement_ids", "new_requirements", "requirement_bindings",
+    "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "expected_version",
+    "expected_agreement_version", "idempotency_key",
+    "types", "adopted_planning", "adopt_default_requirement_ids", "requirement_bindings",
   ],
   goalboard_v1_event_report: [
-    "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key", "events",
+    "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key", "events", "progress",
+  ],
+  goalboard_v1_event_note: [
+    "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "body", "idempotency_key",
   ],
   goalboard_v1_event_list: ["database_path", "board_id", "goal_id", "after_cursor", "limit"],
   goalboard_v1_event_read: ["database_path", "board_id", "goal_id", "event_id"],
@@ -57,7 +66,7 @@ const ALLOWED_KEYS: Record<string, readonly string[]> = {
   ],
   goalboard_v1_event_decision_request: [
     "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key",
-    "question", "options", "scope",
+    "question", "options", "purpose", "proposed_change", "scope",
   ],
   goalboard_v1_event_cite_decision: [
     "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key", "decision_id", "scope",
@@ -65,6 +74,7 @@ const ALLOWED_KEYS: Record<string, readonly string[]> = {
   goalboard_v1_event_agree: [
     "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key",
     "expected_config_version", "expected_agreement_version", "outcome", "new_requirements",
+    "revise_requirements", "retire_requirement_ids", "cited_decision_id",
   ],
   goalboard_v1_event_close: [
     "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key",
@@ -75,7 +85,8 @@ const ALLOWED_KEYS: Record<string, readonly string[]> = {
   ],
   goalboard_v1_event_decide: [
     "database_path", "board_id", "actor_id", "actor_kind", "goal_id", "idempotency_key",
-    "request_id", "selected_option_id", "conclusion", "accepts_requirements", "effects", "scope",
+    "request_id", "selected_option_id", "conclusion", "accepts_requirements", "effects",
+    "authorized_change", "scope",
   ],
 };
 
@@ -83,6 +94,7 @@ export function createMcpGoalEventHandlers(
   client: LocalHostProjectClient,
   audience: "runtime" | "management",
   createError: McpPresentationErrorFactory,
+  urls: { webBaseUrl: string; projectId: string | null | undefined } = { webBaseUrl: "http://127.0.0.1:4173", projectId: null },
 ) {
   const events = createGoalEventEntryClient(client);
   const rejectUnknown = (name: string, input: Record<string, unknown>) => {
@@ -111,6 +123,12 @@ export function createMcpGoalEventHandlers(
       actor_kind: audience === "runtime" ? "runtime" as const : "user" as const,
     };
   };
+  const withGoalUrl = <T,>(value: T, goalId: string): T & { goal_url: string } => {
+    const path = urls.projectId
+      ? `/projects/${encodeURIComponent(urls.projectId)}/goals/${encodeURIComponent(goalId)}`
+      : `/goals/${encodeURIComponent(goalId)}`;
+    return { ...value, goal_url: mcpWebUrl(path, urls.webBaseUrl, createError) };
+  };
 
   return {
     goalboard_v1_goal_intent_create: async (input: Record<string, unknown>) => {
@@ -119,15 +137,37 @@ export function createMcpGoalEventHandlers(
         board_id: String(input.board_id),
         title: String(input.title ?? ""),
         outcome: input.outcome == null ? undefined : String(input.outcome),
+        why: input.why == null ? undefined : String(input.why),
+        business_logic: input.business_logic == null ? undefined : String(input.business_logic),
+        priority: input.priority == null ? undefined : Number(input.priority),
         goal_id: input.goal_id == null ? undefined : String(input.goal_id),
+        parent_goal_id: input.parent_goal_id == null ? undefined : String(input.parent_goal_id),
+        dependency_goal_ids: Array.isArray(input.dependency_goal_ids) ? input.dependency_goal_ids.map(String) : undefined,
+        requirements: input.requirements as CreateGoalIntentInput["requirements"],
+        source_kind: audience === "runtime" ? "runtime" : undefined,
         idempotency_key: String(input.idempotency_key ?? ""),
         ...actor(input),
       };
-      return events.createIntent(payload);
+      const created = await events.createIntent(payload);
+      return withGoalUrl(created, created.goal.goal_id);
+    },
+    goalboard_v1_goal_list: async (input: Record<string, unknown>) => {
+      rejectUnknown("goalboard_v1_goal_list", input);
+      const page = await events.listGoals({
+        board_id: String(input.board_id),
+        work_status: input.work_status as "open" | "completed" | "cancelled" | undefined,
+        limit: input.limit == null ? undefined : Number(input.limit),
+        after_cursor: input.after_cursor == null ? undefined : String(input.after_cursor),
+      });
+      return {
+        ...page,
+        goals: page.goals.map((goal) => withGoalUrl(goal, goal.goal_id)),
+      };
     },
     goalboard_v1_goal_state: async (input: Record<string, unknown>) => {
       rejectUnknown("goalboard_v1_goal_state", input);
-      return events.readState(String(input.board_id), String(input.goal_id));
+      const state = await events.readState(String(input.board_id), String(input.goal_id));
+      return withGoalUrl(state, String(input.goal_id));
     },
     goalboard_v1_event_configure: async (input: Record<string, unknown>) => {
       rejectUnknown("goalboard_v1_event_configure", input);
@@ -139,7 +179,7 @@ export function createMcpGoalEventHandlers(
         types: input.types as ConfigureGoalEventsApplicationInput["types"],
         adopted_planning: input.adopted_planning as ConfigureGoalEventsApplicationInput["adopted_planning"],
         adopt_default_requirement_ids: input.adopt_default_requirement_ids as string[] | undefined,
-        new_requirements: input.new_requirements as ConfigureGoalEventsApplicationInput["new_requirements"],
+        expected_agreement_version: input.expected_agreement_version == null ? undefined : Number(input.expected_agreement_version),
         requirement_bindings: input.requirement_bindings as ConfigureGoalEventsApplicationInput["requirement_bindings"],
         ...actor(input),
       };
@@ -152,9 +192,21 @@ export function createMcpGoalEventHandlers(
         goal_id: String(input.goal_id),
         idempotency_key: String(input.idempotency_key ?? ""),
         events: (input.events as ReportGoalWorkEventInput[]) ?? [],
+        progress: input.progress as ReportGoalEventsInput["progress"],
         ...actor(input),
       };
       return events.report(payload);
+    },
+    goalboard_v1_event_note: async (input: Record<string, unknown>) => {
+      rejectUnknown("goalboard_v1_event_note", input);
+      const payload: RecordGoalNoteInput = {
+        board_id: String(input.board_id),
+        goal_id: String(input.goal_id),
+        idempotency_key: String(input.idempotency_key ?? ""),
+        body: String(input.body ?? ""),
+        ...actor(input),
+      };
+      return events.recordNote(payload);
     },
     goalboard_v1_event_list: async (input: Record<string, unknown>) => {
       rejectUnknown("goalboard_v1_event_list", input);
@@ -211,6 +263,8 @@ export function createMcpGoalEventHandlers(
         idempotency_key: String(input.idempotency_key ?? ""),
         question: String(input.question ?? ""),
         options: input.options as RequestGoalDecisionInput["options"],
+        purpose: input.purpose as RequestGoalDecisionInput["purpose"],
+        proposed_change: input.proposed_change as RequestGoalDecisionInput["proposed_change"],
         scope: input.scope as RequestGoalDecisionInput["scope"],
         ...actor(input),
       };
@@ -234,10 +288,13 @@ export function createMcpGoalEventHandlers(
         board_id: String(input.board_id),
         goal_id: String(input.goal_id),
         idempotency_key: String(input.idempotency_key ?? ""),
-        expected_config_version: input.expected_config_version == null ? undefined : Number(input.expected_config_version),
-        expected_agreement_version: input.expected_agreement_version == null ? undefined : Number(input.expected_agreement_version),
+        expected_config_version: Number(input.expected_config_version),
+        expected_agreement_version: Number(input.expected_agreement_version),
         outcome: input.outcome == null ? undefined : String(input.outcome),
         new_requirements: input.new_requirements as SetGoalEventAgreementInput["new_requirements"],
+        revise_requirements: input.revise_requirements as SetGoalEventAgreementInput["revise_requirements"],
+        retire_requirement_ids: input.retire_requirement_ids as SetGoalEventAgreementInput["retire_requirement_ids"],
+        cited_decision_id: input.cited_decision_id == null ? undefined : String(input.cited_decision_id),
         ...actor(input),
       };
       return events.setAgreement(payload);
@@ -255,7 +312,7 @@ export function createMcpGoalEventHandlers(
         result: input.result == null ? undefined : String(input.result),
         reason: String(input.reason ?? ""),
         expected_config_version: Number(input.expected_config_version),
-        expected_agreement_version: input.expected_agreement_version == null ? undefined : Number(input.expected_agreement_version),
+        expected_agreement_version: Number(input.expected_agreement_version),
         ...actor(input),
       };
       return events.submitClosure(payload);
@@ -295,6 +352,7 @@ export function createMcpGoalEventHandlers(
         conclusion: String(input.conclusion ?? ""),
         accepts_requirements: input.accepts_requirements === true ? true : input.accepts_requirements === false ? false : undefined,
         effects: input.effects as RecordGoalUserDecisionInput["effects"],
+        authorized_change: input.authorized_change as RecordGoalUserDecisionInput["authorized_change"],
         scope: input.scope as RecordGoalUserDecisionInput["scope"],
       };
       return events.recordTrustedDecision(payload);

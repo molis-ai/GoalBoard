@@ -42,8 +42,16 @@ function close(data: { directory: string; store: LocalProjectDatabase }) {
   rmSync(data.directory, { recursive: true, force: true });
 }
 
-function configure(app: GoalProjectApplication, goalId: string, key: string, extra?: { new_requirements?: Array<{ requirement_id: string; statement: string }> }) {
-  return app.goalEvents.configure({
+function versions(app: GoalProjectApplication, goalId: string) {
+  const state = app.goalEvents.readState(BOARD, goalId);
+  return {
+    expected_config_version: state.config.version,
+    expected_agreement_version: state.agreement.version,
+  };
+}
+
+function configure(app: GoalProjectApplication, goalId: string, key: string, extra?: { new_requirements?: Array<{ requirement_id: string; statement: string; human_decision_required?: boolean }> }) {
+  const configured = app.goalEvents.configure({
     board_id: BOARD,
     goal_id: goalId,
     actor_id: "runtime-1",
@@ -51,8 +59,19 @@ function configure(app: GoalProjectApplication, goalId: string, key: string, ext
     expected_version: 0,
     idempotency_key: key,
     types: [delivery()],
-    new_requirements: extra?.new_requirements,
   });
+  if (extra?.new_requirements?.length) {
+    app.goalEvents.setAgreement({
+      board_id: BOARD,
+      goal_id: goalId,
+      actor_id: "runtime-1",
+      actor_kind: "runtime",
+      idempotency_key: `${key}:req`,
+      ...versions(app, goalId),
+      new_requirements: extra.new_requirements,
+    });
+  }
+  return configured;
 }
 
 function fulfillment(app: GoalProjectApplication, goalId: string): string {
@@ -108,7 +127,7 @@ test("intent without agreement can record work but explicit complete does not ap
       idempotency_key: "close-bare",
       kind: "complete",
       reason: "还没有约定也想完成",
-      expected_config_version: 1,
+      ...versions(data.app, created.goal.goal_id),
     });
     assert.equal(closed.recorded, true);
     assert.equal(closed.completion_applied, false);
@@ -152,7 +171,7 @@ test("ordinary support does not auto-complete; unknown and failed closes are rec
       kind: "complete",
       reason: "先交完成报告",
       result: "玩家能走完一段故事",
-      expected_config_version: 1,
+      ...versions(data.app, goalId),
     });
     assert.equal(unknownClose.completion_applied, true);
 
@@ -195,7 +214,7 @@ test("ordinary support does not auto-complete; unknown and failed closes are rec
       idempotency_key: "close-unknown",
       kind: "complete",
       reason: "还有未知项",
-      expected_config_version: 1,
+      ...versions(data.app, other.goal.goal_id),
     });
     assert.equal(failed.recorded, true);
     assert.equal(failed.completion_applied, false);
@@ -250,6 +269,45 @@ test("progress summary uses this Goal cursor, goes stale on new facts, and ignor
       }),
       (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_progress.cursor_not_on_goal",
     );
+
+    const combinedGoal = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "组合进展", outcome: "一次上报", actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-combo",
+    }).goal.goal_id;
+    configure(data.app, combinedGoal, "cfg-combo", { new_requirements: [{ requirement_id: "combo-req", statement: "有结果" }] });
+    const combined = data.app.goalEvents.report({
+      board_id: BOARD, goal_id: combinedGoal, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "combo-1",
+      events: [{
+        type_id: "delivery", type_version: 1, title: "交付", fields: { piece: "入口" },
+        judgments: [{ requirement_id: "combo-req", verdict: "supports" }],
+      }],
+      progress: { summary: "本批已可接续", next_step: "收尾" },
+    });
+    assert.equal(combined.progress_summary?.summary, "本批已可接续");
+    assert.equal(combined.work_status, "open");
+    assert.ok(combined.goal_event_cursor > combined.events[0]!.journal_seq);
+    assert.throws(
+      () => data.app.goalEvents.report({
+        board_id: BOARD, goal_id: combinedGoal, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "combo-1",
+        events: [{
+          type_id: "delivery", type_version: 1, title: "交付", fields: { piece: "入口" },
+          judgments: [{ requirement_id: "combo-req", verdict: "supports" }],
+        }],
+        progress: { summary: "不同进展" },
+      }),
+      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "request.idempotency_key_reused",
+    );
+    const beforeBad = data.app.goalEvents.listEvents(BOARD, combinedGoal, { limit: 100 }).events.length;
+    assert.throws(
+      () => data.app.goalEvents.report({
+        board_id: BOARD, goal_id: combinedGoal, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "combo-bad",
+        events: [{
+          type_id: "delivery", type_version: 1, title: "应回滚", fields: { piece: "入口" },
+        }],
+        progress: { summary: "坏字段", unexpected: true } as never,
+      }),
+      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_report.unknown_progress_field",
+    );
+    assert.equal(data.app.goalEvents.listEvents(BOARD, combinedGoal, { limit: 100 }).events.length, beforeBad);
   } finally {
     close(data);
   }
@@ -286,6 +344,7 @@ test("scoped concerns, trusted user decisions, reuse, and runtime forgery", () =
         { option_id: "accept", label: "接受", impact: "可以内部试用" },
         { option_id: "reject", label: "拒绝", impact: "继续补验证" },
       ],
+      purpose: "requirement_acceptance",
       scope: { requirement_ids: ["human-ok"], concern_ids: [opened.concern.concern_id] },
     });
     assert.throws(
@@ -377,7 +436,7 @@ test("related counter-evidence reopens completion and leaves other requirements 
     });
     const closed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-two",
-      kind: "complete", reason: "两项都支持", result: "可体验", expected_config_version: 1,
+      kind: "complete", reason: "两项都支持", result: "可体验", ...versions(data.app, goalId),
     });
     assert.equal(closed.completion_applied, true);
     data.app.goalEvents.report({
@@ -387,13 +446,17 @@ test("related counter-evidence reopens completion and leaves other requirements 
       }],
     });
     assert.equal(fulfillment(data.app, goalId), "satisfied");
-    data.app.goalEvents.report({
+    const contradicted = data.app.goalEvents.report({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "rep-contra",
       events: [{
         type_id: "delivery", type_version: 1, title: "第二段反证", fields: { piece: "第二段坏了" },
         judgments: [{ requirement_id: "beta", verdict: "contradicts" }],
       }],
     });
+    assert.equal(contradicted.work_status, "open");
+    assert.equal(contradicted.completion_effect, false);
+    assert.ok(contradicted.gaps.some((gap) => gap.requirement_id === "beta"));
+    assert.ok(contradicted.goal_event_cursor > contradicted.events[0]!.journal_seq);
     const after = data.app.goalEvents.readState(BOARD, goalId);
     assert.equal(after.work_status, "open");
     assert.equal(after.completion_effect, false);
@@ -416,7 +479,7 @@ test("cancel needs no fake evidence; ordinary reports do not resume; stale versi
     configure(data.app, goalId, "cfg-can", { new_requirements: [{ requirement_id: "can-req", statement: "有结果" }] });
     const cancelled = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "cancel-1",
-      kind: "cancel", reason: "方向变了", expected_config_version: 1,
+      kind: "cancel", reason: "方向变了", ...versions(data.app, goalId),
     });
     assert.equal(cancelled.recorded, true);
     assert.equal(cancelled.completion_applied, false);
@@ -424,24 +487,41 @@ test("cancel needs no fake evidence; ordinary reports do not resume; stale versi
     assert.equal(data.app.goalQueries.readGoalContract(BOARD, goalId).goal.fulfillment_state, "unmet");
     reportSupport(data.app, goalId, "report-after-cancel", "can-req");
     assert.equal(data.app.goalEvents.readState(BOARD, goalId).work_status, "cancelled");
+    assert.throws(
+      () => data.app.goalEvents.resumeWork({
+        board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "resume-no-reason", reason: "   ",
+      }),
+      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_resume.reason_required",
+    );
     const resumed = data.app.goalEvents.resumeWork({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "resume-1", reason: "明确继续",
     });
     assert.equal(resumed.work_status, "open");
+    const replayedResume = data.app.goalEvents.resumeWork({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "resume-1", reason: "明确继续",
+    });
+    assert.equal(replayedResume.replayed, true);
+    assert.equal(replayedResume.event_id, resumed.event_id);
+    assert.throws(
+      () => data.app.goalEvents.resumeWork({
+        board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "resume-open", reason: "已在进行",
+      }),
+      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_resume.already_open",
+    );
     assert.throws(
       () => data.app.goalEvents.submitClosure({
         board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "stale-close",
-        kind: "complete", reason: "旧版本", expected_config_version: 0,
+        kind: "complete", reason: "旧版本", expected_config_version: 0, expected_agreement_version: 0,
       }),
       (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_closure.stale_version",
     );
     const first = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-retry",
-      kind: "complete", reason: "继续后完成", result: "可用", expected_config_version: 1,
+      kind: "complete", reason: "继续后完成", result: "可用", ...versions(data.app, goalId),
     });
     const retry = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-retry",
-      kind: "complete", reason: "继续后完成", result: "可用", expected_config_version: 1,
+      kind: "complete", reason: "继续后完成", result: "可用", ...versions(data.app, goalId),
     });
     assert.equal(first.completion_applied, true);
     assert.equal(retry.replayed, true);
@@ -454,76 +534,67 @@ test("cancel needs no fake evidence; ordinary reports do not resume; stale versi
 test("parent needs its own integration result; old completion and ancestor auto-satisfy cannot write event-owned Goals", () => {
   const data = fixture();
   try {
-    data.app.goals.commands.createGoal(BOARD, {
+    data.app.goalEvents.createIntent({
+      board_id: BOARD,
       goal_id: "parent-event",
       title: "事件父 Goal",
       outcome: "整合子结果",
       why: "父目标自己收尾",
       business_logic: "子项完成不是父项完成",
-      definition_state: "accepted",
-      decomposition_state: "closed_compound",
-      acceptance_criteria: [{
-        criterion_id: "parent-int",
-        statement: "父 Goal 自己的整合结果",
-        decision_method: "inspection",
-        pass_condition: "能看到整合说明",
-      }],
-    }, { actor_id: "user-1", idempotency_key: "create-parent-event" });
-    data.app.goals.commands.createGoal(BOARD, {
+      requirements: [{ requirement_id: "parent-int", statement: "父 Goal 自己的整合结果" }],
+      actor_id: "user-1",
+      actor_kind: "user",
+      idempotency_key: "create-parent-event",
+      source_kind: "web",
+    });
+    data.app.goalEvents.createIntent({
+      board_id: BOARD,
       goal_id: "child-event",
       title: "事件子 Goal",
       outcome: "子结果",
       why: "子项",
       business_logic: "先完成子项",
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      acceptance_criteria: [{
-        criterion_id: "child-out",
-        statement: "子结果可用",
-        decision_method: "inspection",
-        pass_condition: "可检查",
-      }],
-    }, { actor_id: "user-1", idempotency_key: "create-child-event" });
-    data.app.goals.commands.addRelation(BOARD, {
-      from_goal_id: "child-event",
-      to_goal_id: "parent-event",
-      type: "part_of",
-      reason: "子属于父",
-    }, { actor_id: "user-1", idempotency_key: "rel-event" });
+      parent_goal_id: "parent-event",
+      requirements: [{ requirement_id: "child-out", statement: "子结果可用" }],
+      actor_id: "user-1",
+      actor_kind: "user",
+      idempotency_key: "create-child-event",
+      source_kind: "web",
+    });
     configure(data.app, "parent-event", "cfg-parent");
     configure(data.app, "child-event", "cfg-child");
     reportSupport(data.app, "child-event", "rep-child", "child-out");
     const childClosed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "child-event", actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-child",
-      kind: "complete", reason: "子项完成", result: "子结果", expected_config_version: 1,
+      kind: "complete", reason: "子项完成", result: "子结果", ...versions(data.app, "child-event"),
     });
     assert.equal(childClosed.completion_applied, true);
-    data.app.goals.lifecycle.reconcileAllClosedCompoundGoals(BOARD, "runtime-1", new Date().toISOString());
     assert.equal(fulfillment(data.app, "parent-event"), "unmet");
     const parentTooEarly = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "parent-event", actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-parent-early",
-      kind: "complete", reason: "子都完了", expected_config_version: 1,
+      kind: "complete", reason: "子都完了", ...versions(data.app, "parent-event"),
     });
     assert.equal(parentTooEarly.completion_applied, false);
     reportSupport(data.app, "parent-event", "rep-parent", "parent-int");
     const parentClosed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "parent-event", actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-parent",
-      kind: "complete", reason: "父 Goal 自己整合", result: "整合说明", expected_config_version: 1,
+      kind: "complete", reason: "父 Goal 自己整合", result: "整合说明", ...versions(data.app, "parent-event"),
     });
     assert.equal(parentClosed.completion_applied, true);
 
-    data.app.goals.commands.createGoal(BOARD, {
+    data.app.goalEvents.createIntent({
+      board_id: BOARD,
       goal_id: "parent-event-2",
       title: "事件父 2",
       outcome: "不能被旧入口写",
       why: "门禁",
       business_logic: "旧入口拒绝",
-      definition_state: "accepted",
-      decomposition_state: "closed_compound",
-      acceptance_criteria: [{
-        criterion_id: "p2", statement: "父结果", decision_method: "inspection", pass_condition: "有",
-      }],
-    }, { actor_id: "user-1", idempotency_key: "create-p2" });
+      requirements: [{ requirement_id: "p2", statement: "父结果" }],
+      actor_id: "user-1",
+      actor_kind: "user",
+      idempotency_key: "create-p2",
+      source_kind: "web",
+    });
     data.app.goals.commands.createGoal(BOARD, {
       goal_id: "child-legacy",
       title: "旧子 Goal",
@@ -541,29 +612,10 @@ test("parent needs its own integration result; old completion and ancestor auto-
     }, { actor_id: "user-1", idempotency_key: "rel-p2" });
     configure(data.app, "parent-event-2", "cfg-p2");
     const before = fulfillment(data.app, "parent-event-2");
-    data.app.goals.lifecycle.satisfyForLifecycleFacts(BOARD, "child-legacy", "user-1", new Date().toISOString());
+    data.store.db.prepare("UPDATE goals SET fulfillment_state = 'satisfied' WHERE goal_id = ?").run("child-legacy");
     assert.equal(fulfillment(data.app, "child-legacy"), "satisfied");
     assert.equal(fulfillment(data.app, "parent-event-2"), before);
-    assert.throws(
-      () => data.app.goals.lifecycle.evaluateCompletion({
-        board_id: BOARD, goal_id: "parent-event-2", actor_id: "runtime-1", idempotency_key: "old-complete",
-      }),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal.event_state_owner",
-    );
-    assert.throws(
-      () => data.app.goals.lifecycle.satisfyForLifecycleFacts(BOARD, "parent-event-2", "user-1", new Date().toISOString()),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal.event_state_owner",
-    );
     assert.equal(fulfillment(data.app, "parent-event-2"), "unmet");
-    const claim = data.app.executionValidation.commands.claimGoal({
-      board_id: BOARD,
-      goal_id: "parent-event-2",
-      actor_id: "runtime-1",
-      role: "executor",
-      idempotency_key: "claim-event-owned",
-    });
-    assert.equal(claim.allowed, false);
-    assert.ok(claim.reasons.some((reason) => reason.code === "goal.event_state_owner"));
   } finally {
     close(data);
   }
@@ -600,17 +652,13 @@ test("protected Web user entry records a decision; Host-injected identity is req
       },
       changed: () => undefined,
       commands: data.app.goals.commands,
-      impacts: data.app.goals.impacts,
       lifecycle: data.app.goals.lifecycle,
       query: data.app.goalQueries,
-      executionCommands: data.app.executionValidation.commands,
       setActiveGoal: (...args) => data.app.goals.commands.setActiveGoal(...args),
       goalTreeWebInput: data.app.goalTreeWebInput,
       goalTreeDecision: data.app.goalTreeDecision,
-      legacyContractDecision: data.app.legacyContractDecision,
-      legacyCandidateDecision: data.app.legacyCandidateDecision,
-      legacyRewireDecision: data.app.legacyRewireDecision,
       goalEvents: data.app.goalEvents,
+      journalEvents: () => [],
     });
     assert.equal(handled, true);
     assert.equal(status, 200);
@@ -648,7 +696,10 @@ test("restarted Host reads the same owner, summary staleness and work status", (
       assert.equal(state.progress_summary?.stale, true);
       assert.equal(state.progress_summary?.summary, "已可接续");
       assert.equal(state.work_status, "open");
-      assert.equal(state.protocol.kind, "event_work");
+      assert.equal(state.owner?.kind, "event_work");
+      assert.equal("protocol" in state, false);
+      assert.equal("current_agreement" in state, false);
+      assert.equal("outcome" in state.intent, false);
     } finally {
       reopened.close();
     }
@@ -688,6 +739,7 @@ test("trusted rejection cannot accept a Concern; nonexistent events cannot overt
         { option_id: "accept", label: "接受风险", impact: "带着风险继续" },
         { option_id: "reject", label: "拒绝", impact: "先修复" },
       ],
+      purpose: "suggestion",
       scope: { concern_ids: [opened.concern.concern_id] },
     });
     const rejected = data.app.goalEvents.recordTrustedDecision({
@@ -737,15 +789,20 @@ test("agreement CAS uses the version that changes; unrelated types keep a valid 
     });
     const goalId = created.goal.goal_id;
     configure(data.app, goalId, "cfg-agree", { new_requirements: [{ requirement_id: "agree-req", statement: "可回读" }] });
-    const baseConfig = data.app.goalEvents.readState(BOARD, goalId).config.version;
+    const unauthorized = attempt(() => data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "agree-runtime",
+      ...versions(data.app, goalId), outcome: "第一个已保存的具体结果约定",
+    }));
+    assert.equal(unauthorized.accepted, false);
+    assert.equal((unauthorized as { code: string }).code, "event_agreement.unauthorized_change");
     const first = data.app.goalEvents.setAgreement({
-      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "agree-1",
-      expected_config_version: baseConfig, outcome: "第一个已保存的具体结果约定",
+      board_id: BOARD, goal_id: goalId, actor_id: "web-user", actor_kind: "user", idempotency_key: "agree-1",
+      ...versions(data.app, goalId), outcome: "第一个已保存的具体结果约定",
     });
-    assert.equal(first.agreement.version, 2);
+    assert.equal(first.agreement.version, 3);
     const second = attempt(() => data.app.goalEvents.setAgreement({
-      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "agree-2",
-      expected_config_version: baseConfig, outcome: "仍基于旧版本的覆盖写入",
+      board_id: BOARD, goal_id: goalId, actor_id: "web-user", actor_kind: "user", idempotency_key: "agree-2",
+      expected_config_version: first.agreement.version, expected_agreement_version: 1, outcome: "仍基于旧版本的覆盖写入",
     }));
     assert.equal(second.accepted, false);
     assert.equal((second as { code: string }).code, "event_agreement.stale_version");
@@ -793,12 +850,19 @@ test("complete then cancel then resume stays consistent; invalid kind has no wri
     const version = data.app.goalEvents.readState(BOARD, goalId).config.version;
     const completed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-ok",
-      kind: "complete", result: "具体结果已可回读", reason: "要求已有支持", expected_config_version: version,
+      kind: "complete", result: "具体结果已可回读", reason: "要求已有支持", ...versions(data.app, goalId),
     });
     assert.equal(completed.completion_applied, true);
+    const fromCompleted = data.app.goalEvents.resumeWork({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "resume-from-complete", reason: "从完成继续",
+    });
+    assert.equal(fromCompleted.work_status, "open");
+    const completedEvent = data.app.goalEvents.readEvent(BOARD, goalId, fromCompleted.event_id);
+    assert.equal(completedEvent.kind, "system");
+    if (completedEvent.kind === "system") assert.equal(completedEvent.payload.operation, "completion_reopened");
     const cancelled = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "cancel-ok",
-      kind: "cancel", reason: "用户取消本次目标", expected_config_version: version,
+      kind: "cancel", reason: "用户取消本次目标", ...versions(data.app, goalId),
     });
     assert.equal(cancelled.work_status, "cancelled");
     data.app.goalEvents.resumeWork({
@@ -806,7 +870,7 @@ test("complete then cancel then resume stays consistent; invalid kind has no wri
     });
     const resumed = data.app.goalEvents.readState(BOARD, goalId);
     assert.equal(resumed.work_status, "open");
-    assert.equal(resumed.current_agreement.fulfillment_state, "unmet");
+    assert.equal(resumed.work_status, "open");
     assert.equal(resumed.closure?.kind, "cancel");
     assert.equal(fulfillment(data.app, goalId), "unmet");
 
@@ -818,7 +882,7 @@ test("complete then cancel then resume stays consistent; invalid kind has no wri
     const before = data.app.goalEvents.listEvents(BOARD, invalid.goal.goal_id, { limit: 100 }).events.length;
     const bad = attempt(() => data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: invalid.goal.goal_id, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-bad",
-      kind: "not-a-valid-kind" as "complete", reason: "非法枚举必须拒绝", expected_config_version: 1,
+      kind: "not-a-valid-kind" as "complete", reason: "非法枚举必须拒绝", ...versions(data.app, invalid.goal.goal_id),
     }));
     assert.equal(bad.accepted, false);
     assert.equal((bad as { code: string }).code, "event_closure.invalid_kind");
@@ -832,19 +896,25 @@ test("complete then cancel then resume stays consistent; invalid kind has no wri
 test("closure keeps depends_on, human_approval, completion risk, pending decision and explicit result", () => {
   const data = fixture();
   try {
-    const make = (goalId: string, key: string) => {
+    const make = (goalId: string, key: string, requirement: { human_decision_required?: boolean } = {}) => {
       data.app.goalEvents.createIntent({
         board_id: BOARD, goal_id: goalId, title: goalId, outcome: "完成可检查的具体结果",
         actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: `intent-${key}`,
       });
-      configure(data.app, goalId, `cfg-${key}`, { new_requirements: [{ requirement_id: `${goalId}-result`, statement: "具体结果可以检查" }] });
+      configure(data.app, goalId, `cfg-${key}`, {
+        new_requirements: [{
+          requirement_id: `${goalId}-result`,
+          statement: "具体结果可以检查",
+          ...requirement,
+        }],
+      });
       reportSupport(data.app, goalId, `rep-${key}`, `${goalId}-result`);
     };
     const close = (goalId: string, extra: Record<string, unknown> = {}) => data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
       idempotency_key: `close-${goalId}-${Math.random()}`,
       kind: "complete", result: "本 Goal 的整合结果已可检查", reason: "检查收尾边界",
-      expected_config_version: data.app.goalEvents.readState(BOARD, goalId).config.version,
+      ...versions(data.app, goalId),
       ...extra,
     } as never);
 
@@ -857,25 +927,21 @@ test("closure keeps depends_on, human_approval, completion risk, pending decisio
     assert.equal(blockedDep.completion_applied, false);
     assert.ok(blockedDep.unmet_reasons.some((reason) => reason.code === "event_closure.open_dependency"));
 
-    make("human-policy", "hp");
-    data.app.goals.commands.registerAcceptedPolicy({
-      board_id: BOARD, goal_id: "human-policy", policy_binding_id: "explicit-user-policy",
-      policy: { human_approval: true }, actor_id: "user-1", reason: "用户明确要求完成前验收", at: new Date().toISOString(),
-    });
+    make("human-policy", "hp", { human_decision_required: true });
     const blockedPolicy = close("human-policy");
     assert.equal(blockedPolicy.completion_applied, false);
-    assert.ok(blockedPolicy.unmet_reasons.some((reason) => reason.code === "event_closure.human_approval_required"));
+    assert.ok(blockedPolicy.unmet_reasons.some((reason) => reason.code === "event_closure.human_decision_required"));
 
     make("risk-gate", "rk");
-    data.app.goals.commands.registerAcceptedRisk({
-      risk_id: "real-blocking-risk", board_id: BOARD, goal_ids: ["risk-gate"],
-      description: "现存未解决的完成风险", probability: "已发生", impact: "结果不可用",
-      affected_surfaces: ["当前结果"], trigger: "结果验收", treatment: "mitigate",
-      treatment_plan: "修复后验收", blocking_mode: "completion", revisit_condition: "修复完成后复查", owner: "user-1",
-    }, new Date().toISOString());
+    data.app.goalEvents.applyConcern({
+      board_id: BOARD, goal_id: "risk-gate", actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "risk-concern", action: "open",
+      title: "现存未解决的完成风险", statement: "结果不可用，完成前必须处理",
+      scope: { action: "complete" }, blocks_closure: true,
+    });
     const blockedRisk = close("risk-gate");
     assert.equal(blockedRisk.completion_applied, false);
-    assert.ok(blockedRisk.unmet_reasons.some((reason) => reason.code === "event_closure.blocking_risk"));
+    assert.ok(blockedRisk.unmet_reasons.some((reason) => reason.code === "event_closure.blocking_concern"));
 
     make("missing-result", "mr");
     const emptyResult = close("missing-result", { result: undefined });
@@ -891,6 +957,7 @@ test("closure keeps depends_on, human_approval, completion risk, pending decisio
         { option_id: "accept", label: "允许", impact: "可以收尾" },
         { option_id: "reject", label: "不允许", impact: "继续修改" },
       ],
+      purpose: "action",
       scope: { action: "complete" },
     });
     const blockedPending = close("pending");
@@ -905,21 +972,23 @@ test("closure keeps depends_on, human_approval, completion risk, pending decisio
 test("later rejection and human-requirement counter-evidence update current completion", () => {
   const data = fixture();
   try {
-    data.app.goals.commands.createGoal(BOARD, {
+    data.app.goalEvents.createIntent({
+      board_id: BOARD,
       goal_id: "human-rejection",
       title: "人工验收",
       outcome: "完成可检查的具体结果",
       why: "明确人工验收",
       business_logic: "用户判断结果",
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      acceptance_criteria: [{
-        criterion_id: "human-rejection-result",
+      requirements: [{
+        requirement_id: "human-rejection-result",
         statement: "具体结果可以检查",
-        decision_method: "human_decision",
-        pass_condition: "用户验收通过",
+        human_decision_required: true,
       }],
-    }, { actor_id: "user-1", idempotency_key: "create-human-rej" });
+      actor_id: "user-1",
+      actor_kind: "user",
+      idempotency_key: "create-human-rej",
+      source_kind: "web",
+    });
     data.app.goalEvents.configure({
       board_id: BOARD, goal_id: "human-rejection", actor_id: "runtime-1", actor_kind: "runtime",
       expected_version: 0, idempotency_key: "cfg-human-rej", types: [delivery()],
@@ -935,7 +1004,7 @@ test("later rejection and human-requirement counter-evidence update current comp
     const closed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "human-rejection", actor_id: "runtime-1", actor_kind: "runtime",
       idempotency_key: "close-human-rej", kind: "complete", result: "本 Goal 的整合结果已可检查",
-      reason: "检查收尾边界", expected_config_version: 1,
+      reason: "检查收尾边界", ...versions(data.app, "human-rejection"),
     });
     assert.equal(closed.completion_applied, true);
     data.app.goalEvents.recordTrustedDecision({
@@ -946,25 +1015,27 @@ test("later rejection and human-requirement counter-evidence update current comp
     });
     const afterReject = data.app.goalEvents.readState(BOARD, "human-rejection");
     assert.equal(afterReject.work_status, "open");
-    assert.equal(afterReject.current_agreement.fulfillment_state, "unmet");
+    assert.equal(afterReject.work_status, "open");
     assert.equal(afterReject.requirements[0]?.user_conclusion?.verdict, "rejected");
     assert.equal(afterReject.closure?.superseded, true);
 
-    data.app.goals.commands.createGoal(BOARD, {
+    data.app.goalEvents.createIntent({
+      board_id: BOARD,
       goal_id: "human-counter",
       title: "后续反证",
       outcome: "完成可检查的具体结果",
       why: "明确人工验收",
       business_logic: "用户判断结果",
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      acceptance_criteria: [{
-        criterion_id: "human-counter-result",
+      requirements: [{
+        requirement_id: "human-counter-result",
         statement: "具体结果可以检查",
-        decision_method: "human_decision",
-        pass_condition: "用户验收通过",
+        human_decision_required: true,
       }],
-    }, { actor_id: "user-1", idempotency_key: "create-human-counter" });
+      actor_id: "user-1",
+      actor_kind: "user",
+      idempotency_key: "create-human-counter",
+      source_kind: "web",
+    });
     data.app.goalEvents.configure({
       board_id: BOARD, goal_id: "human-counter", actor_id: "runtime-1", actor_kind: "runtime",
       expected_version: 0, idempotency_key: "cfg-human-counter", types: [delivery()],
@@ -980,7 +1051,7 @@ test("later rejection and human-requirement counter-evidence update current comp
     data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "human-counter", actor_id: "runtime-1", actor_kind: "runtime",
       idempotency_key: "close-counter", kind: "complete", result: "本 Goal 的整合结果已可检查",
-      reason: "检查收尾边界", expected_config_version: 1,
+      reason: "检查收尾边界", ...versions(data.app, "human-counter"),
     });
     reportSupport(data.app, "human-counter", "rep-counter-contra", "human-counter-result", "contradicts");
     const reopened = data.app.goalEvents.readState(BOARD, "human-counter");
@@ -990,7 +1061,7 @@ test("later rejection and human-requirement counter-evidence update current comp
     const reclosed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: "human-counter", actor_id: "runtime-1", actor_kind: "runtime",
       idempotency_key: "reclose-counter", kind: "complete", result: "本 Goal 的整合结果已可检查",
-      reason: "检查收尾边界", expected_config_version: 1,
+      reason: "检查收尾边界", ...versions(data.app, "human-counter"),
     });
     assert.equal(reclosed.completion_applied, false);
     assert.ok(reclosed.unmet_reasons.some((reason) => reason.code === "event_closure.human_decision_required"));
@@ -1022,7 +1093,7 @@ test("upgrading a non-empty v32 event table keeps judgments and readable current
           goal_id TEXT NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
           kind TEXT NOT NULL CHECK(kind IN ('configuration','report')), type_id TEXT, type_version INTEGER, title TEXT NOT NULL,
           payload_json TEXT NOT NULL, actor_id TEXT NOT NULL, actor_kind TEXT, received_at TEXT NOT NULL, journal_seq INTEGER NOT NULL, config_version INTEGER);
-        INSERT INTO goal_work_events_prior SELECT * FROM goal_work_events;
+        INSERT INTO goal_work_events_prior SELECT * FROM goal_work_events WHERE kind IN ('configuration','report');
         DROP TABLE goal_work_events; ALTER TABLE goal_work_events_prior RENAME TO goal_work_events;
         CREATE INDEX goal_work_events_goal_seq_idx ON goal_work_events(board_id, goal_id, journal_seq);
         DELETE FROM schema_migrations WHERE migration_id = 33;
@@ -1135,7 +1206,7 @@ test("later comparable decision is current; old cite cannot undo a later rejecti
     const closed = data.app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "later-close",
       kind: "complete", result: "结果可回读且当前用户允许完成", reason: "按当前决定收尾",
-      expected_config_version: 1, expected_agreement_version: 1,
+      ...versions(data.app, goalId),
     });
     assert.equal(closed.completion_applied, true);
 
@@ -1183,13 +1254,13 @@ test("same-millisecond closures keep this-event receipt and journal-seq current 
     reportSupport(app, goalId, "rep-ms", "ms-req");
     const completed = app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "close-ms",
-      kind: "complete", result: "具体结果已可回读", reason: "先完成", expected_config_version: 1,
+      kind: "complete", result: "具体结果已可回读", reason: "先完成", ...versions(app, goalId),
     });
     assert.equal(completed.completion_applied, true);
     assert.equal(completed.closure.kind, "complete");
     const cancelled = app.goalEvents.submitClosure({
       board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "cancel-ms",
-      kind: "cancel", reason: "同毫秒取消", expected_config_version: 1,
+      kind: "cancel", reason: "同毫秒取消", ...versions(app, goalId),
     });
     assert.equal(cancelled.recorded, true);
     assert.equal(cancelled.work_status, "cancelled");
@@ -1204,7 +1275,7 @@ test("same-millisecond closures keep this-event receipt and journal-seq current 
   }
 });
 
-test("reading a legacy Goal does not adopt event owner; explicit continue is idempotent", () => {
+test("reading a legacy Goal does not adopt event owner or rewrite original criteria", () => {
   const data = fixture();
   try {
     data.app.goals.commands.createGoal(BOARD, {
@@ -1220,122 +1291,362 @@ test("reading a legacy Goal does not adopt event owner; explicit continue is ide
     const before = data.app.goalEvents.readState(BOARD, "legacy-open");
     assert.equal(before.owner, null);
     assert.equal(data.app.goalEvents.isEventStateOwner(BOARD, "legacy-open"), false);
-    assert.throws(
-      () => data.app.goalEvents.continueWithEventWork({
-        board_id: BOARD, goal_id: "legacy-open", actor_id: "user-1", idempotency_key: "go", reopen_completed: true,
-      }),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_owner.not_completed",
-    );
-    const first = data.app.goalEvents.continueWithEventWork({
-      board_id: BOARD, goal_id: "legacy-open", actor_id: "user-1", idempotency_key: "go",
-    });
-    const replay = data.app.goalEvents.continueWithEventWork({
-      board_id: BOARD, goal_id: "legacy-open", actor_id: "user-1", idempotency_key: "go",
-    });
-    assert.equal(first.replayed, false);
-    assert.equal(replay.replayed, true);
-    assert.equal(replay.event_id, first.event_id);
-    assert.equal(first.owner.source, "continue");
-    assert.equal(first.work_status, "open");
-    assert.equal(first.fulfillment_state, "unmet");
     assert.equal(data.app.goalQueries.readGoalContract(BOARD, "legacy-open").goal.acceptance_criteria[0]?.criterion_id, "legacy-ok");
-    assert.throws(
-      () => data.app.goalEvents.continueWithEventWork({
-        board_id: BOARD, goal_id: "legacy-open", actor_id: "user-1", idempotency_key: "go-again",
-      }),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_owner.already_adopted",
-    );
-  } finally {
-    close(data);
-  }
-});
-
-test("completed legacy Goal keeps original fulfillment until explicit continue reopens open/unmet", () => {
-  const data = fixture();
-  try {
     data.app.goals.commands.createGoal(BOARD, {
       goal_id: "legacy-done",
       title: "旧已完成",
       outcome: "原来的完成结论",
       why: "验证已完成 Goal 不会因阅读而转交",
-      business_logic: "明确继续才会 open/unmet。",
+      business_logic: "阅读不会改写完成事实。",
       definition_state: "accepted",
       decomposition_state: "closed_leaf",
       acceptance_criteria: [{ criterion_id: "done-ok", statement: "已验收", decision_method: "inspection", pass_condition: "可检查" }],
     }, { actor_id: "user-1", idempotency_key: "legacy-done" });
-    data.app.goals.lifecycle.satisfyForLifecycleFacts(BOARD, "legacy-done", "user-1", new Date().toISOString());
+    data.store.db.prepare("UPDATE goals SET fulfillment_state = 'satisfied' WHERE goal_id = ?").run("legacy-done");
     assert.equal(fulfillment(data.app, "legacy-done"), "satisfied");
     assert.equal(data.app.goalEvents.isEventStateOwner(BOARD, "legacy-done"), false);
-    assert.throws(
-      () => data.app.goalEvents.continueWithEventWork({
-        board_id: BOARD, goal_id: "legacy-done", actor_id: "user-1", idempotency_key: "need-explicit",
-      }),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "event_owner.completed_requires_explicit_continue",
-    );
+    assert.equal(data.app.goalEvents.readState(BOARD, "legacy-done").owner, null);
     assert.equal(fulfillment(data.app, "legacy-done"), "satisfied");
-    const continued = data.app.goalEvents.continueWithEventWork({
-      board_id: BOARD, goal_id: "legacy-done", actor_id: "user-1", idempotency_key: "reopen", reopen_completed: true,
-    });
-    assert.equal(continued.reopened, true);
-    assert.equal(continued.work_status, "open");
-    assert.equal(continued.fulfillment_state, "unmet");
-    const state = data.app.goalEvents.readState(BOARD, "legacy-done");
-    assert.equal(state.owner?.source, "continue");
-    assert.equal(state.work_status, "open");
-    assert.ok(state.current_decisions);
-    const event = data.app.goalEvents.readEvent(BOARD, "legacy-done", continued.event_id);
-    assert.equal(event.kind, "system");
-    if (event.kind === "system") assert.equal(event.payload.operation, "event_owner_continued");
   } finally {
     close(data);
   }
 });
 
-test("updateDraftGoal rejects event owners with no field, criteria, event or agreement changes; legacy drafts still save", () => {
+test("replacing a non-empty draft outcome needs a specific cited change; user apply exits completion", () => {
   const data = fixture();
   try {
     const created = data.app.goalEvents.createIntent({
-      board_id: BOARD, title: "事件草稿", outcome: "原事件约定", actor_id: "user-1", actor_kind: "user",
-      idempotency_key: "intent-draft-owner",
+      board_id: BOARD, title: "真实购买", outcome: "用户能完成真实购买",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-buy",
     });
     const goalId = created.goal.goal_id;
-    const beforeGoal = data.store.snapshot(BOARD).goals.find((goal) => goal.goal_id === goalId)!;
-    const beforeState = data.app.goalEvents.readState(BOARD, goalId);
-    const beforeEvents = data.app.goalEvents.listEvents(BOARD, goalId, { limit: 50 });
-    assert.equal(beforeGoal.definition_state, "draft");
-    assert.equal(beforeState.owner?.kind, "event_work");
-    assert.throws(
-      () => data.app.goals.commands.updateDraftGoal(BOARD, goalId, {
-        goal_id: goalId, title: "旧草稿表单的新标题", outcome: "旧草稿表单的新结果",
-        why: "不应写入", business_logic: "第二份约定", definition_state: "draft",
-        decomposition_state: "abstract", acceptance_criteria: [],
-      }, { actor_id: "user-1", idempotency_key: "draft-hijack", reason: "通过旧草稿入口修改当前约定" }),
-      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "goal.event_state_owner",
-    );
-    const afterGoal = data.store.snapshot(BOARD).goals.find((goal) => goal.goal_id === goalId)!;
-    const afterState = data.app.goalEvents.readState(BOARD, goalId);
-    const afterEvents = data.app.goalEvents.listEvents(BOARD, goalId, { limit: 50 });
-    assert.equal(afterGoal.outcome, "原事件约定");
-    assert.equal(afterGoal.title, beforeGoal.title);
-    assert.deepEqual(afterGoal.acceptance_criteria, beforeGoal.acceptance_criteria);
-    assert.equal(afterState.agreement.outcome, "原事件约定");
-    assert.equal(afterState.agreement.version, beforeState.agreement.version);
-    assert.equal(afterEvents.events.length, beforeEvents.events.length);
-    assert.equal(afterState.goal_event_cursor, beforeState.goal_event_cursor);
+    configure(data.app, goalId, "cfg-buy", {
+      new_requirements: [
+        { requirement_id: "buy-req", statement: "能完成一次购买" },
+        { requirement_id: "buy-keep", statement: "能查询订单" },
+      ],
+    });
+    const supported = data.app.goalEvents.report({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "rep-buy",
+      events: [{
+        type_id: "delivery", type_version: 1, title: "交付了一段结果", fields: { piece: "可用入口" },
+        judgments: [
+          { requirement_id: "buy-req", verdict: "supports" },
+          { requirement_id: "buy-keep", verdict: "supports" },
+        ],
+      }],
+    });
+    const closed = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-buy", kind: "complete", result: "购买完成", reason: "已支持",
+      ...versions(data.app, goalId),
+    });
+    assert.equal(closed.completion_applied, true);
+    const beforeCursor = data.app.goalEvents.readState(BOARD, goalId).observed_event_cursor;
+    const denied = attempt(() => data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "agree-buy-runtime", ...versions(data.app, goalId),
+      outcome: "只要展示一个购买按钮即可",
+    }));
+    assert.equal(denied.accepted, false);
+    assert.equal((denied as { code: string }).code, "event_agreement.unauthorized_change");
+    assert.equal(data.app.goalEvents.readState(BOARD, goalId).completion_effect, true);
+    assert.equal(data.app.goalEvents.readState(BOARD, goalId).observed_event_cursor, beforeCursor);
+    const requested = data.app.goalEvents.requestDecision({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "ask-buy",
+      question: "是否把结果改成展示购买按钮？",
+      options: [
+        { option_id: "yes", label: "同意", impact: "当前完成退出" },
+        { option_id: "no", label: "拒绝", impact: "保持原约定" },
+      ],
+      purpose: "agreement_change",
+      proposed_change: { outcome: "只要展示一个购买按钮即可" },
+    });
+    assert.equal(requested.decision_request.commitment?.outcome, "用户能完成真实购买");
+    assert.equal(requested.decision_request.commitment?.requirements.length, 2);
+    const decided = data.app.goalEvents.recordTrustedDecision({
+      board_id: BOARD, goal_id: goalId, idempotency_key: "dec-buy",
+      authority: hostEventDecisionAuthority("web", BOARD, "web-user", "dec-buy"),
+      request_id: requested.decision_request.request_id,
+      selected_option_id: "yes",
+      conclusion: "同意改成按钮",
+      effects: [{ kind: "authorize_agreement_change" }],
+    });
+    const applied = data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "agree-buy-cited", ...versions(data.app, goalId),
+      outcome: "只要展示一个购买按钮即可",
+      cited_decision_id: decided.decision.decision_id,
+    });
+    assert.equal(applied.agreement.outcome, "只要展示一个购买按钮即可");
+    const after = data.app.goalEvents.readState(BOARD, goalId);
+    assert.equal(after.completion_effect, false);
+    assert.equal(after.work_status, "open");
+    assert.equal(after.requirements.find((item) => item.requirement_id === "buy-req")?.currently_satisfied, false);
+    assert.equal(after.requirements.find((item) => item.requirement_id === "buy-keep")?.currently_satisfied, false);
+    assert.equal(after.requirements.find((item) => item.requirement_id === "buy-req")?.current_report, null);
+    assert.equal(after.requirements.find((item) => item.requirement_id === "buy-keep")?.current_report, null);
+    const history = data.app.goalEvents.readEvent(BOARD, goalId, supported.events[0]!.event_id);
+    assert.equal(history.judgments.find((item) => item.requirement_id === "buy-req")?.verdict, "supports");
+    const incomplete = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-buy-unmet", kind: "complete", result: "购买完成", reason: "旧支持不能立刻重关",
+      ...versions(data.app, goalId),
+    });
+    assert.equal(incomplete.recorded, true);
+    assert.equal(incomplete.completion_applied, false);
+  } finally {
+    close(data);
+  }
+});
 
-    data.app.goals.commands.createGoal(BOARD, {
-      goal_id: "legacy-draft", title: "未转交草稿", outcome: "旧结果", why: "旧原因",
-      business_logic: "仍走旧编辑", definition_state: "draft", decomposition_state: "abstract",
-      acceptance_criteria: [],
-    }, { actor_id: "user-1", idempotency_key: "legacy-draft-create" });
-    const saved = data.app.goals.commands.updateDraftGoal(BOARD, "legacy-draft", {
-      title: "未转交草稿已补全", outcome: "可继续的旧结果", why: "旧原因",
-      business_logic: "仍走旧编辑", definition_state: "draft", decomposition_state: "abstract",
-      acceptance_criteria: [{ criterion_id: "legacy-c1", statement: "能保存", decision_method: "inspection", pass_condition: "字段在" }],
-    }, { actor_id: "user-1", idempotency_key: "legacy-draft-update", reason: "补全未转交草稿" });
-    assert.equal(saved.goal.title, "未转交草稿已补全");
-    assert.equal(saved.goal.outcome, "可继续的旧结果");
-    assert.equal(data.app.goalEvents.isEventStateOwner(BOARD, "legacy-draft"), false);
+test("close without agreement version is rejected; human extra unknown after accept is unmet", () => {
+  const data = fixture();
+  try {
+    const created = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "人工要求", outcome: "用户亲自确认购买体验",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-human-extra",
+    });
+    const goalId = created.goal.goal_id;
+    configure(data.app, goalId, "cfg-human-extra");
+    data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "req-human-extra", ...versions(data.app, goalId),
+      new_requirements: [{ requirement_id: "human-buy", statement: "必须由用户亲自确认购买体验", human_decision_required: true }],
+    });
+    reportSupport(data.app, goalId, "rep-human-extra", "human-buy");
+    const omitted = attempt(() => data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-omit", kind: "complete", reason: "漏掉约定版本", result: "已确认",
+      expected_config_version: 1,
+    } as never));
+    assert.equal(omitted.accepted, false);
+    assert.equal((omitted as { code: string }).code, "event_closure.expected_agreement_version_required");
+    const supportedOnly = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-support-only", kind: "complete", reason: "只有报告", result: "已确认",
+      ...versions(data.app, goalId),
+    });
+    assert.equal(supportedOnly.completion_applied, false);
+    data.app.goalEvents.recordTrustedDecision({
+      board_id: BOARD, goal_id: goalId, idempotency_key: "dec-human-extra",
+      authority: hostEventDecisionAuthority("web", BOARD, "web-user", "dec-human-extra"),
+      conclusion: "我确认购买体验", accepts_requirements: true,
+      scope: { requirement_ids: ["human-buy"] },
+    });
+    const accepted = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-human-ok", kind: "complete", reason: "用户已确认", result: "已确认",
+      ...versions(data.app, goalId),
+    });
+    assert.equal(accepted.completion_applied, true);
+    reportSupport(data.app, goalId, "rep-human-unknown", "human-buy", "unknown");
+    const afterUnknown = data.app.goalEvents.readState(BOARD, goalId);
+    assert.equal(afterUnknown.work_status, "open");
+    assert.equal(afterUnknown.requirements[0]?.currently_satisfied, false);
+  } finally {
+    close(data);
+  }
+});
+
+test("requirement acceptance pending blocks close; suggestion does not; revise expires only that support", () => {
+  const data = fixture();
+  try {
+    const created = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "两项要求", outcome: "两段都可用",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-pending",
+    });
+    const goalId = created.goal.goal_id;
+    configure(data.app, goalId, "cfg-pending", {
+      new_requirements: [
+        { requirement_id: "alpha", statement: "第一段" },
+        { requirement_id: "beta", statement: "第二段" },
+      ],
+    });
+    data.app.goalEvents.report({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "rep-pending",
+      events: [{
+        type_id: "delivery", type_version: 1, title: "两段都交付", fields: { piece: "两段" },
+        judgments: [
+          { requirement_id: "alpha", verdict: "supports" },
+          { requirement_id: "beta", verdict: "supports" },
+        ],
+      }],
+    });
+    data.app.goalEvents.requestDecision({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "ask-suggest",
+      question: "要不要换个标题？",
+      options: [
+        { option_id: "yes", label: "可以", impact: "只是建议" },
+        { option_id: "no", label: "不用", impact: "保持" },
+      ],
+      purpose: "suggestion",
+      scope: { requirement_ids: ["alpha"] },
+    });
+    const withSuggestion = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-suggest", kind: "complete", reason: "建议不该挡住", result: "可用",
+      ...versions(data.app, goalId),
+    });
+    assert.equal(withSuggestion.completion_applied, true);
+    const waiting = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "待验收", outcome: "两段都可用",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-waiting",
+    });
+    const waitingId = waiting.goal.goal_id;
+    configure(data.app, waitingId, "cfg-waiting", {
+      new_requirements: [{ requirement_id: "need-accept", statement: "需要验收" }],
+    });
+    reportSupport(data.app, waitingId, "rep-waiting", "need-accept");
+    data.app.goalEvents.requestDecision({
+      board_id: BOARD, goal_id: waitingId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "ask-accept",
+      question: "这项要求是否验收？",
+      options: [
+        { option_id: "yes", label: "通过", impact: "可完成" },
+        { option_id: "no", label: "不通过", impact: "继续" },
+      ],
+      purpose: "requirement_acceptance",
+      scope: { requirement_ids: ["need-accept"] },
+    });
+    const blocked = data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: waitingId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-blocked", kind: "complete", reason: "待验收", result: "可用",
+      ...versions(data.app, waitingId),
+    });
+    assert.equal(blocked.completion_applied, false);
+    assert.ok(blocked.unmet_reasons.some((reason) => reason.code === "event_closure.pending_decision"));
+
+    const other = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "修订范围", outcome: "两段都可用",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-revise",
+    });
+    const otherId = other.goal.goal_id;
+    configure(data.app, otherId, "cfg-revise", {
+      new_requirements: [
+        { requirement_id: "keep", statement: "保持的要求" },
+        { requirement_id: "change", statement: "将被改写的要求" },
+      ],
+    });
+    data.app.goalEvents.report({
+      board_id: BOARD, goal_id: otherId, actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "rep-revise",
+      events: [{
+        type_id: "delivery", type_version: 1, title: "两段", fields: { piece: "两段" },
+        judgments: [
+          { requirement_id: "keep", verdict: "supports" },
+          { requirement_id: "change", verdict: "supports" },
+        ],
+      }],
+    });
+    data.app.goalEvents.submitClosure({
+      board_id: BOARD, goal_id: otherId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "close-before-revise", kind: "complete", reason: "先完成", result: "可用",
+      ...versions(data.app, otherId),
+    });
+    const empty = attempt(() => data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: otherId, actor_id: "web-user", actor_kind: "user",
+      idempotency_key: "agree-empty", ...versions(data.app, otherId), outcome: "两段都可用",
+    }));
+    assert.equal(empty.accepted, false);
+    assert.equal((empty as { code: string }).code, "event_agreement.no_changes");
+    data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: otherId, actor_id: "web-user", actor_kind: "user",
+      idempotency_key: "agree-revise", ...versions(data.app, otherId),
+      revise_requirements: [{ requirement_id: "change", statement: "改写后的要求" }],
+    });
+    const revised = data.app.goalEvents.readState(BOARD, otherId);
+    assert.equal(revised.work_status, "open");
+    assert.equal(revised.requirements.find((item) => item.requirement_id === "keep")?.current_report?.verdict, "supports");
+    assert.equal(revised.requirements.find((item) => item.requirement_id === "change")?.current_report, null);
+    assert.equal(revised.requirements.find((item) => item.requirement_id === "change")?.statement, "改写后的要求");
+  } finally {
+    close(data);
+  }
+});
+
+test("stale agreement_change approval is rejected after related commitment change; unrelated config still applies", () => {
+  const data = fixture();
+  try {
+    const created = data.app.goalEvents.createIntent({
+      board_id: BOARD, title: "精确授权", outcome: "用户能完成真实购买",
+      actor_id: "runtime-1", actor_kind: "runtime", idempotency_key: "intent-stale",
+    });
+    const goalId = created.goal.goal_id;
+    configure(data.app, goalId, "cfg-stale", {
+      new_requirements: [{ requirement_id: "r-five", statement: "真实购买" }],
+    });
+    const delta = { outcome: "支持购买后退款" };
+    const requestOutcome = data.app.goalEvents.requestDecision({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "ask-outcome",
+      question: "将结果修改为支持购买后退款",
+      options: [
+        { option_id: "yes", label: "同意", impact: "按所展示内容应用" },
+        { option_id: "no", label: "拒绝", impact: "保留当前约定" },
+      ],
+      purpose: "agreement_change",
+      proposed_change: delta,
+    });
+    const approvedOutcome = data.app.goalEvents.recordTrustedDecision({
+      board_id: BOARD, goal_id: goalId, idempotency_key: "dec-outcome",
+      authority: hostEventDecisionAuthority("web", BOARD, "web-user", "dec-outcome"),
+      request_id: requestOutcome.decision_request.request_id,
+      selected_option_id: "yes",
+      conclusion: "批准展示的结果变化",
+      effects: [{ kind: "authorize_agreement_change" }],
+    });
+    data.app.goalEvents.configure({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      expected_version: data.app.goalEvents.readState(BOARD, goalId).config.version,
+      idempotency_key: "cfg-unrelated",
+      types: [{ ...delivery(), version: 2, name: "结果记录的新显示名" }],
+    });
+    const applied = data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "apply-outcome", ...versions(data.app, goalId), ...delta,
+      cited_decision_id: approvedOutcome.decision.decision_id,
+    });
+    assert.equal(applied.agreement.outcome, "支持购买后退款");
+
+    const staleRequest = data.app.goalEvents.requestDecision({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "ask-retire",
+      question: "取消原来的真实购买要求",
+      options: [
+        { option_id: "yes", label: "同意", impact: "按所展示内容应用" },
+        { option_id: "no", label: "拒绝", impact: "保留当前约定" },
+      ],
+      purpose: "agreement_change",
+      proposed_change: { retire_requirement_ids: ["r-five"] },
+    });
+    assert.equal(staleRequest.decision_request.commitment?.requirements[0]?.statement, "真实购买");
+    data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "web-user", actor_kind: "user",
+      idempotency_key: "revise-before-approve", ...versions(data.app, goalId),
+      revise_requirements: [{ requirement_id: "r-five", statement: "真实购买并处理退货" }],
+    });
+    const beforeApprove = data.app.goalEvents.readState(BOARD, goalId);
+    const stale = attempt(() => data.app.goalEvents.recordTrustedDecision({
+      board_id: BOARD, goal_id: goalId, idempotency_key: "dec-stale",
+      authority: hostEventDecisionAuthority("web", BOARD, "web-user", "dec-stale"),
+      request_id: staleRequest.decision_request.request_id,
+      selected_option_id: "yes",
+      conclusion: "批准之前展示的取消要求",
+      effects: [{ kind: "authorize_agreement_change" }],
+    }));
+    assert.equal(stale.accepted, false);
+    assert.equal((stale as { code: string }).code, "event_decision.stale_commitment");
+    assert.match((stale as { message: string }).message, /变化|变更|匹配|过期|基线/);
+    const afterApprove = data.app.goalEvents.readState(BOARD, goalId);
+    assert.equal(afterApprove.observed_event_cursor, beforeApprove.observed_event_cursor);
+    assert.equal(afterApprove.requirements.find((item) => item.requirement_id === "r-five")?.statement, "真实购买并处理退货");
+    assert.equal(afterApprove.pending_decisions.some((item) => item.request_id === staleRequest.decision_request.request_id), true);
+    const retireDenied = attempt(() => data.app.goalEvents.setAgreement({
+      board_id: BOARD, goal_id: goalId, actor_id: "runtime-1", actor_kind: "runtime",
+      idempotency_key: "retire-without-auth", ...versions(data.app, goalId),
+      retire_requirement_ids: ["r-five"],
+    }));
+    assert.equal(retireDenied.accepted, false);
+    assert.equal((retireDenied as { code: string }).code, "event_agreement.unauthorized_change");
   } finally {
     close(data);
   }

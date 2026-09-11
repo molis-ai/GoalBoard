@@ -10,13 +10,12 @@ import { CapabilityRegistryError } from "@adeptify/goalboard-kernel";
 
 import {
   createGoalBoardLocalHost,
-  createGoalCapability,
+  createGoalIntentCapability,
   goalBoardHostProjectReference,
   snapshotBoardCapability,
 } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
-import type { CreateGoalInput } from "@adeptify/goalboard-contracts/modules/goals";
 
 test("Local Host discovers one runtime and serializes typed capabilities", async () => {
   const increment = {
@@ -80,7 +79,7 @@ async function captureCli(operation: () => Promise<number>): Promise<Record<stri
   return JSON.parse(lines.at(-1) ?? "{}") as Record<string, unknown>;
 }
 
-test("CLI, MCP, and Workbench-style client share one writer and recover after restart", async () => {
+test("CLI snapshot, MCP intent, and Workbench-style client share one writer and recover after restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-local-host-"));
   const databasePath = join(directory, "goalboard.db");
   let openCount = 0;
@@ -89,17 +88,16 @@ test("CLI, MCP, and Workbench-style client share one writer and recover after re
     onRuntimeOpen: () => { openCount += 1; },
   });
   const boardId = "shared-host-board";
-  const commonGoal: CreateGoalInput = {
+  const intent = {
+    board_id: boardId,
     goal_id: "shared-entry-goal",
     title: "共享 Host Goal",
     outcome: "三个入口看到同一个结果",
-    why: "验证 Local Host 单写入者",
-    business_logic: "同一 typed Command 必须幂等地落到同一份事实。",
-    definition_state: "draft",
-    decomposition_state: "abstract",
-    priority: 50,
-    acceptance_criteria: [],
+    actor_id: "shared-user",
+    actor_kind: "user" as const,
+    idempotency_key: "shared-goal-command",
   };
+  const mcp = new GoalBoardServer("management", null, null, host);
   try {
     await captureCli(() => runV1Cli([
       "init",
@@ -111,42 +109,27 @@ test("CLI, MCP, and Workbench-style client share one writer and recover after re
         idempotency_key: "shared-host-init",
       }),
     ], { localHost: host }));
-    const cliCreated = await captureCli(() => runV1Cli([
-      "create-goal",
-      "--db", databasePath,
-      "--json", JSON.stringify({
-        board_id: boardId,
-        goal: commonGoal,
-        actor_id: "shared-user",
-        idempotency_key: "shared-goal-command",
-      }),
-    ], { localHost: host }));
+    await assert.rejects(
+      () => runV1Cli(["create-goal", "--db", databasePath, "--json", JSON.stringify(intent)], { localHost: host }),
+      /未知 V1 operation: create-goal/,
+    );
 
-    const mcp = new GoalBoardServer("management", null, null, host);
-    const mcpCreated = JSON.parse(await mcp.callTool("goalboard_v1_create_goal", {
+    const mcpCreated = JSON.parse(await mcp.callTool("goalboard_v1_goal_intent_create", {
       database_path: databasePath,
-      board_id: boardId,
-      goal: commonGoal,
-      actor_id: "shared-user",
-      idempotency_key: "shared-goal-command",
-    })) as Record<string, unknown>;
+      ...intent,
+    })) as { goal: { goal_id: string }; observed_event_cursor: number; replayed: boolean };
 
     const reference = goalBoardHostProjectReference({ databasePath, boardId });
-    const workbenchCreated = await host.client(reference).invoke(createGoalCapability, {
-      board_id: boardId,
-      goal: commonGoal,
-      actor_id: "shared-user",
-      idempotency_key: "shared-goal-command",
-    });
-    assert.deepEqual(mcpCreated.goal, cliCreated.goal, "MCP and CLI must present the same Goal fact");
-    assert.equal(mcpCreated.observed_event_cursor, cliCreated.observed_event_cursor);
-    assert.equal(mcpCreated.replayed, true);
-    assert.deepEqual(workbenchCreated.goal, cliCreated.goal, "Workbench Host Client must see the same Goal fact");
-    assert.equal(workbenchCreated.observed_event_cursor, cliCreated.observed_event_cursor);
+    const workbenchCreated = await host.client(reference).invoke(createGoalIntentCapability, intent);
+    assert.equal(mcpCreated.goal.goal_id, "shared-entry-goal");
     assert.equal(workbenchCreated.replayed, true);
+    assert.deepEqual(workbenchCreated.goal, mcpCreated.goal, "Workbench Host Client must see the same Goal fact");
+    assert.equal(workbenchCreated.observed_event_cursor, mcpCreated.observed_event_cursor);
     assert.equal(openCount, 1, "all three entries must share one Store/Coordinator runtime");
-    const snapshot = await host.client(reference).invoke(snapshotBoardCapability, { board_id: boardId });
-    assert.deepEqual(snapshot.goals.map((goal) => goal.goal_id), ["shared-entry-goal"]);
+    const snapshot = await captureCli(() => runV1Cli([
+      "snapshot", "--db", databasePath, "--json", JSON.stringify({ board_id: boardId }),
+    ], { localHost: host }));
+    assert.deepEqual((snapshot.goals as { goal_id: string }[]).map((goal) => goal.goal_id), ["shared-entry-goal"]);
 
     await host.close();
     const restarted = createGoalBoardLocalHost({ instanceId: "restarted-entry-host" });
@@ -157,6 +140,7 @@ test("CLI, MCP, and Workbench-style client share one writer and recover after re
       await restarted.close();
     }
   } finally {
+    await mcp.close();
     await host.close();
     rmSync(directory, { recursive: true, force: true });
   }

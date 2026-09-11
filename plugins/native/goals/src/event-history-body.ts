@@ -112,7 +112,7 @@ function renderSystemPayload(
     case "work_resumed":
       return `${heading}<p>${escapeHtml(payload.reason)}</p></article>`;
     case "event_owner_continued":
-      return `${heading}<p>${payload.reopened ? L("原完成事实保留，并开启新一轮 open/unmet 工作。") : L("普通新写入进入事件服务。")}</p></article>`;
+      return `${heading}<p>${payload.reopened ? L("原完成事实保留，并开启新一轮工作。") : L("普通新写入进入事件服务。")}</p></article>`;
     case "observation_note":
       return `${heading}<p>${escapeHtml(payload.body)}</p></article>`;
     default:

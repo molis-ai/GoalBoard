@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import test from "node:test";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { DEMO_BOARD_ID, GoalProjectApplication, LocalProjectDatabase, seedDemoBoard } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, GoalProjectApplication, LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
+import { materializeGoalEventV35Fixture } from "./goal-event-v35-fixture.js";
 
 const TOKEN = "goalboard-history-contract-token-0123456789abcdef";
 
@@ -21,9 +20,9 @@ function listen(server: Server): Promise<string> {
 }
 
 test("public document timeline is bounded, keeps journal, and does not label self-verification as user", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "goalboard-history-contract-"));
-  const databasePath = join(directory, "fixture.db");
-  seedDemoBoard(databasePath);
+  const fixture = materializeGoalEventV35Fixture("legacy");
+  const directory = fixture.directory;
+  const databasePath = fixture.path;
   const store = new LocalProjectDatabase(databasePath);
   const app = new GoalProjectApplication(store);
   const server = createGoalBoardWebServer({ databasePath, boardId: DEMO_BOARD_ID, homeDirectory: directory, controlToken: TOKEN });
@@ -32,7 +31,7 @@ test("public document timeline is bounded, keeps journal, and does not label sel
     const page = async (goalId: string, query: Record<string, string>) => {
       const response = await fetch(`${origin}/api/goals/${goalId}/event-timeline?${new URLSearchParams(query)}`);
       assert.equal(response.status, 200);
-      return response.json() as Promise<{ items: Array<{ item_id: string; original_id: string; actor_kind: string | null }>; next_cursor: string | null }>;
+      return response.json() as Promise<{ items: Array<{ item_id: string; original_id: string; source: string; actor_id: string; actor_kind: string | null }>; next_cursor: string | null }>;
     };
     const coreBefore = await page("CORE", { limit: "1" });
     assert.ok(coreBefore.items.length <= 1, "limit must bound mixed history");
@@ -45,6 +44,8 @@ test("public document timeline is bounded, keeps journal, and does not label sel
     const coreHistory = await page("CORE", { limit: "100" });
     const mappedReview = coreHistory.items.find((item) => item.original_id === review.review_id);
     assert.ok(mappedReview);
+    assert.equal(mappedReview.source, "legacy_review");
+    assert.equal(mappedReview.actor_id, review.actor_id);
     assert.notEqual(mappedReview.actor_kind, "user");
 
     const fragment = await (await fetch(origin + "/api/goals/V1/document")).text();
@@ -53,10 +54,9 @@ test("public document timeline is bounded, keeps journal, and does not label sel
     assert.ok(renderedIds.length > 0);
     assert.ok(renderedIds.every((id) => v1History.items.some((item) => item.item_id === id)));
 
-    const coreGoal = snapshot.goals.find((goal) => goal.goal_id === "CORE");
-    app.goalEvents.continueWithEventWork({
+    app.goalEvents.resumeWork({
       board_id: DEMO_BOARD_ID, goal_id: "CORE", actor_id: "review-user", actor_kind: "user",
-      idempotency_key: "history-transfer", reopen_completed: coreGoal?.fulfillment_state === "satisfied",
+      idempotency_key: "history-transfer", reason: "保留转交后的工作事实",
     });
     app.goalEvents.configure({
       board_id: DEMO_BOARD_ID, goal_id: "CORE", actor_id: "review-user", actor_kind: "user",
@@ -78,14 +78,18 @@ test("public document timeline is bounded, keeps journal, and does not label sel
     assert.equal(second.items.filter((item) => first.items.some((prior) => prior.item_id === item.item_id)).length, 0);
     const body = await fetch(`${origin}/api/goals/CORE/history/${encodeURIComponent(mappedReview.item_id)}`);
     assert.equal(body.status, 200);
-    const payload = await body.json() as { html: string; item: { original_id: string; source: string } };
-    assert.match(payload.html, /可检查|检查结论/);
+    const payload = await body.json() as { html: string; item: { original_id: string; source: string; actor_id: string } };
+    assert.equal(payload.item.source, "legacy_review");
     assert.equal(payload.item.original_id, review.review_id);
+    assert.equal(payload.item.actor_id, review.actor_id);
+    assert.match(payload.html, /生命周期测试通过/);
+    assert.match(payload.html, new RegExp(review.actor_id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     const byOriginal = await fetch(`${origin}/api/goals/CORE/history/${encodeURIComponent(review.review_id)}`);
     assert.equal(byOriginal.status, 200);
-    const originalPayload = await byOriginal.json() as { html: string; item: { original_id: string } };
+    const originalPayload = await byOriginal.json() as { html: string; item: { original_id: string; source: string } };
     assert.equal(originalPayload.item.original_id, review.review_id);
-    assert.match(originalPayload.html, /可检查|检查结论/);
+    assert.equal(originalPayload.item.source, "legacy_review");
+    assert.equal(originalPayload.html, payload.html);
 
     const refresh = await fetch(`${origin}/api/board/refresh?view=current&goal_id=CORE`);
     assert.equal(refresh.status, 200);

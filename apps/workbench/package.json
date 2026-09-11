@@ -55,7 +55,6 @@
       "workbench.ui-slots.v1",
       "workbench.feed-composition.v1",
       "workbench.goals-command-adapter.v1",
-      "workbench.execution-validation-adapter.v1",
       "workbench.work-composition.v1",
       "workbench.goals-policy-composition.v1",
       "workbench.goals-safety-composition.v1",

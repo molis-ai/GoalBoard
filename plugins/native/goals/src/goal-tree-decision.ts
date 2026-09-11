@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { GoalsQueryApi, GoalsApplicationApi } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GovernanceApplicationApi, GoalTreeProposalDecideInput, GoalTreeProposalItemRecord, ProposalAffectedObject } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
 import type { GoalTreeApplicationApi, GoalTreeProposalDecisionResult } from "./goal-tree-contract.js";
-import type { ExecutionValidationApplicationApi, ActionTransitionReceipt } from "./execution-validation-contract.js";
 import type { GoalTreeQueryApplication } from "./goal-tree-query.js";
 import type { GoalTreeInputReader } from "./goal-tree-inputs.js";
 import type { GoalTreeDecisionNormalizer, NormalizedGoalTreeProposalDecision } from "./goal-tree-decision-inputs.js";
@@ -10,10 +9,8 @@ import type { NormalizedGoalTreeProposalItem } from "./proposal-normalizer.js";
 import type { GoalTreeMaterializationConflicts } from "./goal-tree-materialization-conflicts.js";
 import type { GoalTreeMaterializationApplication } from "./goal-tree-materialization.js";
 import type { GoalTreeDecisionFollowup } from "./goal-tree-decision-followup.js";
-import type { LegacyGoalTreeDecisionApplication } from "./legacy-goal-tree-decision.js";
 import { GoalTreeDecisionPlan } from "./goal-tree-decision-plan.js";
 import { goalTreeMaterializationGroups } from "./goal-tree-materialization-order.js";
-import { compactGoalActionProjection } from "./action-projection.js";
 
 interface DecisionError extends Error { code: string; details?: Record<string, unknown> }
 /** Applies a subset or a pristine whole proposal under the original all-owner transaction. */
@@ -24,8 +21,7 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
     governance: Pick<GovernanceApplicationApi, "records">;
     query: GoalTreeQueryApplication; inputs: GoalTreeInputReader; normalizer: GoalTreeDecisionNormalizer;
     conflicts: GoalTreeMaterializationConflicts; materialization: GoalTreeMaterializationApplication;
-    followup: GoalTreeDecisionFollowup; validation: Pick<ExecutionValidationApplicationApi, "query">;
-    legacy: LegacyGoalTreeDecisionApplication; clock: () => Date;
+    followup: GoalTreeDecisionFollowup; clock: () => Date;
     errorFactory: (code: string, message: string, details?: Record<string, unknown>) => Error;
     isDomainError: (error: unknown) => error is DecisionError;
   }) { this.plan = new GoalTreeDecisionPlan(ports); }
@@ -40,7 +36,10 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
     );
     const runtimeActorId = nullableDialogueText(input.runtime_actor_id);
     if (proposalId.startsWith("legacy-")) {
-      return this.ports.legacy.decide(input, proposalId, authority);
+      throw this.ports.errorFactory(
+        "goal_tree_proposal.kind_retired",
+        "历史提案不能从新 decide 落地；请在 Web 或管理入口阅读历史，结构变更请提交新的 Goal/关系提案",
+      );
     }
     const hash = requestHash({
       board_id: input.board_id,
@@ -155,13 +154,9 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
         confirmed.push({ item, decision });
       }
 
-      const projectionsBeforeDecision = new Map(
-        this.ports.validation.query.getGoalActionProjections({ board_id: input.board_id })
-          .map((projection) => [projection.goal_id, projection]),
-      );
       const confirmedById = new Map(confirmed.map(entry => [entry.item.item_id, entry]));
       const materializationOrder = goalTreeMaterializationGroups(
-        input.board_id, confirmed.map(entry => entry.item), this.ports.goals.query,
+        input.board_id, confirmed.map(entry => entry.item),
       );
       for (const group of materializationOrder) {
         for (const orderedItem of group) {
@@ -224,18 +219,15 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
       }
 
       if (appliedItemIds.length > 0) {
-        this.ports.followup.reconcileEquivalentLegacyRewires(
-          input.board_id,
-          proposal.proposal_id,
-          confirmed
-            .map((entry) => entry.item)
-            .filter((item) =>
-              appliedItemIds.includes(item.item_id) &&
-              (item.kind === "relation" || item.kind === "dependency")),
-          authority.actor_id,
-          now,
-        );
-        this.ports.goals.lifecycle.reconcileAllClosedCompoundGoals(input.board_id, authority.actor_id, now);
+        const graph = this.ports.goals.planning.validateBoardGraph(input.board_id);
+        const blocking = graph.issues.filter((issue) =>
+          issue.code === "planning.part_of_cycle" || issue.code === "planning.dependency_cycle" || issue.code === "planning.execution_cycle");
+        if (blocking[0]) {
+          throw this.ports.errorFactory(blocking[0].code, blocking[0].message, {
+            goal_ids: blocking[0].goal_ids,
+            relation_ids: blocking[0].relation_ids,
+          });
+        }
       }
 
       const revisionInputs = decisions.filter(
@@ -293,19 +285,6 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
         conflict_item_ids: conflictItemIds, revision_proposal_ids: revisionProposals.map(item => item.proposal_id),
         semantic_review: semanticReview, at: now,
       });
-      const projectionsAfterDecision = this.ports.validation.query.getGoalActionProjections({ board_id: input.board_id });
-      const changedProjections = projectionsAfterDecision.filter((projection) =>
-        projectionsBeforeDecision.get(projection.goal_id)?.action_token !== projection.action_token
-      );
-      const affectedGoals = changedProjections.map(compactGoalActionProjection);
-      const transitions = changedProjections.map((projection): ActionTransitionReceipt => ({
-        goal_id: projection.goal_id,
-        previous_action_token: projectionsBeforeDecision.get(projection.goal_id)?.action_token ?? "",
-        projection,
-        affected_goals: affectedGoals,
-        summary: "已应用决定并更新下一步",
-        observed_event_cursor: cursor,
-      }));
       const outcome: Omit<GoalTreeProposalDecisionResult, "replayed"> = {
         proposal: this.ports.query.readNative(input.board_id, proposal.proposal_id),
         revision_proposals: revisionProposals.map((item) => this.ports.query.readNative(input.board_id, item.proposal_id)),
@@ -314,7 +293,7 @@ export class GoalTreeDecisionApplication implements Pick<GoalTreeApplicationApi,
         revised_item_ids: revisedItemIds,
         conflict_item_ids: conflictItemIds,
         semantic_review: semanticReview,
-        transitions,
+        transitions: [],
         observed_event_cursor: cursor,
       };
       return { value: outcome, at: now };

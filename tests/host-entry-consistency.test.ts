@@ -3,12 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { LocalHost } from "@adeptify/goalboard-app-local-host";
-import { createGoalEntryCompositionClient } from "@adeptify/goalboard-plugin-goals";
-import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
+import { createGoalEntryCompositionClient, createGoalIntentCapability } from "@adeptify/goalboard-plugin-goals";
+import { LocalHost, createGoalBoardLocalHost, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 
-test("MCP combined responses cannot be split by a queued competing Goal write", async () => {
+test("MCP event directory and trash composition cannot be split by a queued competing Goal write", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-entry-consistency-"));
   const databasePath = join(directory, "project.db");
   const boardId = "combined-entry";
@@ -16,38 +15,38 @@ test("MCP combined responses cannot be split by a queued competing Goal write", 
   const reference = goalBoardHostProjectReference({ databasePath, boardId });
   const client = host.client(reference);
   const composition = createGoalEntryCompositionClient(client);
-  const mcp = new GoalBoardServer("runtime", { databasePath, boardId, webBaseUrl: "http://127.0.0.1:4173" }, null, host);
-  const makeGoal = (goalId: string) => ({ board_id: boardId, actor_id: "user", idempotency_key: `create-${goalId}`,
-    goal: { goal_id: goalId, title: goalId, outcome: "一致的入口结果", why: "验证组合操作", business_logic: "读取与写后状态不能被并发操作拆开",
-      definition_state: "accepted" as const, decomposition_state: "closed_leaf" as const, promised_outputs: ["一致结果"],
-      acceptance_criteria: [{ statement: "结果一致", decision_method: "inspection" as const, pass_condition: "两部分来自同一操作", required_evidence: ["test"] }] } });
+  const runtimeHost = {
+    homeDirectory: directory,
+    runtimeContext: { runtime_id: "entry", stable_work_context_id: "session", host_declares_stable: true },
+  };
+  const mcp = new GoalBoardServer("runtime", { databasePath, boardId, webBaseUrl: "http://127.0.0.1:4173" }, runtimeHost, host);
+  const makeIntent = (goalId: string) => ({
+    board_id: boardId, actor_id: "user", actor_kind: "user" as const, idempotency_key: `create-${goalId}`,
+    goal_id: goalId, title: goalId, outcome: "一致的入口结果",
+  });
   let competingWrite: Promise<unknown> | undefined;
   try {
     await client.invoke(initializeBoardCapability, { board_id: boardId, title: "组合入口", actor_id: "user", idempotency_key: "init" });
-    await client.invoke(createGoalCapability, makeGoal("first"));
+    await client.invoke(createGoalIntentCapability, makeIntent("first"));
     await host.withProject(reference, ({ coordinator }) => {
-      const original = coordinator.queryAvailable.bind(coordinator);
+      const original = coordinator.goalEvents.listGoals.bind(coordinator.goalEvents);
       let enqueue = true;
-      coordinator.queryAvailable = input => {
+      coordinator.goalEvents.listGoals = input => {
         const result = original(input);
         if (enqueue) {
           enqueue = false;
-          // A real competing write enters the same Host queue between the two owner reads.
-          competingWrite = client.invoke(createGoalCapability, makeGoal("later"));
+          competingWrite = client.invoke(createGoalIntentCapability, makeIntent("later"));
         }
         return result;
       };
     });
-    const available = JSON.parse(await mcp.callTool("goalboard_v1_available", {
-      board_id: boardId, actor_id: "runtime", detail_level: "full",
-    }));
+    const listed = JSON.parse(await mcp.callTool("goalboard_v1_goal_list", { limit: 100 }));
     await competingWrite;
-    assert.deepEqual(available.available.map((item: { goal: { goal_id: string } }) => item.goal.goal_id), ["first"]);
-    assert.deepEqual(available.action_projections.map((item: { goal_id: string }) => item.goal_id), ["first"],
-      "a later write must not appear only in the second half of this response");
-    const later = await composition.queryAvailableWithProjections({ board_id: boardId, actor_id: "runtime" });
-    assert.deepEqual(later.available.available.map(item => item.goal.goal_id).sort(), ["first", "later"]);
-    assert.deepEqual(later.action_projections.map(item => item.goal_id).sort(), ["first", "later"]);
+    assert.deepEqual(listed.goals.map((item: { goal_id: string }) => item.goal_id), ["first"]);
+    const later = await client.invoke(createGoalIntentCapability, makeIntent("later"));
+    assert.equal(later.replayed, true);
+    const after = JSON.parse(await mcp.callTool("goalboard_v1_goal_list", { limit: 100 }));
+    assert.deepEqual(after.goals.map((item: { goal_id: string }) => item.goal_id).sort(), ["first", "later"]);
 
     await host.withProject(reference, ({ coordinator }) => {
       const original = coordinator.goals.lifecycle.setTrashed.bind(coordinator.goals.lifecycle);
@@ -62,15 +61,20 @@ test("MCP combined responses cannot be split by a queued competing Goal write", 
       };
     });
     const trashed = JSON.parse(await mcp.callTool("goalboard_v1_goal_trash", {
-      board_id: boardId, payload: { goal_id: "first", actor_id: "runtime", user_confirmed: true,
-        reason: "用户明确移入回收站", idempotency_key: "trash-before-restore" },
+      goal_id: "first", user_confirmed: true,
+      reason: "用户明确移入回收站", idempotency_key: "trash-before-restore",
     }));
     await competingWrite;
     assert.equal(trashed.status, "trashed");
-    assert.equal(trashed.work_state.work_state, "trashed", "queued restore cannot replace the state associated with this trash result");
+    assert.equal(trashed.work_state.status, "trashed", "queued restore cannot replace the state associated with this trash result");
     assert.equal(trashed.next_action.kind, "report_recoverable_trash");
     const final = await client.invoke(snapshotBoardCapability, { board_id: boardId });
     assert.equal(final.goals.find(goal => goal.goal_id === "first")!.trashed_at, null, "the competing restore must really have committed");
+    await host.withProject(reference, ({ store }) => {
+      const trashEvent = store.readEventsDescending(boardId).find((event) =>
+        event.object_id === "first" && event.type === "goal.trashed");
+      assert.equal(trashEvent?.actor_id, "runtime:entry:session");
+    });
   } finally {
     await competingWrite;
     await mcp.close(); await host.close();

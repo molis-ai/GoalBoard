@@ -2,7 +2,6 @@ import type { StoredModuleEvent } from "@adeptify/goalboard-contracts/platform/s
 import type {
   ExecutionClaimRecord,
   ExecutionRunRecord,
-  ExecutionRunState,
   ExecutionRunWithClaim,
 } from "@adeptify/goalboard-contracts/modules/execution";
 
@@ -18,18 +17,6 @@ export interface ExecutionSqliteDatabase {
   prepare(sql: string): ExecutionSqliteStatement;
   exec(sql: string): unknown;
   transaction<T>(operation: () => T): (() => T) & { immediate(): T };
-}
-
-export interface ExecutionEventInput {
-  eventId: string;
-  boardId: string;
-  actorId: string;
-  type: string;
-  objectType: string;
-  objectId: string;
-  reason: string;
-  payload: unknown;
-  at: string;
 }
 
 export const EXECUTION_SCHEMA_SQL = `
@@ -90,37 +77,10 @@ export class ExecutionRepository {
     }));
   }
 
-  immediate<T>(operation: () => T): T {
-    return this.db.transaction(operation).immediate();
-  }
-
-  eventCursor(boardId: string): number {
-    const row = this.db
-      .prepare("SELECT COALESCE(MAX(seq), 0) AS cursor FROM events WHERE board_id = ?")
-      .get(boardId) as Row | undefined;
-    return number(row?.cursor);
-  }
-
-  latestCompletedWorkRunEventSeq(boardId: string, goalId: string): number {
-    const row = this.db.prepare(`
-      SELECT MAX(event.seq) AS seq
-      FROM events event
-      JOIN runs run ON run.run_id = event.object_id
-      WHERE event.board_id = ? AND event.type = 'run.completed'
-        AND run.goal_id = ? AND run.role IN ('executor', 'revalidator')
-    `).get(boardId, goalId) as Row | undefined;
-    return number(row?.seq);
-  }
-
   getClaim(boardId: string, claimId: string): ExecutionClaimRecord | null {
     const row = this.db
       .prepare("SELECT * FROM claims WHERE board_id = ? AND claim_id = ?")
       .get(boardId, claimId) as Row | undefined;
-    return row ? mapExecutionClaim(row) : null;
-  }
-
-  getClaimById(claimId: string): ExecutionClaimRecord | null {
-    const row = this.db.prepare("SELECT * FROM claims WHERE claim_id = ?").get(claimId) as Row | undefined;
     return row ? mapExecutionClaim(row) : null;
   }
 
@@ -249,95 +209,6 @@ export class ExecutionRepository {
     `).all(claimId) as Row[]).map((row) => text(row.run_id));
   }
 
-  expiredActiveClaims(boardId: string, at: string): ExecutionClaimRecord[] {
-    return (this.db.prepare(`
-      SELECT * FROM claims
-      WHERE board_id = ? AND state = 'active' AND expires_at <= ?
-      ORDER BY expires_at, claim_id
-    `).all(boardId, at) as Row[]).map(mapExecutionClaim);
-  }
-
-  insertClaim(claim: ExecutionClaimRecord): void {
-    this.db.prepare(`
-      INSERT INTO claims (
-        claim_id, board_id, goal_id, actor_id, role, contract_revision,
-        action_kind, action_target_id, state, capabilities_json, goal_mode_attestation,
-        resolved_policy_json, claimed_at, expires_at, renewed_at, released_at, release_reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      claim.claim_id, claim.board_id, claim.goal_id, claim.actor_id, claim.role,
-      claim.contract_revision, claim.action_kind, claim.action_target_id, claim.state,
-      json(claim.capabilities), claim.goal_mode_attestation ? 1 : 0,
-      json(claim.resolved_policy), claim.claimed_at, claim.expires_at, claim.renewed_at,
-      claim.released_at, claim.release_reason,
-    );
-  }
-
-  updateClaimLease(claimId: string, expiresAt: string, renewedAt: string): void {
-    this.db.prepare("UPDATE claims SET expires_at = ?, renewed_at = ? WHERE claim_id = ?")
-      .run(expiresAt, renewedAt, claimId);
-  }
-
-  updateClaimState(
-    claimId: string,
-    state: "released" | "expired" | "revoked",
-    at: string,
-    reason: string,
-  ): void {
-    this.db.prepare(`
-      UPDATE claims SET state = ?, released_at = ?, release_reason = ? WHERE claim_id = ?
-    `).run(state, at, reason, claimId);
-  }
-
-  updateClaimContractRevision(claimId: string, revision: number): void {
-    this.db.prepare("UPDATE claims SET contract_revision = ? WHERE claim_id = ?")
-      .run(revision, claimId);
-  }
-
-  insertRun(run: ExecutionRunRecord): void {
-    this.db.prepare(`
-      INSERT INTO runs (
-        run_id, board_id, goal_id, claim_id, actor_id, role, state, block_reason,
-        output_refs_json, discovery_refs_json, started_at, ended_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      run.run_id, run.board_id, run.goal_id, run.claim_id, run.actor_id, run.role,
-      run.state, run.block_reason, json(run.output_refs), json(run.discovery_refs),
-      run.started_at, run.ended_at,
-    );
-  }
-
-  updateRun(
-    runId: string,
-    state: ExecutionRunState,
-    blockReason: string | null,
-    outputRefs: string[],
-    discoveryRefs: string[],
-    endedAt: string | null,
-  ): void {
-    this.db.prepare(`
-      UPDATE runs SET state = ?, block_reason = ?, output_refs_json = ?,
-        discovery_refs_json = ?, ended_at = ? WHERE run_id = ?
-    `).run(state, blockReason, json(outputRefs), json(discoveryRefs), endedAt, runId);
-  }
-
-  completeRun(runId: string, at: string): ExecutionRunRecord | null {
-    const run = this.getRunById(runId);
-    if (!run) return null;
-    if (run.state !== "started" && run.state !== "blocked") return run;
-    this.updateRun(runId, "completed", null, run.output_refs, run.discovery_refs, at);
-    return this.getRunById(runId);
-  }
-
-  abandonActiveRuns(claimId: string, at: string, reason: string): string[] {
-    const runIds = this.activeRunIdsForClaim(claimId);
-    if (runIds.length === 0) return [];
-    this.db.prepare(`
-      UPDATE runs SET state = 'abandoned', block_reason = ?, ended_at = ?
-      WHERE claim_id = ? AND state IN ('started', 'blocked')
-    `).run(reason, at, claimId);
-    return runIds;
-  }
 }
 
 export function mapExecutionClaim(row: Row): ExecutionClaimRecord {
@@ -389,10 +260,6 @@ function nullableText(value: unknown): string | null {
 
 function number(value: unknown): number {
   return Number(value ?? 0);
-}
-
-function json(value: unknown): string {
-  return JSON.stringify(value);
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

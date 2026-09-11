@@ -1,6 +1,6 @@
 import type { UiContribution } from "@adeptify/goalboard-contracts/platform/ui";
 import { sortGoalTreeItems } from "./tree-order.js";
-import type { GoalDisplayStatus } from "./execution-validation-contract.js";
+import type { GoalDisplayStatus } from "./tree-order.js";
 import type { GoalPresentationState } from "./tree-order.js";
 export interface GoalsDialogItem {
     status: GoalPresentationState;
@@ -25,7 +25,7 @@ function createDialogsRenderer(primitives: GoalsDialogPrimitives) {
       <header><div><span class="dialog-icon dialog-icon--danger" data-goal-trash-icon>${icon("archive")}</span><div><h2 id="goal-trash-dialog-title" data-goal-trash-title>${L("移入回收站")}</h2><p data-goal-trash-description>${L("请先确认这条 Goal 和本次操作原因。")}</p></div></div><button class="icon-button" type="button" data-close-goal-trash aria-label="${L("关闭")}">${icon("x")}</button></header>
       <div class="dialog-body">
         <p class="goal-trash-target"><strong data-goal-trash-target-title>${L("未选择 Goal")}</strong><small data-goal-trash-target-id></small></p>
-        <p class="goal-trash-note" data-goal-trash-note>${L("该操作可恢复：Goal 历史会保留，当前仍生效的关联关系会暂时停止。若还有有效 Claim 或执行中的 Run，系统不会改动 Goal，而会告诉你先结束哪项工作。")}</p>
+        <p class="goal-trash-note" data-goal-trash-note>${L("该操作可恢复：Goal 历史会保留，当前仍生效的关联关系会暂时停止。若这条 Goal 仍有未结束的历史活动记录，系统不会改动它，而会指出还挡着的记录。")}</p>
         <label><span data-goal-trash-reason-label>${L("移入原因")}</span><textarea name="reason" rows="3" required maxlength="4000" placeholder="${L("说明为什么暂时不再保留这条 Goal")}"></textarea></label>
         <p class="form-error" data-goal-trash-error role="alert" hidden></p>
       </div>
@@ -42,9 +42,9 @@ function createDialogsRenderer(primitives: GoalsDialogPrimitives) {
             .join("");
         return `<dialog class="create-dialog" data-create-dialog aria-labelledby="create-dialog-title">
     <form method="dialog" class="dialog-shell" data-create-form>
-      <header><div><span class="dialog-icon">${icon("plus")}</span><div><h2 id="create-dialog-title">${L("新建目标")}</h2><p>${L("先记录你的想法，再补全目标说明并拆成可执行工作。")}</p></div></div><button class="icon-button" type="button" data-close-create aria-label="${L("关闭")}">${icon("x")}</button></header>
+      <header><div><span class="dialog-icon">${icon("plus")}</span><div><h2 id="create-dialog-title">${L("新建目标")}</h2><p>${L("先记录你的想法，再补全目标说明。规划可选。")}</p></div></div><button class="icon-button" type="button" data-close-create aria-label="${L("关闭")}">${icon("x")}</button></header>
       <div class="dialog-body">
-        <aside class="goal-lifecycle-hint">${icon("info")}<span><strong>${L("Goal 应描述一项有限、可验收、最终能完成的改变。")}</strong><small>${L("能力建立后的重复运行产生 Evidence；发现问题后再提出有限的改进 Goal，不必把原 Goal 永久留在未完成状态。")}</small></span></aside>
+        <aside class="goal-lifecycle-hint">${icon("info")}<span><strong>${L("Goal 应描述一项有限、可验收、最终能完成的改变。")}</strong><small>${L("能力稳定后，用普通报告记录反复出现的结果；发现问题再开有限的改进 Goal，不必把原 Goal 一直留着。")}</small></span></aside>
         <div class="field-row field-row--split"><label><span>Goal ID <small>${L("可选")}</small></span><input name="goal_id" autocomplete="off" placeholder="${L("例如 GOAL-AUTHORING")}"></label><label><span>${L("优先级")}</span><input name="priority" type="number" min="0" max="100" value="50"></label></div>
         <label><span>${L("目标名称")}</span><input name="title" required maxlength="120" placeholder="${L("一句话说明要完成什么")}"></label>
         <label><span>${L("要得到的结果 ")}<small>${L("可稍后补")}</small></span><textarea name="outcome" rows="2" placeholder="${L("完成后，用户或系统获得什么可观察结果")}"></textarea></label>
@@ -57,13 +57,13 @@ function createDialogsRenderer(primitives: GoalsDialogPrimitives) {
           <p class="relation-preview" id="parent-relation-preview" data-parent-preview>${L("关系预览：新 Goal 将作为独立 Goal 出现在 Tree 中。")}</p>
         </section>
         <fieldset class="relation-field" aria-describedby="dependency-relation-hint dependency-relation-preview">
-          <legend><span>${L("执行前置")}</span><div><strong>${L("开始前必须等哪些 Goal 完成？ ")}<small>${L("可选")}</small></strong><small id="dependency-relation-hint">${L("只有确实要消费对方结果时才选择；这会成为领取和完成的硬门禁。")}</small></div></legend>
+          <legend><span>${L("执行前置")}</span><div><strong>${L("开始前必须等哪些 Goal 完成？ ")}<small>${L("可选")}</small></strong><small id="dependency-relation-hint">${L("只有确实要等对方完成后才能收尾时才选择。普通笔记和准备仍可先做。")}</small></div></legend>
           <div class="goal-choice-list">${dependencyOptions}</div>
           <p class="relation-preview" id="dependency-relation-preview" data-dependency-preview>${L("关系预览：当前没有执行前置，Goal 可以独立推进。")}</p>
         </fieldset>
         <p class="form-error" data-create-error role="alert" hidden></p>
       </div>
-      <footer><button type="button" data-close-create>${L("取消")}</button><button class="button-primary" type="submit">${L("创建草稿 Goal")}</button></footer>
+      <footer><button type="button" data-close-create>${L("取消")}</button><button class="button-primary" type="submit">${L("创建 Goal")}</button></footer>
     </form>
   </dialog>`;
     }

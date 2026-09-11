@@ -5,9 +5,6 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
       }
       if (handleTreeStatusChange(changed)) return;
       handleGoalRelationChange(changed);
-      const riskStateForm = changed.closest("[data-risk-state-form]");
-      if (riskStateForm) updateRiskStatePreview(riskStateForm);
-      handleRiskPickerChange(changed);
     });
     document.addEventListener("input", (event) => {
       const changed = event.target instanceof Element ? event.target : null;
@@ -18,7 +15,6 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
         const factorError = changedFactorForm.querySelector("[data-relation-error], [data-risk-error], [data-impact-error], [data-policy-error]");
         if (factorError) factorError.hidden = true;
       }
-      handleRiskPickerFilter(changed);
     });
     treeResizer?.addEventListener("pointerdown", (event) => {
       if (matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;

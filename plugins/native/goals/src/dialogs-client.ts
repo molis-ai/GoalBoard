@@ -8,22 +8,22 @@ const GOALS_TRASH_DIALOG_SCRIPT = `    const openGoalTrashDialog = (trigger, tra
       trashError.hidden = true;
       trashError.textContent = "";
       trashForm.elements.reason.value = "";
-      trashDialog.querySelector("[data-goal-trash-title]").textContent = trashed ? "移入回收站" : "恢复 Goal";
+      trashDialog.querySelector("[data-goal-trash-title]").textContent = trashed ? L("移入回收站") : L("恢复 Goal");
       trashDialog.querySelector("[data-goal-trash-description]").textContent = trashed
-        ? "请确认这条 Goal 和本次操作原因。"
-        : "请确认把这条 Goal 恢复到日常 Goal Tree。";
+        ? L("请确认这条 Goal 和本次操作原因。")
+        : L("请确认把这条 Goal 恢复到日常 Goal Tree。");
       trashDialog.querySelector("[data-goal-trash-target-title]").textContent = goalTitle;
       trashDialog.querySelector("[data-goal-trash-target-id]").textContent = goalId;
       trashDialog.querySelector("[data-goal-trash-note]").textContent = trashed
-        ? "该操作可恢复：Goal 历史会保留，当前仍生效的关联关系会暂时停止。若还有有效 Claim 或执行中的 Run，系统不会改动 Goal，而会告诉你先结束哪项工作。"
-        : "恢复不会创建新 Goal，也不会自动启动 Runtime。系统只会恢复两端都不在回收站的关联关系；其余关系会保留为待处理事实。";
-      trashDialog.querySelector("[data-goal-trash-reason-label]").textContent = trashed ? "移入原因" : "恢复原因";
+        ? L("该操作可恢复：Goal 历史会保留，当前仍生效的关联关系会暂时停止。若这条 Goal 仍有未结束的历史活动记录，系统不会改动它，而会指出还挡着的记录。")
+        : L("恢复不会创建新 Goal，也不会自动启动 Runtime。系统只会恢复两端都不在回收站的关联关系；其余关系会保留为待处理事实。");
+      trashDialog.querySelector("[data-goal-trash-reason-label]").textContent = trashed ? L("移入原因") : L("恢复原因");
       trashForm.elements.reason.placeholder = trashed
-        ? "说明为什么暂时不再保留这条 Goal"
-        : "说明为什么现在要恢复这条 Goal";
+        ? L("说明为什么暂时不再保留这条 Goal")
+        : L("说明为什么现在要恢复这条 Goal");
       trashSubmit.classList.toggle("button-danger", trashed);
       trashSubmit.classList.toggle("button-primary", !trashed);
-      trashSubmit.textContent = trashed ? "移入回收站" : "恢复到 Goal Tree";
+      trashSubmit.textContent = trashed ? L("移入回收站") : L("恢复到 Goal Tree");
       trashDialog.showModal();
       if (!matchMedia("(max-width: 760px)").matches) {
         requestAnimationFrame(() => trashForm.elements.reason.focus());
@@ -41,19 +41,19 @@ const GOALS_TRASH_DIALOG_SCRIPT = `    const openGoalTrashDialog = (trigger, tra
       const claims = Array.isArray(result.blocking_claim_ids) ? result.blocking_claim_ids : [];
       const runs = Array.isArray(result.blocking_run_ids) ? result.blocking_run_ids : [];
       const records = [
-        claims.length ? "有效 Claim：" + claims.join(currentLocale() === "en" ? ", " : "、") : "",
-        runs.length ? "执行中 Run：" + runs.join(currentLocale() === "en" ? ", " : "、") : "",
+        claims.length ? L("历史 Claim：") + claims.join(currentLocale() === "en" ? ", " : "、") : "",
+        runs.length ? L("历史 Run：") + runs.join(currentLocale() === "en" ? ", " : "、") : "",
       ].filter(Boolean).join("；");
-      return "现在无法移入回收站：这条 Goal 仍有正在进行的 Runtime 工作。" +
+      return L("现在无法移入回收站：这条 Goal 仍有未结束的历史活动记录。") +
         (records ? records + "。" : "") +
-        "请先结束或释放这些工作，再重新确认。";
+        L("这些历史活动结束后才能移入回收站。");
     };
 
     const submitGoalTrashForm = async () => {
       if (!trashIntent || !trashForm || !trashError || !trashSubmit) return;
       const reason = String(new FormData(trashForm).get("reason") || "").trim();
       if (!reason) {
-        trashError.textContent = "请说明本次操作原因。";
+        trashError.textContent = L("请说明本次操作原因。");
         trashError.hidden = false;
         trashForm.elements.reason.focus();
         return;
@@ -72,7 +72,7 @@ const GOALS_TRASH_DIALOG_SCRIPT = `    const openGoalTrashDialog = (trigger, tra
           }),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "操作失败");
+        if (!response.ok) throw new Error(result.error || L("操作失败"));
         if (result.status === "blocked") {
           trashError.textContent = describeTrashBlock(result);
           trashError.hidden = false;
@@ -81,13 +81,13 @@ const GOALS_TRASH_DIALOG_SCRIPT = `    const openGoalTrashDialog = (trigger, tra
         const expected = trashIntent.trashed
           ? ["trashed", "already_trashed"]
           : ["restored", "already_active"];
-        if (!expected.includes(result.status)) throw new Error("GoalBoard 返回了无法识别的回收站状态");
+        if (!expected.includes(result.status)) throw new Error(L("GoalBoard 返回了无法识别的回收站状态"));
         redirecting = true;
         trashDialog.close();
         clearCollectionUiState();
         navigate(route((trashIntent.trashed ? "/trash/goals/" : "/goals/") + encodeURIComponent(trashIntent.goalId)));
       } catch (error) {
-        trashError.textContent = error.message || "操作失败，请检查后重试";
+        trashError.textContent = error.message || L("操作失败，请检查后重试");
         trashError.hidden = false;
       } finally {
         if (!redirecting) trashSubmit.disabled = false;
@@ -145,13 +145,16 @@ const GOALS_CREATE_SUBMIT_SCRIPT = `    form?.addEventListener("change", updateR
         acceptance_criteria: String(values.get("acceptance_criteria") || "").split("\\n").map((line) => line.trim()).filter(Boolean),
       };
       try {
+        const key = form.dataset.idempotencyKey || (globalThis.crypto?.randomUUID?.() || (String(Date.now()) + Math.random()));
+        form.dataset.idempotencyKey = key;
         const response = await fetch(route("/api/goals"), {
           method: "POST",
-          headers: goalboardControlHeaders(),
-          body: JSON.stringify(payload),
+          headers: { ...goalboardControlHeaders(), "x-goalboard-idempotency-key": key },
+          body: JSON.stringify({ ...payload, idempotency_key: key }),
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "创建失败");
+        delete form.dataset.idempotencyKey;
         clearCurrentGoalUiState();
         navigate(result.goal_path);
       } catch (error) {
@@ -173,7 +176,7 @@ const GOALS_DIALOG_ESCAPE_SCRIPT = `      if (event.key === "Escape" && dialog.o
 /** Dialog-local intent and draft state; Host supplies shared refresh, storage and navigation. */
 export const GOALS_DIALOGS_CLIENT_FACTORY_SCRIPT = `(host) => {
     const { dialog, form, route, controlHeaders: goalboardControlHeaders, refreshBoard,
-      updateRelationPreviews, currentLocale, clearCollectionUiState, clearCurrentGoalUiState, navigate } = host;
+      updateRelationPreviews, currentLocale, translate: L, clearCollectionUiState, clearCurrentGoalUiState, navigate } = host;
     const formError = document.querySelector("[data-create-error]");
     const trashDialog = document.querySelector("[data-goal-trash-dialog]");
     const trashForm = document.querySelector("[data-goal-trash-form]");
@@ -244,4 +247,59 @@ ${GOALS_CREATE_SUBMIT_SCRIPT}    };
 ${GOALS_DIALOG_ESCAPE_SCRIPT}    };
     return { readCreateDraft, refreshCreateChoices, handleGoalDialogClick, handleGoalTrashSubmit,
       bindGoalCreateEvents, handleGoalDialogEscape };
+  }`;
+
+const GOALS_LIFECYCLE_CLICK_SCRIPT = `      const archiveAction = target.closest("[data-goal-archive]");
+      const activeGoalAction = target.closest("[data-set-active-goal]");
+      if (activeGoalAction) {
+        activeGoalAction.disabled = true;
+        const goalId = activeGoalAction.dataset.goalId;
+        try {
+          const response = await fetch(route("/api/goals/" + encodeURIComponent(goalId) + "/active"), {
+            method: "POST",
+            headers: goalboardControlHeaders(),
+            body: JSON.stringify({ reason: "用户在 GoalBoard 设为当前 Goal" }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "无法设为当前 Goal");
+          await refreshBoard(true);
+          showToast("已设为当前 Goal；Runtime 的执行状态没有改变");
+        } catch (error) {
+          activeGoalAction.disabled = false;
+          showToast(error.message || "无法设为当前 Goal", true);
+        }
+        return;
+      }
+      if (archiveAction) {
+        archiveAction.disabled = true;
+        const archived = archiveAction.dataset.goalArchive === "true";
+        const goalId = archiveAction.dataset.goalId;
+        try {
+          const response = await fetch(route("/api/goals/" + encodeURIComponent(goalId) + "/archive"), {
+            method: "POST",
+            headers: goalboardControlHeaders(),
+            body: JSON.stringify({
+              archived,
+              reason: archived ? "用户在 GoalBoard 手动归档已完成 Goal" : "用户在 GoalBoard 恢复归档 Goal",
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "操作失败");
+          navigate(route((archived ? "/archive/goals/" : "/goals/") + encodeURIComponent(goalId)));
+        } catch (error) {
+          archiveAction.disabled = false;
+          showToast(error.message || "操作失败", true);
+        }
+        return;
+      }
+`;
+
+/** Archive, restore-from-archive, and current-goal selection remain current Host HTTP. */
+export const GOALS_LIFECYCLE_CLIENT_FACTORY_SCRIPT = `(host) => {
+    const { route, controlHeaders: goalboardControlHeaders, refreshBoard, showToast, navigate } = host;
+    const handleMatchedLifecycleClick = async (target) => {
+${GOALS_LIFECYCLE_CLICK_SCRIPT}    };
+    const handleGoalLifecycleClick = (target) => target.closest("[data-set-active-goal], [data-goal-archive]")
+      ? handleMatchedLifecycleClick(target) : null;
+    return { handleGoalLifecycleClick };
   }`;

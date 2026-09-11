@@ -10,7 +10,7 @@ type ProjectConnection = NonNullable<GoalBoardRuntimeContextResolution["connecti
 export interface McpContextPresentationPorts {
   connection: RuntimeProjectConnectionState;
   readGuidance(connection: ProjectConnection): Promise<ProjectGuidanceView>;
-  readResumeFacts(connection: ProjectConnection): Promise<McpResumeFacts>;
+  readResumeFacts(connection: ProjectConnection, focusGoalIds: readonly string[]): Promise<McpResumeFacts>;
   readSession(host: GoalBoardRuntimeContextHost, reconcileLegacy: boolean): Promise<RuntimeSessionReadResult>;
   createError: McpPresentationErrorFactory;
 }
@@ -35,12 +35,28 @@ export function createMcpContextPresenter(ports: McpContextPresentationPorts) {
       boardId: connection.board_id, webBaseUrl,
     } : null, host.runtimeContext);
     const { sessionRegistry, sessionGoalId } = await ports.readSession(host, reconcileLegacy);
+    const hostFocus = host.goalId?.trim() || null;
+    const sessionFocus = sessionGoalId?.trim() || null;
     const resume = connection
-      ? buildMcpResumeView(await ports.readResumeFacts(connection), host.goalId?.trim() || null, sessionGoalId)
+      ? buildMcpResumeView(
+        await ports.readResumeFacts(connection, uniqueFocusGoalIds(hostFocus, sessionFocus)),
+        hostFocus,
+        sessionFocus,
+      )
       : { focus: null, next_goals: [], auto_claimed: false };
     return JSON.stringify({
       ...resolution, connection, session_registry: sessionRegistry, project_guidance: projectGuidance,
       runtime_prompt_prefix: projectGuidance?.runtime_prompt_prefix ?? null, resume,
     }, null, 2);
   };
+}
+
+function uniqueFocusGoalIds(...ids: Array<string | null>): string[] {
+  const result: string[] = [];
+  for (const id of ids) {
+    if (!id || result.includes(id)) continue;
+    result.push(id);
+    if (result.length === 2) break;
+  }
+  return result;
 }

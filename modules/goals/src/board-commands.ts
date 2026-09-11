@@ -87,9 +87,6 @@ export class GoalBoardCommands {
       );
       if (replay) return { ...replay, replayed: true };
       const goal = this.context.requireGoal(boardId, input.goal_id);
-      if (goal.definition_state !== "accepted") {
-        throw this.context.error("goal.not_accepted", "只有已接受的 Goal 可以成为当前产品目标");
-      }
       if (goal.trashed_at) {
         throw this.context.error("goal.trashed", "回收站中的 Goal 需要先恢复，才能设为当前产品目标");
       }

@@ -1,12 +1,12 @@
-# 执行领取与运行状态
+# 历史领取与运行记录
 
-维护 Claim、Run、尝试和租约，保证执行者领取、报告、恢复时遵循同一生命周期。
+读取既有 Claim、Run、尝试和租约记录，保留其原始身份、状态与时间，供历史正文、快照、数据升级和项目删除保护使用。
 
 包名：`@adeptify/goalboard-module-execution`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-ExecutionModule.commands 委托 ExecutionLifecycle 改变领取/运行状态，query 提供运行事实。Goals Plugin 把这些事实与目标合同、Review 等组合成可执行动作；Runtime Host 只处理实际进程。
+Host 装配 `ExecutionModule.query`，历史读者按原始 ID 查找 Claim/Run，项目删除入口查询历史活动记录。纯读取场景可使用 `createExecutionQueryApi`。当前 Goal 工作通过事件入口记录，不再创建 Claim 或 Run。
 
 ## 从哪里读代码
 
@@ -15,15 +15,14 @@ ExecutionModule.commands 委托 ExecutionLifecycle 改变领取/运行状态，q
 | 文件 | 用途 |
 | --- | --- |
 | [src/index.ts](src/index.ts) | ExecutionModule 与只读 API |
-| [src/lifecycle.ts](src/lifecycle.ts) | Claim/Run 生命周期 |
-| [src/repository.ts](src/repository.ts) | 执行记录持久化 |
-| [src/impact-policy.ts](src/impact-policy.ts) | 执行影响策略 |
+| [src/repository.ts](src/repository.ts) | 原始 Claim/Run 查询、表结构与映射 |
+| [src/migrations.ts](src/migrations.ts) | 历史执行数据升级 |
 
 可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
 ## 接入与边界
 
-Run 完成不等于 Goal 完成。目标合同、Evidence、Review 和 Session 不在本模块重复存储；并行影响策略通过明确的 impact policy 参与执行判断。
+本模块不提供旧领取、运行报告或完成写入口，也不推导当前 Goal 的可执行动作。旧 Run 的终止状态仍按历史保存；当前 Goal 状态由 Goals 事件事实决定。真实 Runtime Session、终端与进程服务属于 Host。
 
 由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
@@ -36,10 +35,10 @@ pnpm --filter @adeptify/goalboard-module-execution typecheck
 pnpm --filter @adeptify/goalboard-module-execution build
 ```
 
-已有行为示例与回归：[execution-module.test.ts](../../tests/execution-module.test.ts)。完成上述构建后运行：
+历史升级与原始记录保留可参考 [goal-event-migration.test.ts](../../tests/goal-event-migration.test.ts)，真实 Host 资源生命周期可参考 [host-entry-consistency.test.ts](../../tests/host-entry-consistency.test.ts)。完成仓库构建后运行：
 
 ```bash
-node --import tsx --test --test-concurrency=1 tests/execution-module.test.ts
+node --import tsx --test --test-concurrency=1 tests/goal-event-migration.test.ts tests/host-entry-consistency.test.ts
 ```
 
 阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。

@@ -63,11 +63,11 @@ Open a Goal. The page should answer three questions without reading the chat: wh
 
 ### See who depends on whom
 
-The Graph is for when the list is no longer enough. Parent/child is structure. A dependency is a hard gate: if B needs A's result, B cannot start early. When a requirement changes, you can see which downstream work is affected instead of re-explaining the whole tree.
+The Graph is for when the list is no longer enough. Parent/child describes structure. If B needs A's result, that dependency matters when B is formally completed; B can still record preparation and partial work. When a requirement changes, you can see which downstream work is affected instead of re-explaining the whole tree.
 
 ### You confirm material changes
 
-A Runtime may discover new work, a new dependency, or a risk. It can propose. It cannot quietly rewrite an accepted Goal, and it cannot fill in a user identity. Trusted user decisions are recorded in Host Web or the management entry. The Decision Center puts the question, why it matters now, the evidence or the gap, and what each choice changes in one place.
+A Runtime may discover new work, a new dependency, or a risk. It can propose. It cannot quietly replace an agreed outcome or weaken its requirements, and it cannot fill in a user identity. Trusted user decisions are recorded in Host Web or the management entry. The Decision Center puts the question, why it matters now, the evidence or the gap, and what each choice changes in one place.
 
 ### Keep the terminal on the Goal
 
@@ -79,15 +79,17 @@ On macOS, the same current Goal is also on the **top menu bar**. Click the GoalB
 
 Completion is not a sentence in chat. Ordinary reports save partial results and sources. Support, counter-evidence, or unknown only update the related requirements; ordinary support does not complete the Goal. An explicit close-out checks the current agreement, real support, and applicable blockers. Recorded is not the same as completion applied. Work can continue with no requirements yet; it cannot claim done.
 
+Requirements can optionally require human acceptance. A Runtime report cannot replace that decision. Completed or cancelled work can explicitly resume with a reason; adding an unrelated note does not silently reopen it.
+
 If something new shows up while you work, attach an ordinary note with **Add a note**. Changes to promises, authorization, or completion requirements go through the event form or a trusted user decision, not a silent rewrite.
 
 ### Tell the Runtime how this project should be split
 
-A new intent can be saved without a plan, starting from local event types. Planning methods are optional: they offer types and default requirements you may adopt. The adopted version and this Goal’s local changes stay; later template edits do not change old meaning. Methods are not a task template and they do not auto-build the tree. A project can combine a work-type method and a domain method. Tree changes are still a proposal you confirm.
+A new intent can be saved without a plan or type, then followed by an ordinary note. Register local types when structured results help. Planning methods are optional: they offer types and default requirements you may adopt. The adopted version and this Goal’s local changes stay; later template edits do not change old meaning. Methods are not a task template and they do not auto-build the tree. A project can combine a work-type method and a domain method. Tree changes are still a proposal you confirm.
 
 ### Connect a Runtime on purpose
 
-GoalBoard works as a board with no Runtime connected. Connect Codex, Claude Code, or another tool only when it should read and advance Goals directly. Every write is previewed; you confirm; a failed apply rolls back. After connecting, open a **new Session** — tools load at Session start.
+GoalBoard works as a board with no Runtime connected. Connect Codex, Claude Code, or another tool only when it should read and advance Goals directly. Integration configuration changes are previewed and applied after confirmation; a failed apply rolls back. Ordinary Goal notes and reports follow your existing work authorization. After connecting, open a **new Session** — tools load at Session start.
 
 ## Try it in 3 minutes
 
@@ -104,7 +106,7 @@ Development builds that are not signed with Developer ID and notarized by Apple 
 
 ### Run from source
 
-You need Node.js 20+, pnpm, and macOS (the persistent Web service currently uses LaunchAgent; other platforms can run Web in the foreground).
+You need Node.js 24+, pnpm, and macOS (the persistent Web service currently uses LaunchAgent; other platforms can run Web in the foreground).
 
 ```bash
 git clone https://github.com/adeptify/goalboard.git
@@ -148,9 +150,9 @@ Each architecture ships separately because GoalBoard's SQLite and PTY native add
 ## Product boundaries
 
 - The authoritative project state is stored in local SQLite; GoalBoard does not bundle a model.
-- Opening a page does not bind a Session, start a Runtime, or claim work.
+- Opening a page does not bind a Session, start a Runtime, or send a command.
 - Runtime integration, terminal launch, and accepted Goal changes require explicit action or confirmation.
-- New Goals and transferred Goals use event records. Untransferred historical Goals keep their Draft and Claim/Run entries until you explicitly continue with event records.
+- All current work uses event records. Database upgrades and V3 import preserve real history and connect Goals to current state; old Draft/Claim/Run writes are retired.
 - GoalBoard manages Goal facts and the execution loop; it does not replace a Harness or Agent Orchestration.
 - The event workflow is currently used for local internal trial and has not been published as a new release.
 

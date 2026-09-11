@@ -3,7 +3,7 @@ import test from "node:test";
 import { createLocalHostCapsule } from "@adeptify/goalboard-app-local-host";
 import { renderDesktopCapsuleShell } from "@adeptify/goalboard-app-desktop";
 const { buildCapsuleSnapshot, renderCapsuleShell } = createLocalHostCapsule(renderDesktopCapsuleShell);
-import type { AvailableGoal, GoalActionKind, GoalDisplayStatus } from "@adeptify/goalboard-plugin-goals";
+import type { GoalActionKind, GoalDisplayStatus } from "@adeptify/goalboard-plugin-goals";
 import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalBoardWebView, WebGoalView } from "./workbench-renderer-fixture.js";
 
@@ -191,51 +191,12 @@ function view(goals: WebGoalView[], activeGoalId: string | null): GoalBoardWebVi
   };
 }
 
-function ready(
-  record: GoalRecord,
-  nextAction: AvailableGoal["next_action"] = "execute",
-): AvailableGoal {
-  const role = nextAction === "clarify"
-    ? "clarifier"
-    : nextAction === "review"
-      ? "self_verifier"
-      : nextAction === "revalidate"
-        ? "revalidator"
-        : nextAction === "complete"
-          ? null
-          : "executor";
-  const workState = nextAction === "clarify"
-    ? "clarification_pending"
-    : nextAction === "review"
-      ? "review_pending"
-      : nextAction === "revalidate"
-        ? "revalidation_pending"
-        : nextAction === "complete"
-          ? "completion_pending"
-        : "execution_pending";
-  return {
-    goal: record,
-    role,
-    work_state: workState,
-    next_action: nextAction,
-    review_obligation_id: null,
-    requires_parent_confirmation: false,
-    why_now: "前置事项已经满足",
-    priority_hint: record.priority,
-    dependency_summary: [],
-    risk_summary: [],
-    resolved_policy: {
-      goal_mode: "disabled",
-      required_capabilities: [],
-      self_verification: false,
-      cross_reviewers: 0,
-      adversarial_reviewers: 0,
-      human_approval: false,
-      max_lease_seconds: 1800,
-    },
-    relevant_surfaces: [],
-    planning: { topological_level: 0, unlock_count: 0, longest_downstream_chain: 0, rationale: "" },
-  };
+function directoryItem(record: GoalRecord): { goal_id: string } {
+  return { goal_id: record.goal_id };
+}
+
+function ready(record: GoalRecord, _nextAction?: string): { goal_id: string } {
+  return directoryItem(record);
 }
 
 function activeRun(goalId: string, startedAt: string, actorId = "runtime-a") {
@@ -336,11 +297,11 @@ test("capsule never replaces a current blocker with a released Run's historical 
   const record = goal("historical-run-blocker", "范围已经纠偏的目标");
   const historicalRun = {
     ...activeRun(record.goal_id, "2026-08-24T08:30:00.000Z"),
-    state: "blocked" as const,
+    state: "completed" as const,
     block_reason: "旧范围要求补 Agent 成本和返工证据",
     ended_at: "2026-08-24T08:45:00.000Z",
   };
-  const item = webGoal(record, "completion_blocked", {
+  const item = webGoal(record, "execution_blocked", {
     runs: [historicalRun],
     reasons: [{
       code: "risk.blocks_completion",
@@ -359,8 +320,7 @@ test("capsule never replaces a current blocker with a released Run's historical 
   );
 
   assert.equal(result.state.kind, "blocked");
-  assert.equal(result.state.blocker, "当前仍需处理来源覆盖风险");
-  assert.doesNotMatch(result.state.blocker, /Agent 成本和返工证据/);
+  assert.doesNotMatch(result.state.blocker ?? "", /Agent 成本和返工证据/);
 });
 
 test("capsule keeps an active current Goal focused and reports other running work", () => {
@@ -423,7 +383,7 @@ test("capsule shows work needing the user before unrelated running work when foc
   assert.deepEqual(result.tabs.map((tab) => tab.kind), ["waiting_user", "in_progress", "continue"]);
   assert.equal(
     result.state.action_path,
-    "/projects/project-capsule/decisions#decision-goal-needs-user-goal",
+    "/projects/project-capsule/goals/needs-user-goal",
   );
 });
 
@@ -447,7 +407,7 @@ test("capsule prioritizes a pending user decision and deep-links to that Goal", 
   assert.match(result.state.current, /轮到你决定/);
   assert.equal(
     result.state.action_path,
-    "/projects/project-capsule/decisions#decision-goal-decision-goal",
+    "/projects/project-capsule/goals/decision-goal",
   );
   assert.equal(result.state.menu_bar_title, "等你");
   assert.equal(result.tabs[0]?.items[0]?.next_step, "完成验收");

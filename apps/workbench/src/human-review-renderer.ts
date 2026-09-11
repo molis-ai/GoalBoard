@@ -1,7 +1,21 @@
 import { createGoalsDecisionPresentation, explainGoalDecision, type GoalsDocumentView, type GoalsDecisionView } from "@adeptify/goalboard-plugin-goals";
-import type { EvidenceRecord } from "@adeptify/goalboard-contracts/modules/evidence-verification";
-import type { ReviewObligationRecord } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
-import { EXECUTION_EVIDENCE_KIND_LABELS as EVIDENCE_KIND_LABELS, EXECUTION_EVIDENCE_RESULT_LABELS as EVIDENCE_RESULT_LABELS } from "./execution-validation-ui.js";
+import type { EvidenceKind, EvidenceResult } from "@adeptify/goalboard-contracts/modules/evidence-verification";
+
+export const EXECUTION_EVIDENCE_KIND_LABELS: Record<EvidenceKind, string> = {
+  test: "测试",
+  measurement: "测量",
+  artifact: "产物",
+  inspection: "检查",
+  attestation: "声明",
+  human_verdict: "人工结论",
+};
+export const EXECUTION_EVIDENCE_RESULT_LABELS: Record<EvidenceResult, string> = {
+  passed: "通过",
+  failed: "未通过",
+  inconclusive: "尚不确定",
+};
+const EVIDENCE_KIND_LABELS = EXECUTION_EVIDENCE_KIND_LABELS;
+const EVIDENCE_RESULT_LABELS = EXECUTION_EVIDENCE_RESULT_LABELS;
 
 export interface HumanReviewPrimitives {
   translate(text: string, values?: Record<string, string | number>): string;
@@ -94,34 +108,6 @@ function renderHumanReviewScenario(item: GoalsDocumentView): string {
   });
 }
 
-function humanVerdictPrefill(
-  item: GoalsDocumentView,
-  obligation: ReviewObligationRecord,
-): EvidenceRecord | null {
-  if (!obligation.criterion_scope.length) return null;
-  const obligationCreatedAt = Date.parse(obligation.created_at);
-  return item.evidence
-    .filter((evidence) =>
-      evidence.lifecycle_state === "effective" &&
-      evidence.kind === "human_verdict" &&
-      evidence.result === "passed" &&
-      evidence.locator.startsWith("conversation://") &&
-      Boolean(evidence.digest?.trim()) &&
-      Number.isFinite(obligationCreatedAt) &&
-      Date.parse(evidence.captured_at) >= obligationCreatedAt &&
-      obligation.criterion_scope.every((criterionId) => evidence.criterion_ids.includes(criterionId))
-    )
-    .sort((left, right) => right.captured_at.localeCompare(left.captured_at))[0] ?? null;
-}
-
-function renderHumanVerdictPrefill(evidence: EvidenceRecord): string {
-  return `<aside class="human-verdict-prefill" data-human-verdict-prefill>
-    <span>${icon("user")}</span><div><strong>${L("已找到当前对话中的明确验收")}</strong>
-    <p>${L("GoalBoard 已把结论、原话和对话来源预填到下方，但尚未记录为用户验收；请核对后只提交一次。")}</p>
-    <dl><div><dt>${L("对话原话")}</dt><dd>${escapeHtml(evidence.digest ?? "")}</dd></div><div><dt>${L("对话来源")}</dt><dd>${escapeHtml(evidence.locator)}</dd></div></dl></div>
-  </aside>`;
-}
-
 function renderHumanReview(item: GoalsDocumentView, view: Pick<GoalsDecisionView, "events">): string {
   const pending = item.review_obligations.filter(
     (obligation) => obligation.role === "human_approver" && obligation.state === "pending",
@@ -149,7 +135,7 @@ function renderHumanReview(item: GoalsDocumentView, view: Pick<GoalsDecisionView
         .join("")
     : `<p class="empty-row">${L("当前还没有已提交的完成依据。你可以在下方补充外部引用。")}</p>`;
   const evidenceChoices = renderEvidenceChoices();
-  return `<div class="decision-record human-review-list"><header class="decision-record-heading"><span class="decision-kind">${icon("user")} ${L("确认工作结果")}${renderNewDecisionBadge(pending[0]!.created_at, view, "review", pending[0]!.obligation_id)}</span></header><div class="decision-record-body"><h3>${escapeHtml(copy.question)}</h3><p>${escapeHtml(copy.purpose)}</p><button class="human-review-jump" type="button" data-human-review-jump><span><strong>${L("填写确认结论")}</strong><small>${L("选择结论并写明判断理由")}</small></span>${icon("chevron-right")}</button>${renderDecisionGuidance({
+  return `<div class="decision-record human-review-list"><header class="decision-record-heading"><span class="decision-kind">${icon("user")} ${L("确认工作结果")}${renderNewDecisionBadge(pending[0]!.created_at, view, "review", pending[0]!.obligation_id)}</span></header><div class="decision-record-body"><h3>${escapeHtml(copy.question)}</h3><p>${escapeHtml(L("这是一条历史用户确认记录，只能查看，不能在这里提交结论。"))}</p>${renderDecisionGuidance({
     whyNow: L("工作结果已经提交，其他必要检查也已走到需要你确认的阶段。"),
     recommendation: hasReliableRecommendation ? L("建议确认通过") : null,
     recommendationBasis: L("{passed}/{total} 条完成标准已有通过依据，共 {evidence} 条当前有效记录。", { passed: item.passed_criteria.length, total: item.goal.acceptance_criteria.length, evidence: effectiveEvidence.length }),
@@ -159,26 +145,9 @@ function renderHumanReview(item: GoalsDocumentView, view: Pick<GoalsDecisionView
       { choice: L("需要修改或不通过"), effect: L("结果不会完成，并会带着你的理由回到后续修改。") },
       { choice: L("证据不足"), effect: L("暂不判断结果，等待补充与完成标准对应的依据。") },
     ],
-  })}${renderHumanReviewScenario(item)}<details class="decision-details"><summary>${L("查看完成标准和已有依据")}${icon("chevron-down")}</summary><div class="review-context"><section><h4>${L("完成标准")}</h4>${renderAcceptanceSummary(item)}</section><section><h4>${L("已有依据")}</h4><div class="evidence-choice-list">${evidenceChoices}</div></section></div></details></div>${pending
-    .map(
-      (obligation) => {
-        const prefill = humanVerdictPrefill(item, obligation);
-        const preselectedEvidence = prefill ? new Set([prefill.evidence_id]) : new Set<string>();
-        const attentionToken = item.action_projection.actions
-          .find((action) => action.actor === "user" && action.target_id === obligation.obligation_id)
-          ?.reasons[0]?.facts?.attention_token ?? "";
-        return `<form class="human-review-form" data-human-review-form data-live-form="human-review-${escapeHtml(obligation.obligation_id)}" data-goal-id="${escapeHtml(item.goal.goal_id)}" data-obligation-id="${escapeHtml(obligation.obligation_id)}" data-attention-token="${escapeHtml(attentionToken)}" data-contract-revision="${item.goal.current_contract_revision}" novalidate>
-        ${prefill ? renderHumanVerdictPrefill(prefill) : ""}
-        <label class="review-verdict"><span>${L("你的结论")}</span><select name="verdict"><option value=""${prefill ? "" : " selected"} disabled>${L("请选择结论")}</option><option value="pass"${prefill ? " selected" : ""}>${L("通过")}</option><option value="needs_changes">${L("需要修改")}</option></select></label>
-        <fieldset><legend>${L("选择支持结论的已有依据")}</legend><div class="evidence-choice-list">${renderEvidenceChoices(preselectedEvidence)}</div></fieldset>
-        <label><span>${L("补充依据链接")} <small>${L("可选，每行一条")}</small></span><textarea name="evidence_refs_extra" rows="2" placeholder="${L("https://… 或项目内文件引用")}"></textarea></label>
-        <label><span>${L("判断理由")}（${L("必填")}）</span><textarea name="reasoning" rows="3" required placeholder="${L("说明为什么给出这个结论，以及哪些依据支撑判断")}">${escapeHtml(prefill?.digest ?? "")}</textarea></label>
-        <p class="form-error" data-review-error role="alert" hidden></p>
-        <footer><details class="decision-record-tech"><summary>${L("记录信息")}</summary><small>${escapeHtml(obligation.independence_rule)} · ${escapeHtml(obligation.obligation_id)}</small></details><button class="button-primary" type="submit">${L("提交结果确认")}</button></footer>
-      </form>`;
-      },
-    )
-    .join("")}</div>`;
+  })}${renderHumanReviewScenario(item)}<details class="decision-details"><summary>${L("查看完成标准和已有依据")}${icon("chevron-down")}</summary><div class="review-context"><section><h4>${L("完成标准")}</h4>${renderAcceptanceSummary(item)}</section><section><h4>${L("已有依据")}</h4><div class="evidence-choice-list">${evidenceChoices}</div></section></div></details><ul class="review-obligation-history">${pending.map((obligation) =>
+    `<li><small>${escapeHtml(obligation.independence_rule)} · ${escapeHtml(obligation.obligation_id)}</small></li>`,
+  ).join("")}</ul></div></div>`;
 }
 
 

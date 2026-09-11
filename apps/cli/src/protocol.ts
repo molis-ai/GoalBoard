@@ -32,13 +32,8 @@ export function printV1Help(): void {
   console.log(`goalboard v1 <operation> --db PATH --json '{...}'
 
 Operations:
-  init | create-goal | snapshot | contract | available | select-goal | ready | explain | claim | release | revoke
-  run-start | run-report | revalidate | evidence-submit | review-submit | complete
-  draft-dialogue-start | draft-dialogue-turn | draft-dialogue-resume
-  goal-tree-propose | goal-tree-read | goal-tree-check | goal-tree-decide
-  relation-add | impact-add | policy-set | risk-add | risk-state | active-goal
-  contract-propose | contract-decide | candidate-submit | dependency-propose
-  candidate-decide | rewire-confirm | import-v3
+  init | snapshot | goal-tree-propose | goal-tree-read | goal-tree-check | goal-tree-decide
+  active-goal | import-v3
 
 Complex payloads may use --file payload.json instead of --json.
 The SQLite database defaults to ${DEFAULT_CLI_DATABASE}.`);

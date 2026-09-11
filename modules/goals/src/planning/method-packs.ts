@@ -72,7 +72,7 @@ ${instructionList(source.steps, "先明确可验收结果，再按产出消费�
 ## 有限 Goal 与持续运行
 Goal 必须描述一项有限、可验收、最终能完成的改变。首次建立能力、流程或工具可以是 Goal；能力建立后的持续运行属于 recurring operation，不应为了保持循环可见而把能力 Goal 留成永久未完成 Goal，也不应把业务循环写成循环 depends_on。
 
-持续运行产生可追溯 Evidence。Evidence 暴露真实问题或改进机会时，提交一条有限的 Candidate Improvement Goal，由用户决定是否晋升；不要自动创建或批准新的 canonical Goal。本轮规划只需沿用现有 Evidence 与 Candidate 能力，不要为了表达重复运行新增调度器或 Operation 数据模型。
+持续运行用笔记和报告留下可追溯事实。笔记或报告暴露真实问题或改进机会时，用意图创建一条有限的改进 Goal，或通过 Goal Tree 提案调整结构，由用户决定是否采纳；不要自动创建或批准新 Goal。本轮规划沿用现有笔记、报告、意图和树能力表达重复运行中的有限改进，不要为了保持循环可见而新增调度器或 Operation 数据模型。
 
 ## 拆分时必须回答
 ${coverage || "1. 最终结果是什么，谁会消费它，凭什么确认完成？"}

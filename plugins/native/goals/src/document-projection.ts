@@ -1,10 +1,7 @@
 import type { GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { BoardSnapshot } from "./goal-entry-contract.js";
-import type { GoalWorkStateView, GoalActionProjection } from "./execution-validation-contract.js";
 import type { GoalsDocumentView } from "./document-view.js";
-import { goalPresentationState } from "./goal-state-presentation.js";
-import type { GoalPresentationState } from "./tree-order.js";
-import type { createGoalActionPresenter } from "./action-presentation.js";
+import type { GoalDisplayStatus, GoalPresentationState } from "./tree-order.js";
 import type { GoalsDocumentReadPorts } from "./document-read-ports.js";
 import type { createGoalDocumentIndex } from "./document-index.js";
 import { eventDirectoryPresentation } from "./event-document-model.js";
@@ -16,42 +13,61 @@ const REVIEW_LABELS: Record<string, string> = {
   human_approver: "用户确认",
 };
 
+function archiveOrTrashPresentation(goal: Pick<GoalRecord, "trashed_at" | "archived_at">): {
+  status: GoalPresentationState;
+  display_status: GoalDisplayStatus;
+  status_label: string;
+  main_action_label: string;
+  action_summary: string;
+} | null {
+  if (goal.trashed_at) {
+    return {
+      status: "trashed",
+      display_status: "blocked",
+      status_label: "回收站",
+      main_action_label: "恢复",
+      action_summary: "Goal 已移入回收站，历史仍被保留。",
+    };
+  }
+  if (goal.archived_at) {
+    return {
+      status: "archived",
+      display_status: "completed",
+      status_label: "已归档",
+      main_action_label: "查看历史",
+      action_summary: "已归档，不再出现在普通工作列表。",
+    };
+  }
+  return null;
+}
+
 export function projectGoalDocument(goal: GoalRecord, input: {
   boardId: string; snapshot: BoardSnapshot; ports: GoalsDocumentReadPorts;
   index: ReturnType<typeof createGoalDocumentIndex>;
-  workStates: Map<string, GoalWorkStateView>; actionProjections: Map<string, GoalActionProjection>;
-  presentGoalAction: ReturnType<typeof createGoalActionPresenter>["presentGoalAction"];
 }): GoalsDocumentView {
-  const { boardId, snapshot, ports, workStates, actionProjections, presentGoalAction } = input;
-  const { goalRiskIds, webRisks, evidenceByGoal, evidenceCorrectionsByGoal, reviewObligationsByGoal, reviewsByGoal, impactsByGoal, contractProposalsByGoal, clarificationSessionsByGoal, clarificationTurnsByGoal, coverageByGoal, inputBindingsByGoal, policyBindingsByGoal, projectPolicyBindings, eventsByObject, relationsByGoal, candidatesByRun, goalTreeProposalsByGoal, rewiresByGoal, rewiresByCandidate } = input.index;
-  const workState = workStates.get(goal.goal_id);
-  if (!workState) throw new Error(`Goal 工作状态不存在: ${goal.goal_id}`);
-  const activeClaim = workState.active_claim;
+  const { boardId, snapshot, ports } = input;
+  const {
+    goalRiskIds, webRisks, evidenceByGoal, evidenceCorrectionsByGoal, reviewObligationsByGoal,
+    reviewsByGoal, impactsByGoal, contractProposalsByGoal, clarificationSessionsByGoal,
+    clarificationTurnsByGoal, coverageByGoal, inputBindingsByGoal, policyBindingsByGoal,
+    projectPolicyBindings, eventsByObject, relationsByGoal, candidatesByRun,
+    goalTreeProposalsByGoal, rewiresByGoal, rewiresByCandidate,
+  } = input.index;
+  const event = ports.eventWork.readState(boardId, goal.goal_id);
+  const eventOwned = Boolean(event.owner);
+  const current = archiveOrTrashPresentation(goal)
+    ?? eventDirectoryPresentation(event, goal)
+    ?? {
+      status: "execution_pending" as const,
+      display_status: "continue" as const,
+      status_label: "历史记录",
+      main_action_label: "阅读历史",
+      action_summary: "这条 Goal 还没有当前事件归属，可阅读保留的历史记录。",
+    };
   const resolvedPolicy = ports.goals.getResolvedGoalPolicy({
     board_id: boardId,
     goal_id: goal.goal_id,
   });
-  const status: GoalPresentationState = goalPresentationState(
-    workState.work_state,
-    goal,
-    snapshot,
-    workState.reasons,
-  );
-  const actionProjection = actionProjections.get(goal.goal_id);
-  if (!actionProjection) throw new Error(`Goal 动作投影不存在: ${goal.goal_id}`);
-  const actionPresentation = presentGoalAction(goal, actionProjection);
-  const eventOwned = input.ports.eventWork?.isEventStateOwner(boardId, goal.goal_id) === true;
-  const eventPresentation = input.ports.eventWork
-    ? eventDirectoryPresentation(input.ports.eventWork.readState(boardId, goal.goal_id), goal)
-    : null;
-  const visibleStatusLabel = eventPresentation?.status_label
-    ?? (status === "replaced"
-      ? "已替代"
-      : status === "archived"
-        ? "已归档"
-        : status === "trashed"
-          ? "回收站"
-          : actionPresentation.status_label);
   const { claims, runs } = ports.projectGoalLifecycle(snapshot, goal.goal_id);
   const evidence = evidenceByGoal.get(goal.goal_id) ?? [];
   const reviewObligations = reviewObligationsByGoal.get(goal.goal_id) ?? [];
@@ -118,18 +134,12 @@ export function projectGoalDocument(goal: GoalRecord, input: {
     .sort((left, right) => right.seq - left.seq);
   return {
     goal,
-    status: eventPresentation?.status ?? status,
-    action_projection: actionProjection,
-    display_status: eventPresentation?.display_status ?? actionPresentation.status,
-    work_state: workState.work_state,
-    status_label: visibleStatusLabel,
-    main_action_label: eventPresentation?.main_action_label ?? actionPresentation.action_label,
-    action_summary: eventPresentation?.action_summary ?? actionPresentation.summary,
+    status: current.status,
+    display_status: current.display_status,
+    status_label: current.status_label,
+    main_action_label: current.main_action_label,
+    action_summary: current.action_summary,
     event_work: eventOwned,
-    reasons: workState.reasons,
-    active_claim_actor: activeClaim?.actor_id ?? null,
-    active_claim: activeClaim ?? null,
-    active_claim_lease: workState.active_claim_lease,
     claims,
     runs,
     evidence,

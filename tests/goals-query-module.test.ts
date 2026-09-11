@@ -1,4 +1,3 @@
-import { GovernanceRecordStore } from "@adeptify/goalboard-module-governance-collaboration";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -13,6 +12,7 @@ import {
 
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { insertHistoricalPolicy, insertHistoricalRisk } from "./historical-sql-fixture.js";
 
 test("Policy proposal versions preserve old serialized baselines and distinguish timestamp-only from fact changes", () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-policy-version-"));
@@ -20,12 +20,7 @@ test("Policy proposal versions preserve old serialized baselines and distinguish
   try {
     const coordinator = new GoalProjectApplication(store);
     coordinator.initializeBoard({ board_id: "board", title: "Version compatibility", actor_id: "user", idempotency_key: "init" });
-    const goals = new GoalsModule(store.db, {
-      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
-      currentActionToken: (_boardId, goalId) => `token:${goalId}`,
-      authorizeRiskUpdate: () => undefined, authorizeRiskState: () => undefined,
-      transitionRevisionDependents: () => undefined, reconcileLifecycle: (_boardId, goalId) => ({ goal_id: goalId }),
-    });
+    const goals = new GoalsModule(store.db, {});
     const policyJson = '{ "self_verification": true, "max_lease_seconds": 900 }';
     const at = "2026-09-01T00:00:00.000Z";
     store.db.prepare(`INSERT INTO policy_bindings
@@ -42,8 +37,7 @@ test("Policy proposal versions preserve old serialized baselines and distinguish
     store.db.prepare("UPDATE policy_bindings SET created_at = ? WHERE policy_binding_id = 'old-rule'").run("2026-09-02T00:00:00.000Z");
     assert.deepEqual(goals.query.policyBindingVersion("board", "old-rule", "semantic-v1"), semantic);
     assert.notDeepEqual(goals.query.policyBindingVersion("board", "old-rule", "legacy"), legacy);
-    goals.commands.applyConfirmedPolicy({ board_id: "board", operation: "deactivate", policy_binding_id: "old-rule",
-      actor_id: "user", reason: "user confirmed", at, source_item_id: "withdraw" });
+    store.db.prepare("UPDATE policy_bindings SET state = 'withdrawn' WHERE policy_binding_id = 'old-rule'").run();
     const withdrawn = goals.query.policyBindingVersion("board", "old-rule", "semantic-v1");
     assert.equal(withdrawn.exists, true, "inactive facts remain versioned for saved proposals");
     assert.notEqual(withdrawn.version, semantic.version, "real state changes invalidate the saved baseline");
@@ -62,14 +56,7 @@ test("Goals public Query API owns list, detail, relation, policy, risk, trash, a
       actor_id: "user-1",
       idempotency_key: "initialize",
     });
-    const goals = new GoalsModule(store.db, {
-      supersedePendingContractProposals: (...args) => new GovernanceRecordStore(store.db).supersedePendingContractProposals(...args),
-      currentActionToken: (_boardId, goalId) => `token:${goalId}`,
-      authorizeRiskUpdate: () => undefined,
-      authorizeRiskState: () => undefined,
-      transitionRevisionDependents: () => undefined,
-      reconcileLifecycle: (_boardId, goalId) => ({ goal_id: goalId }),
-    });
+    const goals = new GoalsModule(store.db, {});
 
     for (const [goalId, title] of [
       ["goal-parent", "父 Goal"],
@@ -98,28 +85,33 @@ test("Goals public Query API owns list, detail, relation, policy, risk, trash, a
       type: "part_of",
       reason: "子结果组成父结果",
     }, { actor_id: "user-1", idempotency_key: "relate" });
-    goals.commands.setPolicy("board-query", {
+    insertHistoricalPolicy(store.db, {
+      policy_binding_id: "policy-project",
+      board_id: "board-query",
+      scope: "project_default",
       policy: { goal_mode: "preferred", required_capabilities: ["testing"] },
       reason: "项目规则",
-    }, { actor_id: "user-1", idempotency_key: "policy:project" });
-    goals.commands.setPolicy("board-query", {
+      created_by: "user-1",
+    });
+    insertHistoricalPolicy(store.db, {
+      policy_binding_id: "policy-child",
+      board_id: "board-query",
       goal_id: "goal-child",
+      scope: "goal",
       policy: { goal_mode: "required", required_capabilities: ["architecture"] },
       reason: "子 Goal 只能加强规则",
-    }, { actor_id: "user-1", idempotency_key: "policy:child" });
-    goals.commands.addRisk("board-query", {
+      created_by: "user-1",
+    });
+    insertHistoricalRisk(store.db, {
       risk_id: "risk-query",
+      board_id: "board-query",
       goal_ids: ["goal-child"],
       description: "查询遗漏正式事实",
-      probability: "low",
-      impact: "high",
-      trigger: "详情缺少 Risk",
-      treatment: "mitigate",
       treatment_plan: "直接验证 public Query",
       blocking_mode: "completion",
       revisit_condition: "每次 Query 边界迁移",
       owner: "runtime",
-    }, { actor_id: "user-1", idempotency_key: "risk" });
+    });
     goals.commands.addProjectGuidance({
       board_id: "board-query",
       actor_id: "user-1",

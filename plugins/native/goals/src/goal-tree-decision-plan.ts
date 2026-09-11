@@ -1,6 +1,5 @@
 import type { GoalsQueryApi, GoalsPlanningApi, GoalRecord, PlanningGraphIssue } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalTreeProposalRecord, GoalTreeProposalItemRecord, GoalTreeProposalDecideInput, GoalTreeProposalDecisionAuthority } from "@adeptify/goalboard-contracts/modules/governance-collaboration";
-import { goalTreeProposalDecompositionIssues } from "@adeptify/goalboard-module-goals";
 import { goalTreeProposalItemValidationIssues, goalTreeRiskDescription } from "./proposal-item-validation.js";
 import type { GoalTreeQueryApplication } from "./goal-tree-query.js";
 import type { GoalTreeInputReader } from "./goal-tree-inputs.js";
@@ -153,19 +152,6 @@ export class GoalTreeDecisionPlan {
       throw this.ports.errorFactory(
         "goal_tree_proposal.risk_goal_root_required",
         "Risk 生命周期变更必须归属于一条明确的 Goal；请重新提交带 root_goal_id 的提案",
-      );
-    }
-
-    const decompositionIssue = goalTreeProposalDecompositionIssues(
-      confirmedItems,
-      this.ports.goals.query.snapshot(input.board_id),
-      this.ports.goals.planning.effectiveMethods(input.board_id),
-      this.ports.goals.planning.projectComposition(input.board_id).method_pack_ids,
-    )[0];
-    if (decompositionIssue) {
-      throw this.ports.errorFactory(
-        decompositionIssue.code,
-        `${decompositionIssue.message}${decompositionIssue.recovery}当前 Goal Tree 没有改变。`,
       );
     }
 

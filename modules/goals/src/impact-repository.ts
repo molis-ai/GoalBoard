@@ -40,24 +40,6 @@ export class GoalImpactRepository {
       .get(bindingId, boardId) as ImpactBindingRecord | undefined;
     return row ? mapImpact(row) : null;
   }
-
-  insert(record: ImpactBindingRecord): void {
-    this.db.prepare(`INSERT INTO impact_bindings (
-      binding_id, board_id, goal_id, surface, access, input_snapshot,
-      state, reason, created_by, created_at, updated_at, deactivated_at, deactivation_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(record.binding_id, record.board_id, record.goal_id, record.surface, record.access, record.input_snapshot,
-        record.state, record.reason, record.created_by, record.created_at, record.updated_at,
-        record.deactivated_at, record.deactivation_reason);
-  }
-
-  update(record: ImpactBindingRecord): void {
-    this.db.prepare(`UPDATE impact_bindings SET goal_id = ?, surface = ?, access = ?, input_snapshot = ?,
-      state = ?, reason = ?, updated_at = ?, deactivated_at = ?, deactivation_reason = ?
-      WHERE binding_id = ? AND board_id = ?`)
-      .run(record.goal_id, record.surface, record.access, record.input_snapshot, record.state, record.reason,
-        record.updated_at, record.deactivated_at, record.deactivation_reason, record.binding_id, record.board_id);
-  }
 }
 
 function mapImpact(row: ImpactBindingRecord): ImpactBindingRecord {

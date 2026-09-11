@@ -10,7 +10,7 @@ const renderer = createWorkbenchGoalsDocumentRenderer({ translate: L, escapeHtml
   formatDate: value => value ?? "", renderStatus: status => status, renderVisibleGoalStatus: item => item.display_status,
   sectionHeading: (_icon, title, description = "") => "<header>" + escapeHtml(L(title)) + escapeHtml(L(description)) + "</header>" });
 const context: GoalsDocumentContext = { activeGoalId: null, decisionCount: 0,
-  draftGapsHtml: "", draftEditorHtml: "", relatedWorkHtml: "", artifactHtml: "", coverageHtml: "" };
+  relatedWorkHtml: "", artifactHtml: "", coverageHtml: "" };
 const item = (): GoalsDocumentItem => ({
   goal: { goal_id: "goal-a", title: '保留用户标题 "<title>', priority: 7, created_at: "2026-09-05", updated_at: "2026-09-05",
     fulfillment_state: "unmet", definition_state: "accepted", outcome: 'Result "<safe>', why: "Why", business_logic: "Behavior",
@@ -19,11 +19,9 @@ const item = (): GoalsDocumentItem => ({
     acceptance_criteria: Array.from({ length: 6 }, (_, index) => ({ criterion_id: "c" + index, statement: "Requirement " + index,
       pass_condition: "Result " + index, decision_method: "inspection", target: null, required_evidence: [] })) },
   status: "execution_pending", display_status: "continue", passed_criteria: ["c1", "c1", "unknown"], relations: [],
-  active_claim_actor: null, action_projection: { primary_action: null }, main_action_label: 'Continue "<safe>', action_summary: "Next action",
+  main_action_label: 'Continue "<safe>', action_summary: "Next action",
   evidence: [], events: [],
 });
-const action = (kind: "clarify" | "execute" | "wait", actor: "runtime" | "user" = "runtime", status: "ready" | "blocked" = "ready") =>
-  ({ action_id: "action-a", actor, kind, status, target_type: "goal", target_id: "goal-a", reasons: [] });
 const render = (value: GoalsDocumentItem, overrides: Partial<GoalsDocumentContext> = {}) => renderer.renderGoalDocument(value, { ...context, ...overrides }, true);
 
 test("initial Goal tabs escape user titles and collection placeholders preserve full versus refresh behavior", () => {
@@ -60,8 +58,7 @@ test("document contribution keeps Goal facts in the timeline layout and escapes 
 });
 
 test("document next action no longer follows Claim/Run projection for the new reading surface", () => {
-  const value = item();
-  const html = render({ ...value, action_projection: { primary_action: action("execute") } });
+  const html = render(item());
   assert.match(html, /data-goal-event-document/);
   assert.doesNotMatch(html, /data-open-goal-tui/);
   assert.doesNotMatch(html, /class="goal-primary-action"/);
@@ -128,12 +125,19 @@ test("accepted Goal requirements keep original criterion details expandable with
   assert.doesNotMatch(empty, /original-goal-criteria|原 Goal 标准/);
 });
 
-test("legacy untransferred drafts keep the old editor; event owners do not", () => {
-  const draft = { ...item(), goal: { ...item().goal, definition_state: "draft" as const }, event_work: false };
-  const legacy = render(draft, { draftEditorHtml: "<div data-draft-editor data-goal-id=\"goal-a\"></div>" });
-  assert.match(legacy, /data-open-goal-edit/);
-  assert.match(legacy, /data-draft-editor/);
-  const owned = render({ ...draft, event_work: true });
+test("event-owned documents keep the note entry and do not restore a draft editor", () => {
+  const owned = render({ ...item(), event_work: true });
+  assert.match(owned, /data-event-form-open="note"/);
+  assert.match(owned, /data-event-form="note"/);
   assert.doesNotMatch(owned, /data-open-goal-edit/);
   assert.doesNotMatch(owned, /data-draft-editor/);
+});
+
+test("unowned historical documents hide write triggers and keep reading", () => {
+  const html = render(item());
+  assert.doesNotMatch(html, /data-open-goal-edit|data-draft-editor|data-event-form-open="note"|data-event-form="note"|data-event-form="type"|data-event-form="agreement"|data-event-form="closure"|data-event-form="continue"/);
+  assert.match(html, /data-event-reader="planning"/);
+  assert.match(html, /data-event-reader="description"/);
+  assert.match(html, /data-event-reader="requirements"/);
+  assert.match(html, /data-open-goal-trash/);
 });

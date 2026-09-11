@@ -6,6 +6,7 @@ import type { GoalEventApplication } from "./goal-event-application.js";
 
 export interface GoalEventEntryApi {
   createIntent: GoalEventApplication["createIntent"];
+  listGoals: GoalEventApplication["listGoals"];
   readState: GoalEventApplication["readState"];
   configure: GoalEventApplication["configure"];
   report: GoalEventApplication["report"];
@@ -21,9 +22,7 @@ export interface GoalEventEntryApi {
   setAgreement: GoalEventApplication["setAgreement"];
   submitClosure: GoalEventApplication["submitClosure"];
   resumeWork: GoalEventApplication["resumeWork"];
-  continueWithEventWork: GoalEventApplication["continueWithEventWork"];
   recordNote: GoalEventApplication["recordNote"];
-  reopenCompletedEventWork: GoalEventApplication["reopenCompletedEventWork"];
 }
 
 export const createGoalIntentCapability = {
@@ -33,6 +32,15 @@ export const createGoalIntentCapability = {
 } as HostCapabilityDefinition<
   Parameters<GoalEventEntryApi["createIntent"]>[0],
   ReturnType<GoalEventEntryApi["createIntent"]>
+>;
+
+export const listGoalDirectoryCapability = {
+  capability_id: "io.goalboard.goals.events.list-goals",
+  version: 1,
+  operation: "query",
+} as HostCapabilityDefinition<
+  Parameters<GoalEventEntryApi["listGoals"]>[0],
+  ReturnType<GoalEventEntryApi["listGoals"]>
 >;
 
 export const readGoalEventStateCapability = {
@@ -106,6 +114,8 @@ export function createGoalEventEntryClient(client: LocalHostProjectClient) {
   return {
     createIntent: (input: Parameters<GoalEventEntryApi["createIntent"]>[0]) =>
       client.invoke(createGoalIntentCapability, input),
+    listGoals: (input: Parameters<GoalEventEntryApi["listGoals"]>[0]) =>
+      client.invoke(listGoalDirectoryCapability, input),
     readState: (boardId: string, goalId: string) =>
       client.invoke(readGoalEventStateCapability, { board_id: boardId, goal_id: goalId }),
     configure: (input: Parameters<GoalEventEntryApi["configure"]>[0]) =>
@@ -136,8 +146,8 @@ export function createGoalEventEntryClient(client: LocalHostProjectClient) {
       client.invoke(submitGoalEventClosureCapability, input),
     resumeWork: (input: Parameters<GoalEventEntryApi["resumeWork"]>[0]) =>
       client.invoke(resumeGoalEventWorkCapability, input),
-    continueWithEventWork: (input: Parameters<GoalEventEntryApi["continueWithEventWork"]>[0]) =>
-      client.invoke(continueGoalEventWorkCapability, input),
+    recordNote: (input: Parameters<GoalEventEntryApi["recordNote"]>[0]) =>
+      client.invoke(recordGoalNoteCapability, input),
   };
 }
 
@@ -213,15 +223,6 @@ export const resumeGoalEventWorkCapability = {
   ReturnType<GoalEventEntryApi["resumeWork"]>
 >;
 
-export const continueGoalEventWorkCapability = {
-  capability_id: "io.goalboard.goals.events.continue",
-  version: 1,
-  operation: "command",
-} as HostCapabilityDefinition<
-  Parameters<GoalEventEntryApi["continueWithEventWork"]>[0],
-  ReturnType<GoalEventEntryApi["continueWithEventWork"]>
->;
-
 export const recordGoalNoteCapability = {
   capability_id: "io.goalboard.goals.events.note",
   version: 1,
@@ -229,13 +230,4 @@ export const recordGoalNoteCapability = {
 } as HostCapabilityDefinition<
   Parameters<GoalEventEntryApi["recordNote"]>[0],
   ReturnType<GoalEventEntryApi["recordNote"]>
->;
-
-export const reopenCompletedEventWorkCapability = {
-  capability_id: "io.goalboard.goals.events.reopen-completed",
-  version: 1,
-  operation: "command",
-} as HostCapabilityDefinition<
-  Parameters<GoalEventEntryApi["reopenCompletedEventWork"]>[0],
-  ReturnType<GoalEventEntryApi["reopenCompletedEventWork"]>
 >;

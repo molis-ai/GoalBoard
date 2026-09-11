@@ -35,30 +35,9 @@ export interface ImpactBindingRecord {
   deactivation_reason: string | null;
 }
 
-export interface ImpactFactsInput {
-  binding_id?: string;
-  goal_id: string;
-  surface: string;
-  access: ImpactAccess;
-  input_snapshot?: string | null;
-  state?: "proposed" | "confirmed";
-  reason: string;
-}
-
-export interface ImpactWriteResult {
-  impact: ImpactBindingRecord;
-  replayed: boolean;
-  observed_event_cursor: number;
-}
-
 export interface GoalsImpactApi {
   list(boardId: string): ImpactBindingRecord[];
   get(boardId: string, bindingId: string): ImpactBindingRecord | null;
-  add(boardId: string, input: ImpactFactsInput, write: GoalsActorWrite): ImpactWriteResult & { binding_id: string };
-  update(boardId: string, input: ImpactFactsInput & { binding_id: string }, write: GoalsActorWrite): ImpactWriteResult;
-  deactivate(boardId: string, input: { binding_id: string; reason: string }, write: GoalsActorWrite): ImpactWriteResult;
-  /** Accepted Proposal application only: caller owns authorization, transaction and aggregate audit event. */
-  registerAccepted(boardId: string, input: Omit<ImpactFactsInput, "state"> & { binding_id: string }, actorId: string, at: string): void;
 }
 export type GoalDecompositionState =
   | "abstract"
@@ -339,37 +318,10 @@ export interface SaveProjectPlanningMethodInput {
   user_confirmed: boolean;
 }
 
-export type GoalContractStructureConflict = {
-  code: string;
-  message: string;
-  objects: Array<{ object_type: string; object_id: string }>;
-  next_action: string;
-  recovery: string;
-  current_goal?: Pick<GoalRecord, "goal_id" | "title" | "definition_state" | "decomposition_state" | "fulfillment_state">;
-  required_item?: { kind: string; operation: string; goal_id: string };
-};
-
-export interface GoalContractPlanningApi {
-  proposalGoalConflict(boardId: string, item: { kind: string; operation: string; payload: Record<string, unknown> },
-    goal: CreateGoalInput, targetGoalId: string): Record<string, unknown> | null;
-  candidateGoalMatches(goalId: string, proposed: CreateGoalInput): boolean;
-  businessContractMatches(existing: GoalRecord, goal: CreateGoalInput): boolean;
-  isCompoundClosure(existing: GoalRecord, goal: CreateGoalInput): boolean;
-  compoundClosureConflict(boardId: string, operation: string, existing: GoalRecord, goal: CreateGoalInput, goalId: string): GoalContractStructureConflict | null;
-  revisionStructureConflict(boardId: string, existing: GoalRecord, goal: CreateGoalInput): GoalContractStructureConflict | null;
-}
-
 export interface GoalsPlanningApi {
   validateRelationAddition(boardId: string, input: AddGoalRelationInput): Pick<PlanningGraphIssue, "code" | "message"> | null;
-  compoundCoverageBlocksClosure(boardId: string, goalId: string): boolean;
-  metrics(
-    goals: readonly Pick<GoalRecord, "goal_id" | "decomposition_state" | "fulfillment_state" | "trashed_at">[],
-    relations: readonly Pick<GoalRelationRecord, "relation_id" | "from_goal_id" | "to_goal_id" | "type" | "state">[],
-  ): Map<string, PlanningMetric>;
-  proposals: GoalsProposalCoordinationApi;
   proposalGraphIssues(boardId: string, items: readonly PlanningProposalItem[]): PlanningGraphIssue[];
   wouldCreatePartOfCycle(boardId: string, fromGoalId: string, toGoalId: string): boolean;
-  contracts: GoalContractPlanningApi;
   effectiveMethods(boardId: string): PlanningMethodPack[];
   projectComposition(boardId: string): PlanningMethodComposition;
   saveProjectMethod(input: SaveProjectPlanningMethodInput): {
@@ -385,30 +337,6 @@ export interface GoalsPlanningApi {
     issues: PlanningGraphIssue[];
     observed_event_cursor: number;
   };
-}
-
-export interface GoalDependencyReference {
-  from_goal_id: string;
-  to_goal_id: string;
-  action?: unknown;
-}
-
-/** Validate existing proposal payloads against Goals-owned identities, graph and Risk facts. */
-export interface GoalsProposalCoordinationApi {
-  validateStandaloneDependencies(boardId: string, dependencies: GoalDependencyReference[]): void;
-  validateCandidateCoordination(boardId: string, proposedGoal: CreateGoalInput,
-    relations: Array<Record<string, unknown>>, impacts: Array<Record<string, unknown>>,
-    risks: Array<Record<string, unknown>>, allowExistingGoalId?: string): void;
-}
-
-export interface GoalLifecycleReason {
-  code: string;
-  severity: "info" | "warning" | "blocker";
-  subject_type: string;
-  subject_id: string;
-  message: string;
-  facts?: Record<string, unknown>;
-  remediation?: string;
 }
 
 export type GoalTrashStatus =
@@ -432,34 +360,6 @@ export interface GoalTrashResult {
 export interface GoalArchiveResult {
   goal: GoalRecord;
   active_goal_cleared: boolean;
-  observed_event_cursor: number;
-  replayed: boolean;
-}
-
-export interface GoalRevalidationInput {
-  board_id: string;
-  goal_id: string;
-  run_id: string;
-  actor_id: string;
-  reason: string;
-  evidence_refs: string[];
-  contract_revision?: number;
-  action_token?: string;
-  idempotency_key: string;
-}
-
-export interface GoalRevalidationDecision<TTransition = unknown> {
-  revalidated: boolean;
-  goal: GoalRecord;
-  observed_event_cursor: number;
-  reasons: GoalLifecycleReason[];
-  replayed: boolean;
-  transition?: TTransition;
-}
-
-export interface GoalCompletionResult {
-  satisfied: boolean;
-  reasons: GoalLifecycleReason[];
   observed_event_cursor: number;
   replayed: boolean;
 }
@@ -561,25 +461,6 @@ export interface RiskFactsInput {
 export type AcceptedRiskFacts = Omit<RiskRecord, "state" | "resolution_basis" | "created_at" | "updated_at"> & {
   goal_ids: string[];
 };
-
-export interface UpdateRiskInput extends Omit<RiskFactsInput, "risk_id"> {
-  risk_id: string;
-  action_goal_id?: string;
-  contract_revision?: number;
-  action_id?: string;
-  action_token?: string;
-}
-
-export interface SetRiskStateInput {
-  risk_id: string;
-  state: RiskRecord["state"];
-  reason: string;
-  resolution_basis?: NonNullable<RiskRecord["resolution_basis"]>;
-  goal_id?: string;
-  contract_revision?: number;
-  action_id?: string;
-  action_token?: string;
-}
 
 export type ProjectGuidanceKind =
   | "context"
@@ -793,7 +674,7 @@ export interface ConfirmedRelationBatch {
   }>;
 }
 
-export interface GoalsCommandApi<TTransition = unknown> {
+export interface GoalsCommandApi {
   /** Internal import port; caller retains the complete V3 import transaction and audit event. */
   importLegacyCoverage(boardId: string, rows: ReadonlyArray<Omit<GoalLegacyCoverageRecord, "board_id">>): void;
   /** Finish an existing V3 import transaction; does not accept the imported Draft as live work. */
@@ -802,40 +683,10 @@ export interface GoalsCommandApi<TTransition = unknown> {
     legacy_goal_id: string; legacy_schema_version: string;
   }): number;
   validateGoalInput(input: CreateGoalInput): void;
-  applyAcceptedRewireRelations(input: {
-    board_id: string; rewire_id: string; formal_goal_id: string; actor_id: string; at: string;
-    relations: Array<{ from_goal_id: string; to_goal_id: string; type: string; action: string; reason: string }>;
-  }): { added_relation_ids: string[]; deactivated_relation_ids: string[]; revalidated_goal_ids: string[] };
-  registerAcceptedRisk(facts: AcceptedRiskFacts, at: string): void;
-  registerAcceptedRewireRisk(facts: AcceptedRiskFacts, actorId: string, at: string): void;
-  /** Accepted legacy aggregate facts; the application preserves its existing aggregate audit. */
-  registerAcceptedPolicy(input: {
-    board_id: string; goal_id: string; policy_binding_id: string; policy: Partial<GoalPolicy>;
-    actor_id: string; reason: string; at: string;
-  }): void;
-  updateConfirmedDraft(input: {
-    board_id: string; goal_id: string; goal: CreateGoalInput; actor_id: string; at: string;
-  }): GoalRecord;
-  /** Record the original final event after Governance supersession/closure in the same decision. */
-  recordConfirmedDraftUpdate(input: {
-    board_id: string; goal_id: string; actor_id: string; reason: string; source_item_id: string; at: string;
-  }): number;
   applyConfirmedRelations(input: ConfirmedRelationBatch): Array<{ relation_id: string }>;
-  applyConfirmedRisk(input: ConfirmedRiskChange): { risk_id: string };
-  createConfirmedGoal(input: {
-    board_id: string; goal_id: string; goal: CreateGoalInput;
-    source_proposal_id: string; source_item_id: string;
-    actor_id: string; reason: string; at: string;
-  }): GoalRecord;
-  applyConfirmedPolicy(input: ConfirmedPolicyChange): { policy_binding_id: string };
   initializeBoard(input: { board_id: string; title: string; actor_id: string; idempotency_key: string }): { board_id: string; replayed: boolean; observed_event_cursor: number };
   setActiveGoal(boardId: string, input: { goal_id: string; reason: string }, write: GoalsActorWrite): { active_goal_id: string; replayed: boolean; observed_event_cursor: number };
   createGoal(boardId: string, input: CreateGoalInput, write: GoalsActorWrite): {
-    goal: GoalRecord;
-    observed_event_cursor: number;
-    replayed: boolean;
-  };
-  updateDraftGoal(boardId: string, goalId: string, input: CreateGoalInput, write: GoalsActorWrite): {
     goal: GoalRecord;
     observed_event_cursor: number;
     replayed: boolean;
@@ -850,60 +701,11 @@ export interface GoalsCommandApi<TTransition = unknown> {
     observed_event_cursor: number;
     replayed: boolean;
   };
-  setPolicy(boardId: string, input: { goal_id?: string | null; policy: Partial<GoalPolicy>; reason: string }, write: GoalsActorWrite): {
-    policy_binding_id: string;
-    observed_event_cursor: number;
-    replayed: boolean;
-  };
-  addRisk(boardId: string, input: RiskFactsInput, write: GoalsActorWrite): {
-    risk: RiskRecord;
-    transitions: TTransition[];
-    observed_event_cursor: number;
-    replayed: boolean;
-  };
-  updateRisk(boardId: string, input: UpdateRiskInput, write: GoalsActorWrite): {
-    risk: RiskRecord;
-    transitions: TTransition[];
-    observed_event_cursor: number;
-    replayed: boolean;
-  };
-  setRiskState(boardId: string, input: SetRiskStateInput, write: GoalsActorWrite): {
-    risk: RiskRecord;
-    transitions: TTransition[];
-    observed_event_cursor: number;
-    replayed: boolean;
-  };
   addProjectGuidance(input: AddProjectGuidanceInput): AddProjectGuidanceResult;
   updateProjectGuidance(input: UpdateProjectGuidanceInput): UpdateProjectGuidanceResult;
 }
 
-export interface AcceptDraftGoalInput {
-  board_id: string; goal_id: string; proposed_goal: CreateGoalInput; actor_id: string; accepted_at: string;
-}
-
-export interface ApplyAcceptedContractRevisionInput {
-  board_id: string; goal_id: string; proposed_goal: CreateGoalInput; source_proposal_id: string;
-  source_item_id?: string; actor_id: string; reason: string; applied_at: string;
-}
-
-export interface AppliedGoalContractRevision {
-  goal: GoalRecord; previous_contract_revision: number; contract_revision: number;
-  effect: GoalContractRevisionEffect; downstream_goal_ids: string[];
-}
-
-export interface GoalsLifecycleApi<TTransition = unknown> {
-  markSatisfiedGoalForEvidenceRevalidation(boardId: string, goalId: string, actorId: string, evidenceId: string, correctionId: string, at: string): number;
-  reconcileAllClosedCompoundGoals(boardId: string, actorId: string, at: string): number;
-  markCandidateAwaitingRewire(boardId: string, goalId: string, at: string): void;
-  reconcileRewireGoalValidity(boardId: string, formalGoalId: string, revalidatedGoalIds: readonly string[], at: string): void;
-  reopenForLifecycleFacts(boardId: string, goalId: string, actorId: string, at: string, reason: string): number;
-  satisfyForLifecycleFacts(boardId: string, goalId: string, actorId: string, at: string): number;
-  acceptDraft(input: AcceptDraftGoalInput): GoalRecord;
-  applyAcceptedContractRevision(input: ApplyAcceptedContractRevisionInput): AppliedGoalContractRevision;
-  closeAcceptedCompound(input: {
-    board_id: string; goal_id: string; decomposition_review?: GoalDecompositionReview;
-    actor_id: string; reason: string; source_item_id: string; at: string;
-  }): GoalRecord;
+export interface GoalsLifecycleApi {
   setArchived(
     boardId: string,
     input: { goal_id: string; archived: boolean; reason: string },
@@ -915,47 +717,30 @@ export interface GoalsLifecycleApi<TTransition = unknown> {
     write: GoalsActorWrite,
   ): GoalTrashResult & { observed_event_cursor: number; replayed: boolean };
   listTrashed(boardId: string): GoalRecord[];
-  revalidate(input: GoalRevalidationInput): GoalRevalidationDecision<TTransition>;
-  evaluateCompletion(input: {
-    board_id: string;
-    goal_id: string;
-    actor_id: string;
-    idempotency_key: string;
-  }): GoalCompletionResult;
-}
-
-/** Existing cross-owner consequence of a confirmed Goal Contract revision. */
-export interface GoalRevisionDependentTransition {
-  board_id: string;
-  goal_id: string;
-  previous_contract_revision: number;
-  contract_revision: number;
-  effect: GoalContractRevisionEffect;
-  actor_id: string;
-  at: string;
 }
 
 /** Public application-facing Goals capabilities; Apps bind this port without owning rules or Stores. */
-export interface GoalsApplicationApi<TTransition = unknown> {
+export interface GoalsApplicationApi {
   impacts: GoalsImpactApi;
-  commands: GoalsCommandApi<TTransition>;
-  lifecycle: GoalsLifecycleApi<TTransition>;
+  commands: GoalsCommandApi;
+  lifecycle: GoalsLifecycleApi;
   planning: GoalsPlanningApi;
 }
 export type { GoalInputBindingRecord, GoalInputBindingsApi } from "./goal-inputs.js";
 export type {
   ApplyGoalConcernInput,
   CiteGoalDecisionInput,
-  ContinueGoalEventWorkInput,
-  ContinueGoalEventWorkResult,
   ConfigureGoalEventsApplicationInput,
   ConfigureGoalEventsInput,
   ConfigureGoalEventsResult,
   CreateGoalIntentInput,
+  CreateGoalIntentRequirementInput,
   CreateGoalIntentResult,
+  GoalIntentSourceKind,
   GoalConfigurationWorkEventRecord,
   GoalEventAdoptedPlanningRef,
   GoalEventAdoptedPlanningRequest,
+  GoalEventAgreementChange,
   GoalEventAgreementResult,
   GoalEventAgreementView,
   GoalEventAppliedDecisionView,
@@ -972,6 +757,7 @@ export type {
   GoalEventConfigView,
   GoalEventConfigurationPayload,
   GoalEventDecisionOption,
+  GoalEventDecisionPurpose,
   GoalEventDecisionRequestResult,
   GoalEventDecisionRequestView,
   GoalEventDecisionResult,
@@ -993,10 +779,15 @@ export type {
   GoalEventPlanningMethodRef,
   GoalEventProgressResult,
   GoalEventProgressSummaryView,
-  GoalEventProtocolBoundary,
+  GoalEventDirectoryItem,
+  GoalEventDirectoryPage,
+  GoalEventDirectoryQuery,
+  GoalEventImportedCompletion,
   GoalEventReportSummary,
   GoalEventRequirementBinding,
   GoalEventRequirementCommitment,
+  GoalEventRequirementCurrentStatus,
+  GoalEventRequirementRevisionInput,
   GoalEventRequirementSource,
   GoalEventRequirementReport,
   GoalEventRequirementStatus,
@@ -1029,8 +820,9 @@ export type {
   RecordGoalNoteInput,
   RecordGoalProgressSummaryInput,
   RecordGoalUserDecisionInput,
-  ReopenCompletedEventWorkInput,
+  GoalEventReportProgressInput,
   ReportGoalEventsInput,
+  ReportGoalEventsRecordedResult,
   ReportGoalEventsResult,
   ReportGoalWorkEventInput,
   RequestGoalDecisionInput,
@@ -1044,8 +836,10 @@ export {
   goalEventConcernActions,
   goalEventConcernStatuses,
   goalEventDecisionEffectKinds,
+  goalEventDecisionPurposes,
   goalEventFieldFormats,
   goalEventJudgmentVerdicts,
+  goalEventRequirementCurrentStatuses,
   goalEventSemanticFamilies,
   goalEventSystemOperations,
   goalEventTrustedAuthoritySources,

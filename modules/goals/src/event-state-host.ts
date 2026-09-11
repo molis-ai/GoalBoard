@@ -1,10 +1,11 @@
 import type {
+  GoalEventExtraRequirementInput,
+  GoalEventRequirementRevisionInput,
   GoalEventRequirementStatus,
   GoalEventScope,
   GoalEventSystemPayload,
   GoalRecord,
   GoalSystemWorkEventRecord,
-  SetGoalEventAgreementInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 import type { GoalEventCompletionContext } from "./event-state-completion.js";
 
@@ -13,7 +14,14 @@ export interface GoalEventStateHost {
   actorKind(kind: "user" | "runtime" | undefined): "user" | "runtime" | null;
   configVersion(boardId: string, goalId: string): number;
   readCurrentRequirements(boardId: string, goalId: string): GoalEventRequirementStatus[];
-  addRequirements(input: SetGoalEventAgreementInput, goal: GoalRecord): void;
+  applyAgreementChange(input: {
+    actor_id: string;
+    new_requirements: GoalEventExtraRequirementInput[];
+    revise_requirements: GoalEventRequirementRevisionInput[];
+    retire_requirement_ids: string[];
+    expire_requirement_ids: string[];
+    journal_seq: number;
+  }, goal: GoalRecord): void;
   readCompletionContext(boardId: string, goalId: string): GoalEventCompletionContext;
 }
 
@@ -34,5 +42,6 @@ export interface GoalEventStateCore {
   requireOwnedWritable(boardId: string, goalId: string): GoalRecord;
   requireLocalScope(goal: GoalRecord, raw?: Partial<GoalEventScope>): GoalEventScope;
   assertConfigVersion(goal: GoalRecord, expected: number): void;
+  assertAgreementVersion(goal: GoalRecord, expected: number, code: string): void;
   error: (code: string, message: string, details?: Record<string, unknown>) => Error;
 }

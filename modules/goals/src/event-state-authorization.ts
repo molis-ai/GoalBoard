@@ -2,15 +2,22 @@ import {
   goalEventClosureKinds,
   goalEventConcernActions,
   goalEventDecisionEffectKinds,
+  type GoalEventAgreementChange,
   type GoalEventAppliedDecisionView,
   type GoalEventClosureKind,
   type GoalEventConcernAction,
   type GoalEventDecisionCommitment,
   type GoalEventDecisionEffect,
+  type GoalEventDecisionRequestView,
   type GoalEventRequirementCommitment,
   type GoalEventRequirementStatus,
   type GoalEventScope,
+  type RecordGoalUserDecisionInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
+import {
+  affectedExistingRequirementIds,
+  type CanonicalAgreementChange,
+} from "./event-agreement-change.js";
 import { emptyScope, scopeIsSubset } from "./event-state-repository.js";
 
 type StateError = (code: string, message: string, details?: Record<string, unknown>) => Error;
@@ -181,6 +188,39 @@ export function snapshotCommitment(
   };
 }
 
+export function snapshotAgreementChangeCommitment(
+  change: CanonicalAgreementChange,
+  requirements: GoalEventRequirementStatus[],
+  currentOutcome: string,
+): GoalEventDecisionCommitment {
+  const ids = new Set(affectedExistingRequirementIds(change));
+  if (change.outcome != null && currentOutcome) {
+    for (const item of requirements) ids.add(item.requirement_id);
+  }
+  return currentCommitment(requirements, currentOutcome, [...ids]);
+}
+
+export function agreementChangeCommitmentCurrent(
+  recorded: GoalEventDecisionCommitment | null | undefined,
+  requirements: GoalEventRequirementStatus[],
+  currentOutcome: string,
+  change: CanonicalAgreementChange,
+): boolean {
+  if (!recorded) return false;
+  if (recorded.outcome !== currentOutcome) return false;
+  const affected = new Set(affectedExistingRequirementIds(change));
+  if (change.outcome != null && currentOutcome) {
+    for (const item of requirements) affected.add(item.requirement_id);
+  }
+  const recordedIds = new Set(recorded.requirements.map((item) => item.requirement_id));
+  if (![...affected].every((id) => recordedIds.has(id))) return false;
+  if (!recorded.requirements.length) return affected.size === 0;
+  return commitmentsMatch(
+    recorded,
+    currentCommitment(requirements, currentOutcome, recorded.requirements.map((item) => item.requirement_id)),
+  );
+}
+
 export function requirementCommitment(requirement: GoalEventRequirementStatus): GoalEventRequirementCommitment {
   return {
     requirement_id: requirement.requirement_id,
@@ -236,7 +276,7 @@ export function requirementCurrentlySatisfied(requirement: GoalEventRequirementS
     const report = requirement.current_report;
     if (
       report
-      && report.verdict === "contradicts"
+      && (report.verdict === "contradicts" || report.verdict === "unknown")
       && report.journal_seq > requirement.user_conclusion.journal_seq
     ) {
       return false;
@@ -248,6 +288,18 @@ export function requirementCurrentlySatisfied(requirement: GoalEventRequirementS
 
 export function scopeAppliesToComplete(scope: GoalEventScope): boolean {
   return scope.action === "complete";
+}
+
+export function pendingBlocksCompletion(
+  pending: { purpose?: string; scope: GoalEventScope },
+  requirements: GoalEventRequirementStatus[],
+): boolean {
+  if (pending.purpose === "suggestion" || pending.purpose === "agreement_change") return false;
+  if (pending.purpose === "requirement_acceptance") {
+    const current = new Set(requirements.map((item) => item.requirement_id));
+    return pending.scope.requirement_ids.some((id) => current.has(id));
+  }
+  return scopeAppliesToComplete(pending.scope);
 }
 
 function assertEffectsMatchScope(
@@ -268,10 +320,90 @@ function assertEffectsMatchScope(
       }
       continue;
     }
+    if (effect.kind === "authorize_agreement_change") continue;
     if (!scope.action || effect.action !== scope.action) {
       throw error("event_decision.effect_scope_mismatch", "动作效果必须匹配声明的 scope.action，不能把授权扩大到范围之外");
     }
   }
+}
+
+export function resolveRecordedDecision(
+  error: StateError,
+  input: Pick<RecordGoalUserDecisionInput, "accepts_requirements" | "effects" | "authorized_change" | "scope">,
+  request: GoalEventDecisionRequestView | null,
+  scope: GoalEventScope,
+): { effects: GoalEventDecisionEffect[]; accepts_requirements: boolean; authorized_change: GoalEventAgreementChange | null; scope: GoalEventScope } {
+  if (request?.purpose === "agreement_change") {
+    const proposed = request.proposed_change;
+    if (!proposed) {
+      throw error("event_decision.missing_proposed_change", "约定变更请求必须带有可审阅的具体变化");
+    }
+    const callerEffects = Array.isArray(input.effects) ? input.effects : [];
+    const denyAction = request.scope.action || "set_agreement";
+    const authorize = callerEffects.some((effect) => effect.kind === "authorize_agreement_change");
+    const deny = callerEffects.some((effect) => effect.kind === "deny_action" && effect.action === denyAction);
+    const extra = callerEffects.filter((effect) => {
+      if (effect.kind === "authorize_agreement_change") return false;
+      if (effect.kind === "deny_action" && effect.action === denyAction) return false;
+      return true;
+    });
+    if (extra.length) {
+      throw error("event_decision.effect_widened", "批准约定变更时不能附加请求里没有的效果或另一份变化");
+    }
+    if (authorize && deny) {
+      throw error("event_decision.effect_conflict", "不能同时批准和拒绝同一份约定变更");
+    }
+    if (input.scope && (input.scope.requirement_ids?.length || input.scope.event_ids?.length || input.scope.concern_ids?.length || input.scope.action)) {
+      if (!scopeIsSubset(scope, request.scope) || !scopeIsSubset(request.scope, scope)) {
+        throw error("event_decision.scope_expanded", "批准约定变更时不能替换请求中的范围");
+      }
+    }
+    const accepts = input.accepts_requirements === true || authorize;
+    if (accepts) {
+      if (deny) {
+        throw error("event_decision.effect_conflict", "不能同时批准和拒绝同一份约定变更");
+      }
+      if (input.authorized_change) {
+        const left = JSON.stringify(canonicalizeValue(input.authorized_change));
+        const right = JSON.stringify(canonicalizeValue(proposed));
+        if (left !== right) {
+          throw error("event_decision.change_mismatch", "批准时的约定变化必须与请求中的具体变化一致，不能加宽或替换");
+        }
+      }
+      return {
+        effects: [{ kind: "authorize_agreement_change" }],
+        accepts_requirements: false,
+        authorized_change: proposed,
+        scope: request.scope,
+      };
+    }
+    return {
+      effects: [{ kind: "deny_action", action: denyAction }],
+      accepts_requirements: false,
+      authorized_change: null,
+      scope: request.scope,
+    };
+  }
+  const normalized = normalizeTrustedDecision(error, input, scope);
+  if (normalized.effects.some((effect) => effect.kind === "authorize_agreement_change")) {
+    if (!input.authorized_change) {
+      throw error("event_decision.missing_proposed_change", "授权约定变更必须带上可审阅的具体变化");
+    }
+    return { ...normalized, authorized_change: input.authorized_change, scope };
+  }
+  return { ...normalized, authorized_change: null, scope };
+}
+
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalizeValue(item)]),
+    );
+  }
+  return value;
 }
 
 function normalizeEffects(error: StateError, effects: GoalEventDecisionEffect[]): GoalEventDecisionEffect[] {

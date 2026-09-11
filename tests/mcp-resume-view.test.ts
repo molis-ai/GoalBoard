@@ -1,52 +1,147 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
+import {
+  createGoalBoardLocalHost,
+  GoalProjectApplication,
+  LocalProjectDatabase,
+  openWorkSessionRegistry,
+} from "@adeptify/goalboard-app-local-host";
 import { buildMcpResumeView, type McpResumeFacts } from "@adeptify/goalboard-app-mcp";
-import type { GoalActionProjection } from "@adeptify/goalboard-plugin-goals";
+import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 
-function factsFor(entries: Array<[string, GoalActionProjection["display_status"], GoalActionProjection["progress"]]>): McpResumeFacts {
+function factsFor(entries: Array<[string, McpResumeFacts["goals"][number]["work_status"], boolean]>): McpResumeFacts {
   return {
-    goals: entries.map(([id]) => ({ goal_id: id, title: `目标 ${id}`, priority: 50, updated_at: "2026-09-01T00:00:00Z", trashed_at: null })),
-    projections: entries.map(([id, status, progress]) => ({
-      goal_id: id, display_status: status, progress, contract_revision: 1,
-      action_token: `existing-${id}`, primary_action: null, actions: [],
+    goals: entries.map(([id, work_status, can_record], index) => ({
+      goal_id: id,
+      title: `目标 ${id}`,
+      work_status,
+      completion_effect: work_status === "completed",
+      can_record,
+      next_hint: work_status === "completed" ? "已完成，明确继续后开启新一轮" : "可记录",
+      unmet_requirement_count: 0,
+      pending_decision_count: id === "attention" ? 1 : 0,
+      blocking_concern_count: 0,
+      updated_at: `2026-09-0${9 - (index % 8)}T00:00:00Z`,
     })),
   };
 }
 
-test("MCP resume preserves host/session focus, original action facts and no automatic claim", () => {
+test("MCP resume preserves host/session focus and no automatic claim", () => {
   const facts = factsFor([
-    ["active", "in_progress", "in_progress"], ["session", "continue", "not_started"],
-    ["host", "waiting_user", "not_started"],
+    ["active", "open", true], ["session", "open", true], ["host", "open", true],
   ]);
   const before = structuredClone(facts);
   const hostFocus = buildMcpResumeView(facts, "host", "session");
   assert.equal(hostFocus.focus?.goal_id, "host");
   assert.equal(hostFocus.focus?.source, "host_focus");
-  assert.equal(hostFocus.focus?.projection, facts.projections[2]);
   assert.equal(hostFocus.auto_claimed, false);
   const sessionFocus = buildMcpResumeView(facts, "missing-host-goal", "session");
   assert.equal(sessionFocus.focus?.goal_id, "session");
   assert.equal(sessionFocus.focus?.source, "session_focus");
   assert.equal(sessionFocus.auto_claimed, false);
-  assert.deepEqual(facts, before, "display construction must not change input facts or projections");
+  assert.deepEqual(facts, before, "display construction must not change input facts");
 });
 
-test("MCP resume keeps recovery ordering and excludes trashed/completed suggestions", () => {
+test("MCP resume keeps recovery ordering and excludes completed suggestions", () => {
   const facts = factsFor([
-    ["done", "completed", "verified"], ["blocked", "blocked", "not_started"],
-    ["waiting", "waiting", "not_started"], ["ready-b", "continue", "not_started"],
-    ["ready-a", "continue", "not_started"], ["recorded", "continue", "work_recorded"],
-    ["attention", "waiting_user", "not_started"], ["active", "in_progress", "in_progress"],
-    ["trashed", "in_progress", "in_progress"],
+    ["done", "completed", true], ["blocked", "open", true],
+    ["waiting", "open", true], ["ready-b", "open", true],
+    ["ready-a", "open", true], ["recorded", "open", true],
+    ["attention", "open", true], ["active", "open", true],
   ]);
-  const removed = facts.goals.find((goal) => goal.goal_id === "trashed")!;
-  removed.trashed_at = "2026-09-02T00:00:00Z";
   const view = buildMcpResumeView(facts, null, null);
-  assert.equal(view.focus?.goal_id, "active");
+  assert.equal(view.focus?.goal_id, "attention");
   assert.equal(view.focus?.source, "project_recovery_order");
-  assert.deepEqual(view.next_goals.map((goal) => goal.goal_id), ["attention", "recorded", "ready-a", "ready-b", "waiting"]);
+  assert.equal(view.next_goals.some((goal) => goal.goal_id === "done"), false);
   assert.equal(view.auto_claimed, false);
-  assert.deepEqual(buildMcpResumeView({ goals: [], projections: [] }, null, null), {
+  assert.deepEqual(buildMcpResumeView({ goals: [] }, null, null), {
     focus: null, next_goals: [], auto_claimed: false,
   });
+});
+
+test("context_resolve restores Host and Session focus outside the discovery window", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "goalboard-02-focus-"));
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory: directory });
+  let store: LocalProjectDatabase | undefined;
+  let registry: Awaited<ReturnType<typeof openWorkSessionRegistry>> | undefined;
+  let runtime: GoalBoardServer | undefined;
+  let host = createGoalBoardLocalHost();
+  try {
+    const project = await catalog.createProject({ display_name: "真实 Session 恢复", actor_id: "focus-user" });
+    store = new LocalProjectDatabase(project.database_path);
+    let tick = Date.parse("2026-09-10T00:00:00.000Z");
+    const app = new GoalProjectApplication(store, () => new Date(tick++));
+    const create = (goal_id: string, title: string) => app.goalEvents.createIntent({
+      board_id: project.board_id, goal_id, title, actor_id: "focus-user", actor_kind: "user",
+      idempotency_key: `focus-create-${goal_id}`, source_kind: "web",
+    });
+    create("FOCUS-HOST", "明确的 Host 目标");
+    create("FOCUS-SESSION", "原 Session 正在处理的目标");
+    for (let i = 0; i < 105; i++) create(`FOCUS-RECENT-${String(i).padStart(3, "0")}`, `后续记录目标 ${i + 1}`);
+    assert.equal(
+      app.goalEvents.listGoals({ board_id: project.board_id, limit: 100 }).goals
+        .some((item) => item.goal_id === "FOCUS-HOST" || item.goal_id === "FOCUS-SESSION"),
+      false,
+    );
+    registry = await openWorkSessionRegistry({ homeDirectory: directory });
+    const session = registry.explicitlyLinkSession({
+      runtime_id: "codex", native_runtime_session_id: "focus-session", actor_id: "focus-user",
+      user_confirmed: true, project_id: project.project_id, current_goal_id: "FOCUS-SESSION",
+    });
+    const originalSession = registry.get(session.session_id);
+    const originalEvents = registry.events(session.session_id);
+    const runtimeHost: {
+      homeDirectory: string;
+      runtimeContext: { runtime_id: string; stable_work_context_id: string; host_declares_stable: boolean };
+      goalId?: string;
+    } = {
+      homeDirectory: directory,
+      runtimeContext: { runtime_id: "codex", stable_work_context_id: "focus-session", host_declares_stable: true },
+      goalId: "FOCUS-HOST",
+    };
+    catalog.bindRuntimeContext({
+      context: runtimeHost.runtimeContext, project_id: project.project_id,
+      actor_id: "focus-user", user_confirmed: true,
+    });
+    const connection = {
+      databasePath: project.database_path, boardId: project.board_id,
+      projectId: project.project_id, webBaseUrl: "http://127.0.0.1:4173",
+    };
+    runtime = new GoalBoardServer("runtime", connection, runtimeHost, host);
+    const resolve = async () => JSON.parse(await runtime!.callTool("goalboard_v1_context_resolve", {}));
+    let result = await resolve();
+    assert.equal(result.resume.focus.goal_id, "FOCUS-HOST");
+    assert.equal(result.resume.focus.source, "host_focus");
+    assert.equal(result.session_registry.session.current_goal_id, "FOCUS-SESSION");
+    runtimeHost.goalId = undefined;
+    result = await resolve();
+    assert.equal(result.resume.focus.goal_id, "FOCUS-SESSION");
+    assert.equal(result.resume.focus.source, "session_focus");
+    runtimeHost.goalId = "DOES-NOT-EXIST";
+    result = await resolve();
+    assert.equal(result.resume.focus.goal_id, "FOCUS-SESSION");
+    assert.equal(result.resume.focus.source, "session_focus");
+    assert.deepEqual(registry.get(session.session_id), originalSession);
+    assert.deepEqual(registry.events(session.session_id), originalEvents);
+    await runtime.close();
+    await host.close();
+    host = createGoalBoardLocalHost();
+    runtime = new GoalBoardServer("runtime", connection, runtimeHost, host);
+    result = await resolve();
+    assert.equal(result.resume.focus.goal_id, "FOCUS-SESSION");
+    assert.equal(result.resume.focus.source, "session_focus");
+    assert.deepEqual(registry.get(session.session_id), originalSession);
+    assert.deepEqual(registry.events(session.session_id), originalEvents);
+  } finally {
+    await runtime?.close();
+    await host.close();
+    registry?.close();
+    store?.close();
+    await catalog.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

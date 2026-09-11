@@ -1,12 +1,12 @@
-# 提案、复核与决定事实
+# 结构提案与可信决定
 
-保存澄清、提案、Review obligation、Review 和用户决定，回答“谁依据什么确认了哪个变化”。
+保存当前结构提案、决定和确认来源，回答“谁依据什么确认了哪个具体变化”；同时保留旧澄清、提案和 Review 的原始历史。
 
 包名：`@adeptify/goalboard-module-governance-collaboration`。工作区内部包，通过仓库构建和 Host 装配使用。
 
 ## 一次典型调用
 
-GovernanceCollaborationModule 装配记录、复核生命周期和 provenance；state-machine 校验转换。Native Goals 接收确认后，通过各 owner 执行目标树等变化，再把决定及关联事实留在这里。
+Native Goals 通过 `records` 保存有限 Goal/Relation 结构提案，使用 `decisions` 在同一事务内记录决定并调用实际数据 owner。`eventDecisions` 保存受保护入口产生的可信用户决定，供当前约定与要求验收引用。`query` 和只读 `clarification` 提供历史记录。
 
 ## 从哪里读代码
 
@@ -15,15 +15,17 @@ GovernanceCollaborationModule 装配记录、复核生命周期和 provenance；
 | 文件 | 用途 |
 | --- | --- |
 | [src/index.ts](src/index.ts) | 模块服务与公开查询 |
-| [src/review-lifecycle.ts](src/review-lifecycle.ts) | Review 生命周期 |
+| [src/record-store.ts](src/record-store.ts) | 当前结构提案的记录入口 |
+| [src/decision-transactions.ts](src/decision-transactions.ts) | 决定、幂等和事务边界 |
+| [src/event-decisions.ts](src/event-decisions.ts) | 可信用户决定与具体授权范围 |
 | [src/state-machine.ts](src/state-machine.ts) | 提案/决定状态转换 |
-| [src/clarification-store.ts](src/clarification-store.ts) | 澄清会话事实 |
+| [src/clarification-store.ts](src/clarification-store.ts) | 历史澄清会话及轮次读取 |
 
 可对照现有调用方 [apps/local-host/src/goal-project-application.ts](../../apps/local-host/src/goal-project-application.ts) 阅读装配方式。
 
 ## 接入与边界
 
-Governance 不直接替代 Goals/Artifacts/Projects 的写入接口。复核结论和 Goal 完成不是同一个状态；legacy proposal 视图仍用于兼容既有历史。
+Governance 不替代 Goals/Artifacts/Projects 的写入接口，也不自行宣布 Goal 完成。Runtime 不能用自填身份或文字确认伪造用户授权。旧 Contract/Candidate/Rewire、Review 和澄清写协议已退役，原记录与来源仍能通过历史查询读取。
 
 由 Local Host 装配数据库与协作端口；跨 Module 协作使用公开 Contract，不从另一 Module 深层导入实现。完整依赖见 [package.json](package.json)。
 
@@ -36,10 +38,10 @@ pnpm --filter @adeptify/goalboard-module-governance-collaboration typecheck
 pnpm --filter @adeptify/goalboard-module-governance-collaboration build
 ```
 
-已有行为示例与回归：[governance-collaboration-module.test.ts](../../tests/governance-collaboration-module.test.ts)。完成上述构建后运行：
+当前树提案与事件决定可参考 [goal-tree-event-flow.test.ts](../../tests/goal-tree-event-flow.test.ts)、[goal-events-state.test.ts](../../tests/goal-events-state.test.ts)。完成仓库构建后运行：
 
 ```bash
-node --import tsx --test --test-concurrency=1 tests/governance-collaboration-module.test.ts
+node --import tsx --test --test-concurrency=1 tests/goal-tree-event-flow.test.ts tests/goal-events-state.test.ts
 ```
 
 阅读测试中的输入与断言，可以看到接入方式、结果和错误分支。

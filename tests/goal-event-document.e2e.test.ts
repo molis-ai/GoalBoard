@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DEMO_BOARD_ID, GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
+import { insertHistoricalClaim, insertHistoricalEvidence, insertHistoricalRun } from "./historical-sql-fixture.js";
 
 test("event document writes planning, report, concern, decision and closure through the production UI", { timeout: 120_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
@@ -180,20 +181,23 @@ test("event document writes planning, report, concern, decision and closure thro
     agreement: document.querySelector('[data-event-form="closure"] [name="expected_agreement_version"]').value,
   })`);
   await fillField('[data-event-form="closure"] [name="reason"]', "旧版本收尾");
-  app.goalEvents.configure({
+  const current = app.goalEvents.readState(DEMO_BOARD_ID, goalId);
+  app.goalEvents.setAgreement({
     board_id: DEMO_BOARD_ID,
     goal_id: goalId,
     actor_id: "web-user",
     actor_kind: "user",
-    expected_version: Number(versions.config),
-    new_requirements: [{ requirement_id: "extra-need", statement: "冲突探测用" }],
+    expected_config_version: current.config.version,
+    expected_agreement_version: current.agreement.version,
+    outcome: "并发修改后的约定，用来制造过期收尾",
     idempotency_key: "e2e-conflict-bump",
   });
   await click('[data-event-form="closure"] button[type="submit"]');
   await waitDom("document.querySelector('[data-conflict-retry]')");
   assert.equal(await evaluate("document.querySelector('[data-event-form=closure] [name=reason]').value"), "旧版本收尾");
   assert.equal(await evaluate("document.querySelector('[data-event-form=closure] [name=expected_config_version]').value"), versions.config);
-  assert.match(await evaluate("document.querySelector('[data-event-conflict]').textContent || ''"), /当前预期结果|约定版本|配置版本/);
+  assert.equal(await evaluate("document.querySelector('[data-event-form=closure] [name=expected_agreement_version]').value"), versions.agreement);
+  assert.match(await evaluate("document.querySelector('[data-event-conflict]').textContent || ''"), /当前预期结果|约定版本|配置版本|并发修改后的约定/);
   const retryKey = await evaluate("document.querySelector('[data-event-form=closure]').dataset.idempotencyKey || ''");
   assert.ok(retryKey);
   const beforeReviewCursor = app.goalEvents.readState(DEMO_BOARD_ID, goalId).goal_event_cursor;
@@ -211,7 +215,7 @@ test("event document writes planning, report, concern, decision and closure thro
     };
   })()`);
   await click("[data-conflict-retry]");
-  await waitDom(`document.querySelector('[data-event-form=closure] [name=expected_config_version]')?.value !== ${JSON.stringify(versions.config)}`);
+  await waitDom(`document.querySelector('[data-event-form=closure] [name=expected_agreement_version]')?.value !== ${JSON.stringify(versions.agreement)}`);
   assert.equal(await evaluate("document.querySelector('[data-event-form=closure] [name=reason]').value"), "旧版本收尾");
   assert.equal(await evaluate("document.querySelector('[data-event-form=closure]').dataset.idempotencyKey || ''"), "");
   assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, goalId).goal_event_cursor, beforeReviewCursor);
@@ -222,72 +226,97 @@ test("event document writes planning, report, concern, decision and closure thro
   assert.ok(state.current_decisions.length >= 1);
 });
 
-test("legacy unfinished Goal can continue explicitly and reading history does not write owner", { timeout: 60_000 }, async (t) => {
+test("legacy unfinished Goal history remains readable without writing owner or a retired transfer form", { timeout: 60_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
-  const { store, origin, sessionId, command, evaluate, click, navigate, waitFor } = browser;
+  const { store, origin, sessionId, command, evaluate, click, navigate, waitFor, reloadPage } = browser;
   const app = new GoalProjectApplication(store);
-  const goalId = "V1";
-  async function submitSuccess(selector: string) {
-    const before = app.goalEvents.readState(DEMO_BOARD_ID, goalId).goal_event_cursor;
-    await click(selector);
-    await waitFor(
-      `document.querySelector("[data-goal-event-document]")?.dataset.goalView === ${JSON.stringify(goalId)} && Number(document.querySelector("[data-goal-event-document]")?.dataset.goalEventCursor) > ${before} && document.querySelector("[data-document-pane]")?.getAttribute("aria-busy") !== "true"`,
-    );
-  }
+  const goalId = "legacy-readonly-history";
+  const originalTitle = "未转交历史草稿";
+  const originalOutcome = "旧结果必须原样可读";
+  const originalWhy = "历史资料不能在更换界面时消失";
+  const originalLogic = "从目标说明直接读取原字段";
+  const originalConstraint = "原约束：只修改已确认的文案";
+  const evidenceId = "legacy-readonly-evidence";
+  const evidenceLocator = "historical-readonly://original-body";
+  app.goals.commands.createGoal(DEMO_BOARD_ID, {
+    goal_id: goalId,
+    title: originalTitle,
+    outcome: originalOutcome,
+    why: originalWhy,
+    business_logic: originalLogic,
+    definition_state: "draft",
+    decomposition_state: "abstract",
+    constraints: [originalConstraint],
+    required_inputs: ["原输入：用户已确认的发布说明"],
+    promised_outputs: ["原输出：可读的最终说明文档"],
+    acceptance_criteria: [],
+  }, { actor_id: "history-fixture", idempotency_key: "legacy-readonly-create", reason: "隔离验收无 owner 历史阅读" });
+  insertHistoricalClaim(store.db, {
+    claim_id: "legacy-readonly-claim",
+    board_id: DEMO_BOARD_ID,
+    goal_id: goalId,
+    actor_id: "history-runtime",
+  });
+  insertHistoricalRun(store.db, {
+    run_id: "legacy-readonly-run",
+    board_id: DEMO_BOARD_ID,
+    goal_id: goalId,
+    claim_id: "legacy-readonly-claim",
+    actor_id: "history-runtime",
+    output_refs_json: JSON.stringify(["historical-readonly://run-output"]),
+  });
+  insertHistoricalEvidence(store.db, {
+    evidence_id: evidenceId,
+    board_id: DEMO_BOARD_ID,
+    goal_id: goalId,
+    producer_actor_id: "history-runtime",
+    locator: evidenceLocator,
+    kind: "artifact",
+    result: "passed",
+    run_id: "legacy-readonly-run",
+  });
+  const before = store.snapshot(DEMO_BOARD_ID);
+  const beforeGoal = before.goals.find((item) => item.goal_id === goalId)!;
+  const beforeEvidence = before.evidence.find((item) => item.evidence_id === evidenceId)!;
+  assert.equal(app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, goalId), false);
+  assert.equal(beforeGoal.outcome, originalOutcome);
+  assert.equal(beforeEvidence.locator, evidenceLocator);
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
-  await navigate(() => command("Page.navigate", { url: origin + "/goals/V1" }, sessionId));
-  await evaluate(`new Promise((resolve) => {
-    const deadline = Date.now() + 4000;
-    const check = () => {
-      if (document.querySelector('[data-goal-event-document]')?.dataset.goalView === 'V1') resolve(true);
-      else if (Date.now() >= deadline) resolve(false);
-      else requestAnimationFrame(check);
-    };
-    check();
-  })`);
-  await waitFor(`document.querySelector('[data-event-form="continue"]') && document.querySelector('[data-event-form="continue"]').hidden === false`);
-  await click("[data-goal-event-document]:not([hidden]) .header-actions > [data-event-reader='planning']");
+  await navigate(() => command("Page.navigate", { url: origin + "/goals/" + encodeURIComponent(goalId) }, sessionId));
+  await waitFor(`document.querySelector('[data-goal-event-document]')?.dataset.goalView === ${JSON.stringify(goalId)}`);
+  const page = await evaluate("document.querySelector('[data-goal-event-document]:not([hidden])')?.outerHTML || ''") as string;
+  assert.match(page, new RegExp(originalTitle));
+  assert.match(page, new RegExp(originalOutcome));
+  assert.doesNotMatch(page, /data-open-goal-edit|data-event-form-open="note"|data-event-form="note"|data-event-form="type"|data-event-form="agreement"|data-event-form="closure"|data-event-form="continue"|data-event-form-open="resume"/);
+  assert.match(page, /阅读原来的说明、要求和历史/);
+  assert.equal(await evaluate(`document.querySelector('[data-event-form="continue"], [data-event-form-open="note"]')`), null);
+  await click("[data-goal-event-document]:not([hidden]) .header-actions > [data-event-reader='description']");
   await waitFor("document.querySelector('[data-event-reader-root]') && !document.querySelector('[data-event-reader-root]').hasAttribute('hidden')");
-  assert.equal(await evaluate(`document.querySelector('[data-event-form="continue"]')?.hidden === true`), true);
+  const description = await evaluate("document.querySelector('[data-event-panel=description]')?.textContent || ''") as string;
+  assert.match(description, new RegExp(originalWhy));
+  assert.match(description, new RegExp(originalLogic));
+  assert.match(description, new RegExp(originalConstraint));
   await click("[data-goal-event-document]:not([hidden]) [data-event-back]");
-  await waitFor(`document.querySelector('[data-event-reader-root]')?.hasAttribute('hidden') === true && document.querySelector('[data-event-form="continue"]')?.hidden === false`);
-  await click("[data-goal-event-document]:not([hidden]) [data-event-form-open='note']");
-  await waitFor(`document.querySelector('[data-event-form="note"]')?.hidden === false`);
-  assert.equal(await evaluate(`document.querySelector('[data-event-form="continue"]')?.hidden === true`), true);
-  await click('[data-event-form="note"] [data-event-back]');
-  await waitFor(`document.querySelector('[data-event-form="note"]')?.hidden === true && document.querySelector('[data-event-form="continue"]')?.hidden === false`);
-  assert.equal(app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, "V1"), false);
-  const snapshot = store.snapshot(DEMO_BOARD_ID);
-  assert.ok(
-    snapshot.runs.some((item) => item.goal_id === "V1")
-      || snapshot.evidence.some((item) => item.goal_id === "V1")
-      || snapshot.reviews.some((item) => item.goal_id === "V1")
-      || snapshot.goals.some((item) => item.goal_id === "V1"),
-  );
-  const historyId = await evaluate(`(
-    document.querySelector('[data-source="legacy_evidence"],[data-source="legacy_run"],[data-source="legacy_review"],[data-source="legacy_record"]')
-    || document.querySelector('[data-timeline-item]')
-  )?.dataset.timelineItem || ""`) as string;
-  assert.ok(historyId, "V1 mixed timeline must include original records");
+  await waitFor(`document.querySelector('[data-event-reader-root]')?.hasAttribute('hidden') === true`);
+  const historyId = await evaluate(`document.querySelector('[data-source="legacy_evidence"]')?.dataset.timelineItem || ""`) as string;
+  assert.ok(historyId, "unowned historical Goal must keep the original Evidence timeline item");
   await click(`[data-timeline-item="${historyId}"]`);
-  await evaluate(`new Promise((resolve, reject) => {
-    const deadline = Date.now() + 4000;
-    const check = () => {
-      if (document.querySelector('[data-event-sheet] .event')) resolve(true);
-      else if (Date.now() >= deadline) reject(new Error('evidence body timeout'));
-      else requestAnimationFrame(check);
-    };
-    check();
-  })`);
-  const body = await evaluate("document.querySelector('[data-event-sheet]')?.textContent || ''");
-  assert.match(body, /原记录|原 Run|原 Evidence|原 Review|关系|未填写/);
-  assert.equal(app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, "V1"), false);
-  await submitSuccess('[data-event-form="continue"] button[type=submit]');
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    if (app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, "V1")) break;
-    await evaluate("new Promise((resolve) => setTimeout(resolve, 400))");
-  }
-  assert.equal(app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, "V1"), true);
-  assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, "V1").work_status, "open");
+  await waitFor("document.querySelector('[data-event-sheet] .event')");
+  const body = await evaluate("document.querySelector('[data-event-sheet]')?.textContent || ''") as string;
+  assert.match(body, new RegExp(evidenceId));
+  assert.match(body, /historical-readonly:\/\/original-body/);
+  assert.match(body, /原 Evidence/);
+  await reloadPage();
+  await waitFor(`document.querySelector('[data-goal-event-document]')?.dataset.goalView === ${JSON.stringify(goalId)}`);
+  const after = store.snapshot(DEMO_BOARD_ID);
+  const afterGoal = after.goals.find((item) => item.goal_id === goalId)!;
+  const afterEvidence = after.evidence.find((item) => item.evidence_id === evidenceId)!;
+  assert.equal(app.goalEvents.isEventStateOwner(DEMO_BOARD_ID, goalId), false);
+  assert.equal(afterGoal.title, beforeGoal.title);
+  assert.equal(afterGoal.outcome, beforeGoal.outcome);
+  assert.deepEqual(afterGoal.constraints, beforeGoal.constraints);
+  assert.equal(afterEvidence.locator, beforeEvidence.locator);
+  assert.deepEqual(after.evidence.filter((item) => item.goal_id === goalId), before.evidence.filter((item) => item.goal_id === goalId));
+  assert.equal(await evaluate(`document.querySelector('[data-event-form-open="note"], [data-open-goal-edit], [data-event-form="continue"]')`), null);
 });

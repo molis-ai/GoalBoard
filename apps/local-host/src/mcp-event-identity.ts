@@ -1,11 +1,13 @@
 import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
-import type { GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
-import type { McpToolCallContext } from "@adeptify/goalboard-app-mcp";
+import type { GoalBoardRuntimeConnection, GoalBoardRuntimeContextHost } from "@adeptify/goalboard-contracts/platform/app-host";
+import { isRuntimeContextMcpTool, type McpToolCallContext } from "@adeptify/goalboard-app-mcp";
 
 export const GOAL_EVENT_WRITE_TOOLS = new Set([
+  "goalboard_v1_goal_tree_propose",
   "goalboard_v1_goal_intent_create",
   "goalboard_v1_event_configure",
   "goalboard_v1_event_report",
+  "goalboard_v1_event_note",
   "goalboard_v1_event_progress",
   "goalboard_v1_event_concern",
   "goalboard_v1_event_decision_request",
@@ -17,34 +19,92 @@ export const GOAL_EVENT_WRITE_TOOLS = new Set([
 
 export const GOAL_EVENT_TOOLS = new Set([
   ...GOAL_EVENT_WRITE_TOOLS,
+  "goalboard_v1_goal_list",
   "goalboard_v1_goal_state",
   "goalboard_v1_event_list",
   "goalboard_v1_event_read",
   "goalboard_v1_event_decide",
 ]);
 
-const FORBIDDEN_RUNTIME_FIELDS = [
+export const RUNTIME_CONNECTION_OVERRIDE_FIELDS = [
+  "board_id",
+  "database_path",
+  "web_base_url",
+] as const;
+
+export const RUNTIME_ACTOR_OVERRIDE_FIELDS = [
   "actor_id",
   "actor_kind",
+  "runtime_actor_id",
+] as const;
+
+const RUNTIME_FORGED_AUTHORITY_FIELDS = [
   "authority",
   "user_approval",
   "user_approved",
-  "user_confirmed",
+  "source_kind",
+  "payload",
 ] as const;
+
+const RUNTIME_CONFIRMATION_TOOLS = new Set([
+  "goalboard_v1_project_guidance_add",
+  "goalboard_v1_project_guidance_update",
+  "goalboard_v1_planning_method_save",
+  "goalboard_v1_goal_trash",
+  "goalboard_v1_goal_restore",
+]);
+
+const RUNTIME_READ_TOOLS = new Set([
+  "goalboard_v1_project_guidance_get",
+  "goalboard_v1_planning_methods",
+  "goalboard_v1_planning_analyze_change",
+  "goalboard_v1_planning_graph_check",
+  "goalboard_v1_goal_state",
+  "goalboard_v1_event_list",
+  "goalboard_v1_event_read",
+  "goalboard_v1_goal_list",
+  "goalboard_v1_goal_tree_read",
+  "goalboard_v1_goal_trash_list",
+]);
+
+export function assertRuntimeOrdinaryToolInput(
+  name: string,
+  arguments_: Record<string, unknown>,
+): void {
+  if (isRuntimeContextMcpTool(name)) return;
+  const connection = RUNTIME_CONNECTION_OVERRIDE_FIELDS.filter((field) => Object.hasOwn(arguments_, field));
+  const actor = RUNTIME_ACTOR_OVERRIDE_FIELDS.filter((field) => Object.hasOwn(arguments_, field));
+  const forged: string[] = RUNTIME_FORGED_AUTHORITY_FIELDS.filter((field) => Object.hasOwn(arguments_, field));
+  if (Object.hasOwn(arguments_, "user_confirmed") && !RUNTIME_CONFIRMATION_TOOLS.has(name)) {
+    forged.push("user_confirmed");
+  }
+  if (name === "goalboard_v1_goal_tree_propose") {
+    for (const field of ["submitted_session_id", "discovered_in_run_id"]) {
+      if (Object.hasOwn(arguments_, field) && !forged.includes(field)) forged.push(field);
+    }
+  }
+  if (connection.length) {
+    throw new GoalBoardV1Error(
+      "mcp.connection_override_denied",
+      `MCP 连接拒绝：Runtime 不能覆盖宿主固定的项目或地址字段：${connection.join("、")}`,
+      { fields: connection },
+    );
+  }
+  const impersonation = [...actor, ...forged];
+  if (impersonation.length) {
+    throw new GoalBoardV1Error(
+      "mcp.user_impersonation_denied",
+      `MCP 权限拒绝：Runtime 不能通过 ${impersonation.join("、")} 自填用户身份、批准、权威来源或创建渠道`,
+      { fields: impersonation },
+    );
+  }
+}
 
 export function assertRuntimeGoalEventToolInput(
   name: string,
   arguments_: Record<string, unknown>,
 ): void {
-  if (!GOAL_EVENT_TOOLS.has(name)) return;
-  const forged = FORBIDDEN_RUNTIME_FIELDS.filter((field) => Object.hasOwn(arguments_, field));
-  if (forged.length) {
-    throw new GoalBoardV1Error(
-      "mcp.user_impersonation_denied",
-      `MCP 权限拒绝：Runtime 不能通过 ${forged.join("、")} 自填用户身份、批准或权威来源`,
-      { fields: forged },
-    );
-  }
+  assertRuntimeOrdinaryToolInput(name, arguments_);
 }
 
 export function runtimeEventActor(
@@ -86,13 +146,26 @@ function stableRuntimeSessionId(
   return null;
 }
 
-export function injectRuntimeEventActor(
+export function injectRuntimeIdentity(
   name: string,
   arguments_: Record<string, unknown>,
   host: GoalBoardRuntimeContextHost | null,
   callContext: McpToolCallContext,
+  connection: GoalBoardRuntimeConnection,
 ): Record<string, unknown> {
-  if (!GOAL_EVENT_WRITE_TOOLS.has(name)) return arguments_;
+  if (isRuntimeContextMcpTool(name)) return arguments_;
+  const withBoard = { ...arguments_, board_id: connection.boardId };
+  if (RUNTIME_READ_TOOLS.has(name)) return withBoard;
   const actor = runtimeEventActor(host, callContext);
-  return { ...arguments_, actor_id: actor.actor_id, actor_kind: actor.actor_kind };
+  if (name === "goalboard_v1_goal_tree_propose") {
+    const sessionId = actor.actor_id.split(":").slice(2).join(":") || actor.actor_id;
+    return { ...withBoard, actor_id: actor.actor_id, actor_kind: actor.actor_kind, submitted_session_id: sessionId };
+  }
+  if (name === "goalboard_v1_goal_intent_create") {
+    return { ...withBoard, actor_id: actor.actor_id, actor_kind: actor.actor_kind, source_kind: "runtime" };
+  }
+  if (GOAL_EVENT_WRITE_TOOLS.has(name)) {
+    return { ...withBoard, actor_id: actor.actor_id, actor_kind: actor.actor_kind };
+  }
+  return { ...withBoard, actor_id: actor.actor_id };
 }

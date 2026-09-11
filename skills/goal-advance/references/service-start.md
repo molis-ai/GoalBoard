@@ -1,6 +1,6 @@
 # Starting GoalBoard Web from a Runtime
 
-Use this reference only when the user explicitly asks to start or open the GoalBoard page/Web UI, or accepts a separate visualization offer. Service management is independent of Goal lifecycle; never use these commands to read or modify Goals, projects, bindings, Claims, Runs, or Evidence.
+Use this reference only when the user explicitly asks to start or open the GoalBoard page/Web UI, or accepts a separate visualization offer. Service management is independent of Goal work; never use these commands to read or modify Goals, project bindings, reports, agreements or decisions.
 
 ## 1. Inspect before acting
 
@@ -67,11 +67,11 @@ Before launching, say plainly that closing the terminal or Runtime Session stops
 
 Service health and the navigation target are separate decisions. After the page is healthy, but before opening it, make a read-only `goalboard_v1_context_resolve` call unless the user explicitly asked to browse all projects.
 
-- If the current request has an explicit current Goal, read its Contract and open the returned `goal_url`.
+- If the current request has an explicit current Goal, call `goalboard_v1_goal_state` with its `goal_id` and open the returned `goal_url`. The same URL is the protected user entry for a concrete pending agreement, tree or acceptance decision. Ordinary records can continue without opening it.
 - If there is no explicit current Goal and resolution is `bound`, open the returned connection `project_url`.
 - If resolution is unbound or suggested, the bound target is unavailable, or the user explicitly asks to browse all projects, open the Web root so the project picker remains available.
 - Use only official URLs returned by GoalBoard. Do not construct a project or Goal URL from IDs, database paths, repository names, or browser history.
-- Opening a project or Goal changes only Web focus. It does not bind or switch the Runtime project, create a Claim, start a Run, advance a Goal, or authorize any Goal lifecycle write.
+- Opening a project or Goal changes only Web focus. It does not bind or switch the Runtime project, record work, apply a pending decision, advance a Goal, or authorize another Goal write.
 - If context resolution itself fails, report that failure instead of claiming that a guessed page is the current project.
 
 ## 6. Explain failures without switching paths

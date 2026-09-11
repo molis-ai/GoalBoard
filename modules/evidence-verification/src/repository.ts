@@ -21,29 +21,6 @@ export interface EvidenceSqliteDatabase {
   pragma(source: string): unknown;
 }
 
-export interface EvidenceEventInput {
-  eventId: string;
-  boardId: string;
-  actorId: string;
-  type: string;
-  objectType: string;
-  objectId: string;
-  reason: string;
-  payload: unknown;
-  at: string;
-}
-
-export interface StoredEvidenceInput extends EvidenceRecord {
-  locator_workspace_root: string | null;
-}
-
-export interface PassingEvidenceSubmission {
-  evidence_id: string;
-  contract_revision: number;
-  criterion_ids: string[];
-  submitted_event_seq: number;
-}
-
 export const EVIDENCE_SCHEMA_SQL = `
   CREATE TABLE evidence (
     evidence_id TEXT PRIMARY KEY,
@@ -103,17 +80,6 @@ export class EvidenceRepository {
     }));
   }
 
-  immediate<T>(operation: () => T): T {
-    return this.db.transaction(operation).immediate();
-  }
-
-  eventCursor(boardId: string): number {
-    const row = this.db
-      .prepare("SELECT COALESCE(MAX(seq), 0) AS cursor FROM events WHERE board_id = ?")
-      .get(boardId) as Row | undefined;
-    return number(row?.cursor);
-  }
-
   getEvidence(boardId: string, evidenceId: string): EvidenceRecord | null {
     const row = this.db
       .prepare("SELECT * FROM evidence WHERE board_id = ? AND evidence_id = ?")
@@ -142,13 +108,6 @@ export class EvidenceRepository {
     return (this.db
       .prepare("SELECT * FROM evidence_corrections WHERE board_id = ? ORDER BY created_at, correction_id")
       .all(boardId) as Row[]).map(mapEvidenceCorrection);
-  }
-
-  getCorrection(correctionId: string): EvidenceCorrectionRecord | null {
-    const row = this.db
-      .prepare("SELECT * FROM evidence_corrections WHERE correction_id = ?")
-      .get(correctionId) as Row | undefined;
-    return row ? mapEvidenceCorrection(row) : null;
   }
 
   getCorrectionForTarget(evidenceId: string): EvidenceCorrectionRecord | null {
@@ -187,107 +146,6 @@ export class EvidenceRepository {
     } : null;
   }
 
-  latestCriterionReworkSeq(boardId: string, goalId: string, criterionId: string): number {
-    const rows = this.db.prepare(`
-      SELECT seq, payload_json FROM events
-      WHERE board_id = ? AND object_id = ? AND type = 'goal.rework_requested'
-      ORDER BY seq DESC
-    `).all(boardId, goalId) as Row[];
-    for (const row of rows) {
-      const payload = parseJson<Record<string, unknown>>(row.payload_json, {});
-      const affected = Array.isArray(payload.criterion_ids)
-        ? payload.criterion_ids.map(String)
-        : [];
-      if (affected.includes(criterionId)) return number(row.seq);
-    }
-    return 0;
-  }
-
-  passingEvidenceSubmissions(
-    boardId: string,
-    goalId: string,
-    afterEventSeq: number,
-  ): PassingEvidenceSubmission[] {
-    return (this.db.prepare(`
-      SELECT evidence.evidence_id, evidence.criterion_ids_json,
-        evidence.contract_revision, event.seq AS submitted_event_seq
-      FROM evidence
-      JOIN events event
-        ON event.board_id = evidence.board_id
-       AND event.object_id = evidence.evidence_id
-       AND event.type = 'evidence.submitted'
-      LEFT JOIN evidence_corrections correction
-        ON correction.target_evidence_id = evidence.evidence_id
-      WHERE evidence.board_id = ? AND evidence.goal_id = ?
-        AND evidence.result = 'passed'
-        AND correction.correction_id IS NULL
-        AND event.seq > ?
-      ORDER BY event.seq DESC
-    `).all(boardId, goalId, afterEventSeq) as Row[]).map((row) => ({
-      evidence_id: text(row.evidence_id),
-      contract_revision: Math.max(1, number(row.contract_revision) || 1),
-      criterion_ids: parseJson<string[]>(row.criterion_ids_json, []),
-      submitted_event_seq: number(row.submitted_event_seq),
-    }));
-  }
-
-  insertEvidence(input: StoredEvidenceInput): void {
-    this.db.prepare(`
-      INSERT INTO evidence (
-        evidence_id, board_id, goal_id, contract_revision, criterion_ids_json, producer_actor_id,
-        run_id, review_id, kind, locator, locator_status, locator_validation_reason,
-        locator_checked_at, locator_workspace_id, locator_workspace_root, digest, captured_at, result,
-        historical_unmapped
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      input.evidence_id,
-      input.board_id,
-      input.goal_id,
-      input.contract_revision,
-      json(input.criterion_ids),
-      input.producer_actor_id,
-      input.run_id,
-      input.review_id,
-      input.kind,
-      input.locator,
-      input.locator_status,
-      input.locator_validation_reason,
-      input.locator_checked_at,
-      input.locator_workspace_id,
-      input.locator_workspace_root,
-      input.digest,
-      input.captured_at,
-      input.result,
-      input.historical_unmapped ? 1 : 0,
-    );
-  }
-
-  insertCorrection(correction: EvidenceCorrectionRecord): void {
-    this.db.prepare(`
-      INSERT INTO evidence_corrections (
-        correction_id, board_id, goal_id, target_evidence_id, action,
-        replacement_evidence_id, actor_id, reason, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      correction.correction_id,
-      correction.board_id,
-      correction.goal_id,
-      correction.target_evidence_id,
-      correction.action,
-      correction.replacement_evidence_id,
-      correction.actor_id,
-      correction.reason,
-      correction.created_at,
-    );
-  }
-
-  attachReview(boardId: string, evidenceId: string, reviewId: string): EvidenceRecord | null {
-    this.db.prepare(`
-      UPDATE evidence SET review_id = ?
-      WHERE board_id = ? AND evidence_id = ? AND review_id IS NULL
-    `).run(reviewId, boardId, evidenceId);
-    return this.getEvidence(boardId, evidenceId);
-  }
 }
 
 export function mapEvidenceCorrection(row: Row): EvidenceCorrectionRecord {
@@ -335,10 +193,6 @@ export function mapEvidence(
     correction,
     historical_unmapped: number(row.historical_unmapped) === 1,
   };
-}
-
-function json(value: unknown): string {
-  return JSON.stringify(value ?? null);
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {

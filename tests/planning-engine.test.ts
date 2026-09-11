@@ -25,7 +25,6 @@ import {
 
 import { readPersonalPlanningMethodPacks } from "@adeptify/goalboard-app-local-host";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
-import { goalTreeProposalDecompositionIssues } from "@adeptify/goalboard-module-goals";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import type { GoalRecord, GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
 
@@ -135,7 +134,7 @@ test("planning methods resolve project over personal over cold-start built-ins",
     assert.match(pack.instructions, /用户提出新要求时/);
     assert.match(pack.instructions, /没有循环/);
     assert.match(pack.instructions, /Goal.*有限.*可验收.*最终能完成/s);
-    assert.match(pack.instructions, /持续运行.*Evidence.*Candidate Improvement Goal/s);
+    assert.match(pack.instructions, /持续运行.*笔记和报告.*意图.*Goal Tree/s);
     assert.match(pack.instructions, /永久未完成 Goal.*循环 depends_on/s);
   }
   const operations = BUILTIN_PLANNING_METHOD_PACKS.find((pack) => pack.method_id === "domain-operations-organization")!;
@@ -353,58 +352,6 @@ test("planning composition keeps work type, domain, industry, and overlay as par
     "industry",
     "overlay",
   ]);
-});
-
-test("complex decomposition must include every method in the project composition", () => {
-  const methodIds = ["work-build-change", "domain-software-development"];
-  const composition = composePlanningMethodPacks(
-    BUILTIN_PLANNING_METHOD_PACKS.filter((pack) => methodIds.includes(pack.method_id)),
-  );
-  const issues = goalTreeProposalDecompositionIssues(
-    [{
-      item_id: "parent-contract",
-      kind: "contract",
-      operation: "update",
-      payload: {
-        goal_id: "parent",
-        title: "交付完整软件产品",
-        definition_state: "accepted",
-        decomposition_state: "closed_compound",
-        decomposition_review: {
-          status: "complete",
-          task_context: "other",
-          method_pack_ids: ["work-build-change"],
-          coverage: composition.required_coverage.map((rule) => ({
-            area: rule.area,
-            disposition: "owned",
-            goal_ids: ["child"],
-            reason: "由子 Goal 负责。",
-          })),
-          open_goal_ids: [],
-          next_step: "推进子 Goal。",
-        },
-      },
-    }],
-    {
-      goals: [
-        { goal_id: "parent", decomposition_state: "frontier_open" },
-        { goal_id: "child", decomposition_state: "closed_leaf" },
-      ],
-      relations: [{
-        relation_id: "child-parent",
-        from_goal_id: "child",
-        to_goal_id: "parent",
-        type: "part_of",
-        state: "active",
-      }],
-    },
-    BUILTIN_PLANNING_METHOD_PACKS,
-    methodIds,
-  );
-
-  const compositionIssue = issues.find((issue) => issue.code === "goal_tree_proposal.project_planning_composition_incomplete");
-  assert.ok(compositionIssue);
-  assert.match(compositionIssue.message, /软件开发/);
 });
 
 test("project and personal methods persist without a second Goal truth model", async () => {
@@ -643,4 +590,28 @@ test("planning order and requirement impact stay local and explain downstream va
   assert.deepEqual(cgsImpact.adjacent_dependencies, ["g2"]);
   assert.ok(!cgsImpact.review_order.includes("g1"));
   assert.ok(!cgsImpact.review_order.includes("g4a"));
+});
+
+test("reusable open goals and unlock metrics follow current event work status, not old leaf kinds", () => {
+  const goals = [
+    { ...goal("parent"), decomposition_state: "closed_compound" as const, fulfillment_state: "satisfied" as const },
+    { ...goal("child"), decomposition_state: "closed_compound" as const, fulfillment_state: "satisfied" as const },
+  ];
+  const relations = [relation("p-child", "child", "parent", "part_of")];
+  const withoutStatus = analyzeGoalChangeImpact(goals, relations, ["child"]);
+  assert.deepEqual(withoutStatus.affected_ancestors, ["parent"]);
+  assert.ok(withoutStatus.reusable_open_goal_ids.includes("parent"));
+  assert.ok(withoutStatus.reusable_open_goal_ids.includes("child"));
+
+  const currentWork = new Map([
+    ["parent", "open" as const],
+    ["child", "completed" as const],
+  ]);
+  const impact = analyzeGoalChangeImpact(goals, relations, ["child"], currentWork);
+  assert.deepEqual(impact.affected_ancestors, ["parent"]);
+  assert.ok(impact.reusable_open_goal_ids.includes("parent"), "open closed_compound remains reusable");
+  assert.ok(!impact.reusable_open_goal_ids.includes("child"), "completed work is not reusable");
+  const metrics = planningMetrics(goals, relations, currentWork);
+  assert.equal(metrics.get("child")?.unlock_count, 1);
+  assert.equal(metrics.get("parent")?.unlock_count, 0);
 });

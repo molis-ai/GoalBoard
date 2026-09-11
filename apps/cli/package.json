@@ -41,8 +41,7 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
-      "cli.goals-command-adapter.v1",
-      "cli.execution-validation-adapter.v1"
+      "cli.goals-command-adapter.v1"
     ]
   }
 }

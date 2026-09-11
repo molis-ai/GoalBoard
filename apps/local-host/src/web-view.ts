@@ -38,7 +38,7 @@ function feedDirectorySnapshot(feed: FeedApplication, boardId: string): FeedSnap
 export function buildGoalBoardWebView(store: LocalProjectDatabase, coordinator: GoalProjectApplication, options: WebViewOptions): GoalBoardWebView {
   const collection = buildGoalsDocumentCollection({
     snapshot: boardId => store.snapshot(boardId), events: boardId => store.readEventsDescending(boardId),
-    goals: coordinator.goalQueries, inputs: coordinator.goalInputs, execution: coordinator.executionValidation.query,
+    goals: coordinator.goalQueries, inputs: coordinator.goalInputs,
     projectGoalLifecycle: (snapshot, goalId) => coordinator.projectGoalLifecycle(snapshot, goalId),
     eventWork: coordinator.goalEvents,
   }, options.boardId, L);

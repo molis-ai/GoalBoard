@@ -4,13 +4,7 @@ export type DecompositionState = import("@adeptify/goalboard-contracts/modules/g
 export type ValidityState = import("@adeptify/goalboard-contracts/modules/goals").GoalValidityState;
 export type FulfillmentState = import("@adeptify/goalboard-contracts/modules/goals").GoalFulfillmentState;
 export type ClaimRole = import("@adeptify/goalboard-contracts/modules/execution").ExecutionClaimRole;
-export type GoalWorkAction = import("@adeptify/goalboard-plugin-goals").GoalWorkAction;
-export type GoalWorkState = import("@adeptify/goalboard-plugin-goals").GoalWorkState;
 export type ClaimState = import("@adeptify/goalboard-contracts/modules/execution").ExecutionClaimState;
-export type GoalActionActor = import("@adeptify/goalboard-plugin-goals").GoalActionActor;
-export type GoalActionKind = import("@adeptify/goalboard-plugin-goals").GoalActionKind;
-export type GoalActionStatus = import("@adeptify/goalboard-plugin-goals").GoalActionStatus;
-export type GoalActionProgress = import("@adeptify/goalboard-plugin-goals").GoalActionProgress;
 export type GoalDisplayStatus = import("@adeptify/goalboard-plugin-goals").GoalDisplayStatus;
 export type ImpactAccess = import("@adeptify/goalboard-contracts/modules/goals").ImpactAccess;
 export type RiskBlockingMode = import("@adeptify/goalboard-contracts/modules/goals").RiskBlockingMode;
@@ -60,14 +54,6 @@ export type GoalRiskLinkRecord = import("@adeptify/goalboard-contracts/modules/g
 export type CoverageContractRevisionRecord = import("@adeptify/goalboard-contracts/modules/goals").CoverageContractRevisionRecord;
 
 export type GoalLifecycleEventRecord = import("@adeptify/goalboard-plugin-goals").BoardSnapshot["lifecycle_events"][number];
-
-export type GoalAction = import("@adeptify/goalboard-plugin-goals").GoalAction;
-
-export type GoalActionProjection = import("@adeptify/goalboard-plugin-goals").GoalActionProjection;
-
-export type CompactGoalActionProjection = import("@adeptify/goalboard-plugin-goals").CompactGoalActionProjection;
-
-export type ActionTransitionReceipt = import("@adeptify/goalboard-plugin-goals").ActionTransitionReceipt;
 
 export type DependencyProposalBasis =
   import("@adeptify/goalboard-contracts/modules/governance-collaboration").DependencyProposalBasis;
@@ -162,46 +148,10 @@ export type CandidateGoalRecord =
 export type RewireRecord =
   import("@adeptify/goalboard-contracts/modules/governance-collaboration").RewireRecord;
 
-export type DecisionReason = import("@adeptify/goalboard-contracts/modules/goals").GoalLifecycleReason;
-
-export type ReadyGoal = import("@adeptify/goalboard-plugin-goals").ReadyGoal;
-
-/**
- * The one user-facing work state for a Goal. It is derived from canonical
- * Goal, relation, Claim, Run and Review facts; it is never a second mutable
- * status field.
- */
-export type GoalWorkStateView = import("@adeptify/goalboard-plugin-goals").GoalWorkStateView;
-
-export type AvailableGoal = import("@adeptify/goalboard-plugin-goals").AvailableGoal;
-export type BlockedAvailableGoal = import("@adeptify/goalboard-plugin-goals").BlockedAvailableGoal;
-export type BlockedAvailableOverview = import("@adeptify/goalboard-plugin-goals").BlockedAvailableOverview;
-export type ParallelRuntimeAssignment = import("@adeptify/goalboard-plugin-goals").ParallelRuntimeAssignment;
-export type ParallelExecutionSuggestion = import("@adeptify/goalboard-plugin-goals").ParallelExecutionSuggestion;
-
 export type BoardSnapshot = import("@adeptify/goalboard-plugin-goals").BoardSnapshot;
 
 export type GoalContractView = import("@adeptify/goalboard-plugin-goals").GoalContractView;
 
 export type CreateGoalInput = import("@adeptify/goalboard-contracts/modules/goals").CreateGoalInput;
-export type ClaimRequest = import("@adeptify/goalboard-plugin-goals").ClaimRequest;
-
-export type ClaimRenewRequest = import("@adeptify/goalboard-plugin-goals").ClaimRenewRequest;
-
-export type ClaimRenewResult = import("@adeptify/goalboard-plugin-goals").ClaimRenewResult;
-
-export type ClaimDecision = import("@adeptify/goalboard-plugin-goals").ClaimDecision;
-
-export type ClaimRunDecision = import("@adeptify/goalboard-plugin-goals").ClaimRunDecision;
-
-export type DraftDialogueStartInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueStartInput;
-
-export type DraftDialogueTurnInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueTurnInput;
-
-export type DraftDialogueResumeInput = import("@adeptify/goalboard-plugin-goals").DraftDialogueResumeInput;
-
-export type DraftDialogueView = import("@adeptify/goalboard-plugin-goals").DraftDialogueView;
-
-export type RevalidationDecision = import("@adeptify/goalboard-contracts/modules/goals").GoalRevalidationDecision<ActionTransitionReceipt>;
 
 export { DEFAULT_GOAL_POLICY } from "@adeptify/goalboard-module-goals";

@@ -26,8 +26,7 @@ import {
   type GoalHistoryIndexItem,
   type GoalHistoryTimelinePage,
 } from "./event-history-map.js";
-import type { GoalDisplayStatus } from "./execution-validation-contract.js";
-import type { GoalPresentationState } from "./tree-order.js";
+import type { GoalDisplayStatus, GoalPresentationState } from "./tree-order.js";
 
 const TIMELINE_PAGE = 40;
 
@@ -50,7 +49,7 @@ export interface GoalEventDocumentView {
   planning_methods: PlanningMethodPack[];
   transfer: {
     available: boolean;
-    kind: "continue_open" | "reopen_completed" | "resume_cancelled" | "reopen_event_completed" | null;
+    kind: "resume_cancelled" | "reopen_event_completed" | null;
   };
   types: GoalEventTypeDefinition[];
 }
@@ -192,7 +191,6 @@ export function createGoalEventDocumentView(input: {
     events: input.events,
   });
   const owned = state.owner != null;
-  const completed = input.goal.fulfillment_state === "satisfied" || state.work_status === "completed";
   return {
     state,
     timeline,
@@ -210,13 +208,13 @@ export function createGoalEventDocumentView(input: {
     relations: [...input.relations],
     risks: [...input.risks],
     planning_methods: [...(input.planning_methods ?? [])],
-    transfer: transferFor(owned, completed, state.work_status),
+    transfer: transferFor(owned, state.work_status),
     types: state.config.types,
   };
 }
 
-function transferFor(owned: boolean, completed: boolean, workStatus: GoalEventStateView["work_status"]): GoalEventDocumentView["transfer"] {
-  if (!owned) return { available: true, kind: completed ? "reopen_completed" : "continue_open" };
+function transferFor(owned: boolean, workStatus: GoalEventStateView["work_status"]): GoalEventDocumentView["transfer"] {
+  if (!owned) return { available: false, kind: null };
   if (workStatus === "cancelled") return { available: true, kind: "resume_cancelled" };
   if (workStatus === "completed") return { available: true, kind: "reopen_event_completed" };
   return { available: false, kind: null };
@@ -237,8 +235,8 @@ export function eventDirectoryPresentation(state: GoalEventStateView, _goal?: Pi
       status: "satisfied",
       display_status: "completed",
       status_label: "已完成",
-      main_action_label: "继续此目标",
-      action_summary: state.closure?.result || state.agreement.outcome || "已有明确完成结论。",
+      main_action_label: "显式继续",
+      action_summary: state.closure?.result || state.agreement.outcome || "已有明确完成结论。如需新一轮，打开「继续此目标」并填写原因。",
     };
   }
   if (state.work_status === "cancelled") {
@@ -267,7 +265,7 @@ export function eventDirectoryPresentation(state: GoalEventStateView, _goal?: Pi
       event_work: true,
       status: "execution_blocked",
       display_status: "blocked",
-      status_label: "部分受阻",
+      status_label: "可记录，尚不可完成",
       main_action_label: "处理 Concern",
       action_summary: blocking[0]!.title,
     };
@@ -299,7 +297,7 @@ export function eventDirectoryPresentation(state: GoalEventStateView, _goal?: Pi
     display_status: "in_progress",
     status_label: "正在推进",
     main_action_label: "记录进展",
-    action_summary: state.progress_summary?.summary || "按当前约定记录事实，不必领取角色。",
+    action_summary: state.progress_summary?.summary || "按当前约定记录事实。",
   };
 }
 

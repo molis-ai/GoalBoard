@@ -12,11 +12,11 @@ Home installation, Runtime integration, managed Web service and uninstall implem
 
 Rebuild after changing workspace sources. At the end of `pnpm build`, `apps/local-host/tooling/write-build-manifest.mjs` invokes the Local Host build-record API over root and workspace source/configuration plus build scripts. Never stamp an old build as fresh. Update fingerprint package discovery and build lists when introducing a workspace level. Targeted tests are `tests/install.test.ts`, `tests/service.test.ts`, `tests/uninstall.test.ts`, and `tests/uninstall-catalog.test.ts`, supplemented by Web/Desktop integration tests. Full DV4 release acceptance remains pending; these checks are not release certification.
 
-## Compound coverage clarification
+## Current Goals, parents, and dependencies
 
-A closed parent can still need a coverage `clarify` action after a substantive child Contract revision. `plugins/native/goals/src/clarification-policy.ts` owns definition clarification and coverage freshness; action projection, claim/Explain, work-state and completion reconciliation share that policy. Draft Dialogue consumes the public work-state instead of independently rejecting all accepted Goals.
+Current work is represented by event state and read through `goal_state`. A parent completes against its own current agreement, reports, requirements, and applicable blockers; child count is not proof of completion. An unfinished dependency affects formal completion without preventing notes or partial work.
 
-Only valid parents with stale coverage qualify for this entry. Missing mappings, active Claims, pending user decisions, archive/trash/replacement, capabilities and stale tokens retain their gates. Claiming or discussing does not edit a Contract: coverage changes still require Proposal → Check → user decision. Regression: `tests/coverage-clarifier.test.ts`.
+Goals Module owns graph integrity and structural impact. Reusable candidates come from current event work status rather than old leaf categories. Relation changes use finite Goal Tree proposals and protected user decisions, with no clarifier Claim, Draft Dialogue, or old action token. Regressions include `tests/goal-tree-event-flow.test.ts`, `tests/goal-events-state.test.ts`, and `tests/planning-engine.test.ts`.
 
 ## One-time V3 import
 
@@ -31,7 +31,7 @@ goalboard v1 import-v3 \
   --file legacy-goal-board.json
 ```
 
-The import keeps only Goal names and parent/child structure, inputs/outputs, root constraints, coverage disposition, and source identity. Business logic, acceptance, accepted/satisfied, dependencies, Risk, Policy, Evidence, and Review are never fabricated; the import report lists them under `regenerate`. Import refuses to overwrite an existing target Board.
+Import preserves Goal titles and original outcomes, parent/child structure, scope, inputs/outputs, root constraints, coverage dispositions, and original sources. The same transaction establishes current event ownership, with `goal_state.intent.source_kind=migration`. Imported Goals immediately support ordinary notes through Runtime or Web and remain usable after reopening. Import invents no acceptance requirements, completion, user approval, or dependencies absent from V3. Clarify further deliverables through current agreements and requirements. An existing target Board is never overwritten.
 
 The management MCP exposes `goalboard_v1_import_v3` on the same Coordinator; the Runtime MCP does not expose import.
 
@@ -40,16 +40,11 @@ The management MCP exposes `goalboard_v1_import_v3` on the same Coordinator; the
 The public CLI top level provides program install, the persistent service, demo, safe uninstall, and the `goalboard v1 <operation>` management surface:
 
 ```text
-init | create-goal | snapshot | contract | ready | explain | claim | release
-run-start | run-report | revalidate | evidence-submit | review-submit | complete
-draft-dialogue-start | draft-dialogue-turn | draft-dialogue-resume
+init | snapshot | import-v3 | active-goal
 goal-tree-propose | goal-tree-read | goal-tree-check | goal-tree-decide
-relation-add | impact-add | policy-set | risk-add | risk-state | active-goal
-contract-propose | contract-decide | candidate-submit | dependency-propose
-candidate-decide | rewire-confirm | import-v3
 ```
 
-Complex payloads can be passed with `--json` or `--file payload.json`. The CLI is the user/management and local debugging entry point, not a fallback for Runtime service failures.
+Complex inputs can be passed with `--json` or `--file payload.json`. Old create-goal, Claim/Run, Evidence/Review, and Contract/Candidate/Rewire commands are retired and return an unknown-operation error. Everyday notes, reports, agreements, closure, and resume use MCP or Web; CLI does not provide duplicate event-write commands. CLI is a user/management and local debugging entry, not a fallback for Runtime service failures.
 
 ## Project structure
 
@@ -65,16 +60,16 @@ packages/plugin-runtime/     FD3 local Plugin lifecycle reference implementation
 packages/plugin-sdk/         FD3 Manifest and Integration Plugin definition API
 plugins/official-integrations/
                              Official Manifests, Provider adapters, and install packages
-apps/workbench/              AP3 shell/slots/assets plus FD4/GW4/EX4 wiring and execution-validation UI
+apps/workbench/              Shell, slots, assets, current Goal navigation, and native Plugin pages
 apps/desktop/                AP4 Desktop shell, panels, Capsule, and Tauri native adapter
-apps/cli/                    GW4 Goals + EX4 execution-validation adapter; DV1 finishes protocol migration
-apps/mcp/                    GW4 Goals + EX4 execution-validation adapter; DV1/DV2 finish schema/context
+apps/cli/                    Current management command parsing, Host invocation, and output
+apps/mcp/                    Current tool schemas, connection, event/structure commands, and receipts
 packages/ui-host/            UI Contribution registry, surface rendering, and Slot mount validation
 packages/design-system/      AP3 theme preferences, browser visual foundation, and layered styles
 plugins/native/feed/         FD4 Feed/Attention/Source UI and HTTP route table
-modules/goals/               Goals Query + GW1–GW4 Commands/Lifecycle/Planning and public app port
+modules/goals/               Current events, agreements/requirements, completion, graphs/planning, guidance, and history
 modules/governance-collaboration/
-                             EX3 Review/Proposal/Decision facts, state machines, and public app port
+                             Current user decisions, finite structure proposals, provenance, and history
 tooling/plugin-cli/          Plugin CLI boundary; DV3 implements the real developer tool
 scripts/workspace-packages.mjs
                              Inventory, manifest, entrypoint, README, and Contract wiring check
@@ -91,15 +86,16 @@ desktop/                     macOS Cargo/Tauri distribution config; source lives
 examples/seed-demo.mts       Dev script calling the product demo lifecycle
 docs/screenshots/            README product screenshots
 skills/goal-advance/         Runtime working protocol
-tests/v1.test.ts             Coordinator, CLI, migration, and protocol regression
-tests/goals-command-module.test.ts
-                             Goals public Command API, idempotency, and side-effect regression
-tests/goals-app-adapters.test.ts
-                             Workbench/MCP/CLI Goal adapter parity, idempotency, and error regression
-tests/execution-validation-app-adapters.test.ts
-                             Cross-entry execution, permission, recovery, and UI-contribution regression
-tests/governance-collaboration-module.test.ts
-                             Governance public API, authority provenance, transitions, and atomic rollback
+tests/goal-events-state.test.ts
+                             Current requirements, decisions, completion, and resume transitions
+tests/goal-event-migration.test.ts
+                             Real database upgrades, original history, and approval preservation
+tests/goal-tree-event-flow.test.ts
+                             Finite tree proposals, user decisions, graph and transaction boundaries
+tests/command-entry-chain.test.ts
+                             Current MCP/Host/CLI composition and persistence
+tests/host-entry-consistency.test.ts
+                             Composed calls, queued concurrency, and Host resource lifetime
 tests/mcp.test.ts            MCP audience, permission, and connection regression
 tests/web.test.ts            Web data and interaction regression
 tests/desktop-tui.test.ts    Third-pane launch, panels, and local PTY regression

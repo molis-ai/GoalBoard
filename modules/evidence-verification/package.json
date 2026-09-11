@@ -40,9 +40,7 @@
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
       "evidence.records.v1",
-      "evidence.corrections.v1",
-      "evidence.locator-preflight.v1",
-      "evidence.verification-gates.v1"
+      "evidence.locator-preflight.v1"
     ]
   }
 }

@@ -8,18 +8,35 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { createContextLedger } from "@adeptify/goalboard-module-context-ledger";
 
-import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
+import { DEMO_BOARD_ID, GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { CodexRuntimeSessionAdapter, RuntimeHostRouter } from "@adeptify/goalboard-service-runtime-host";
 import { SessionContentService } from "@adeptify/goalboard-plugin-work";
 import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
-import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
+import { SessionHandoffService, buildSessionHandoffPackage } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import { GoalBoardSessionError } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
 import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
+import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
+import {
+  insertHistoricalClaim,
+  insertHistoricalEvidence,
+  insertHistoricalRisk,
+  insertHistoricalRun,
+  sessionHandoffGoalContext,
+} from "./historical-sql-fixture.js";
+import { materializeGoalEventV35Fixture } from "./goal-event-v35-fixture.js";
 
 const WEB_TOKEN = "goalboard-session-handoff-token-0123456789abcdef";
+
+function handoffCurrentSection(content: string): string {
+  return content.split("## 历史记录（只读）")[0] ?? content;
+}
+
+function handoffHistorySection(content: string): string {
+  return content.split("## 历史记录（只读）")[1] ?? "";
+}
 
 function createContract(databasePath: string, boardId: string, goalId: string) {
   const store = new LocalProjectDatabase(databasePath);
@@ -30,32 +47,57 @@ function createContract(databasePath: string, boardId: string, goalId: string) {
     actor_id: "owner",
     idempotency_key: `${boardId}-init`,
   });
-  coordinator.goals.commands.createGoal(
-    boardId,
-    {
-      goal_id: goalId,
-      title: "交付新的目标 Runtime Session",
-      outcome: "目标 Runtime 收到可执行的 Goal Handoff",
-      why: "换 Runtime 后仍需保留目标、约束与验收事实",
-      business_logic: "用户审阅 package 后创建全新 Session，不复用来源原生身份。",
-      in_scope: ["可编辑 package", "新目标 Session"],
-      out_of_scope: ["跨 Runtime resume"],
-      constraints: ["必须由用户确认"],
-      required_inputs: ["当前 Goal Contract"],
-      promised_outputs: ["可追溯的目标 Session"],
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      acceptance_criteria: [{
-        criterion_id: `${goalId}-criterion`,
-        statement: "目标 Session 收到 Handoff",
-        decision_method: "inspection",
-        pass_condition: "新 Session 的第一条消息等于用户确认的 package",
-        required_evidence: ["inspection"],
-      }],
-    },
-    { actor_id: "owner", idempotency_key: `${goalId}-create` },
-  );
-  return { store, contract: coordinator.readGoalContract(boardId, goalId) };
+  coordinator.goalEvents.createIntent({
+    board_id: boardId,
+    goal_id: goalId,
+    title: "交付新的目标 Runtime Session",
+    outcome: "目标 Runtime 收到可执行的 Goal Handoff",
+    why: "换 Runtime 后仍需保留目标、约束与验收事实",
+    business_logic: "用户审阅 package 后创建全新 Session，不复用来源原生身份。",
+    actor_id: "owner",
+    actor_kind: "user",
+    idempotency_key: `${goalId}-create`,
+    requirements: [{
+      requirement_id: `${goalId}-criterion`,
+      statement: "目标 Session 收到 Handoff",
+    }],
+  });
+  insertHistoricalClaim(store.db, {
+    claim_id: `${goalId}-claim`,
+    board_id: boardId,
+    goal_id: goalId,
+    actor_id: "runtime-history",
+    state: "released",
+  });
+  insertHistoricalRun(store.db, {
+    run_id: `${goalId}-run`,
+    board_id: boardId,
+    goal_id: goalId,
+    claim_id: `${goalId}-claim`,
+    actor_id: "runtime-history",
+    state: "completed",
+    ended_at: "2026-09-02T00:02:00.000Z",
+    output_refs_json: JSON.stringify(["artifact://handoff-history"]),
+  });
+  insertHistoricalEvidence(store.db, {
+    evidence_id: `${goalId}-evidence`,
+    board_id: boardId,
+    goal_id: goalId,
+    producer_actor_id: "runtime-history",
+    locator: "artifact://handoff-history",
+    result: "passed",
+    criterion_ids: [`${goalId}-criterion`],
+    run_id: `${goalId}-run`,
+  });
+  insertHistoricalRisk(store.db, {
+    risk_id: `${goalId}-risk`,
+    board_id: boardId,
+    goal_ids: [goalId],
+    description: "历史交接风险",
+    treatment_plan: "只读保留",
+    state: "resolved",
+  });
+  return { store, contract: sessionHandoffGoalContext(coordinator, boardId, goalId) };
 }
 
 test("Handoff package uses the canonical Goal and a minimal Session context, then creates a new Codex Session", async () => {
@@ -424,20 +466,7 @@ test("event-work handoff package uses current facts and does not force Proposal 
     board_id: boardId, title: "事件交接目标", outcome: "按当前差距继续",
     actor_id: "owner", actor_kind: "user", idempotency_key: "event-handoff-intent",
   });
-  const state = coordinator.goalEvents.readState(boardId, created.goal.goal_id);
-  const contract = {
-    ...coordinator.readGoalContract(boardId, created.goal.goal_id),
-    event_work: true,
-    event_facts: {
-      work_status: state.work_status,
-      outcome: state.agreement.outcome,
-      next_step: state.progress_summary?.next_step ?? null,
-      pending_decisions: state.pending_decisions.map((item) => item.question),
-      current_decisions: state.current_decisions.map((item) => item.conclusion),
-      gaps: state.gaps.map((item) => item.statement),
-      stale_summary: state.progress_summary?.stale === true,
-    },
-  };
+  const contract = sessionHandoffGoalContext(coordinator, boardId, created.goal.goal_id);
   const registry = await openWorkSessionRegistry({ homeDirectory: home });
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   const transport: RuntimeSessionTransport = {
@@ -479,9 +508,15 @@ test("event-work handoff package uses current facts and does not force Proposal 
       goal_contract: contract,
     });
     const content = prepared.handoff.content ?? "";
+    const current = handoffCurrentSection(content);
     assert.match(content, /当前事件工作/);
     assert.match(content, /不要领取角色或开始 Run/);
     assert.match(content, /按当前差距继续|当前约定/);
+    assert.match(current, /## 当前要求/);
+    assert.doesNotMatch(current, /## 验收标准/);
+    assert.match(content, /## 历史记录（只读）/);
+    assert.match(content, /## 历史验收标准/);
+    assert.doesNotMatch(content, /resumeWork\(/);
     assert.doesNotMatch(content, /提交 Proposal/);
     assert.doesNotMatch(content, /先读取它的合同和当前项目规划组合/);
     const sent = await service.send({
@@ -500,4 +535,154 @@ test("event-work handoff package uses current facts and does not force Proposal 
     await rm(directory, { recursive: true, force: true });
   }
 });
-import { openWorkSessionRegistry } from "@adeptify/goalboard-app-local-host";
+
+test("current handoff acceptance uses live event requirements; original v35 criteria stay under history", async () => {
+  const fixture = materializeGoalEventV35Fixture("legacy");
+  const store = new LocalProjectDatabase(fixture.path);
+  const app = new GoalProjectApplication(store);
+  const boardId = DEMO_BOARD_ID;
+  const goalId = "CORE";
+  const registry = await openWorkSessionRegistry({ homeDirectory: fixture.directory });
+  try {
+    const historyBefore = app.goalQueries.readGoalContract(boardId, goalId);
+    const originalCriteria = historyBefore.goal.acceptance_criteria;
+    const criterion = originalCriteria[0];
+    assert.ok(criterion, "original v35 CORE must keep at least one historical acceptance criterion");
+    let state = app.goalEvents.readState(boardId, goalId);
+    const requirement = state.requirements.find((item) => item.statement === criterion.statement);
+    assert.ok(requirement, "the original historical acceptance criterion must be mapped to an actual current requirement");
+    app.goalEvents.setAgreement({
+      board_id: boardId,
+      goal_id: goalId,
+      actor_id: "handoff-history-user",
+      actor_kind: "user",
+      expected_config_version: state.config.version,
+      expected_agreement_version: state.agreement.version,
+      retire_requirement_ids: [requirement.requirement_id],
+      idempotency_key: "handoff-history-retire",
+    });
+    state = app.goalEvents.readState(boardId, goalId);
+    assert.equal(state.requirements.some((item) => item.requirement_id === requirement.requirement_id), false);
+    const history = app.goalQueries.readGoalContract(boardId, goalId);
+    assert.deepEqual(history.goal.acceptance_criteria, originalCriteria);
+    const source = registry.explicitlyLinkSession({
+      runtime_id: "handoff-history-fixture",
+      native_runtime_session_id: "isolated-history-source",
+      actor_id: "handoff-history-user",
+      user_confirmed: true,
+      project_id: boardId,
+      current_goal_id: goalId,
+      workspace_path: fixture.directory,
+    });
+    const content = buildSessionHandoffPackage({
+      source_session: source,
+      project_name: "原始历史接力验收",
+      timeline: [],
+      goal_contract: sessionHandoffGoalContext(app, boardId, goalId),
+    });
+    const current = handoffCurrentSection(content);
+    const historical = handoffHistorySection(content);
+    assert.equal(current.includes(criterion.statement), false);
+    for (const item of originalCriteria) {
+      assert.match(historical, new RegExp(item.statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(historical, new RegExp(item.pass_condition.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      assert.match(historical, new RegExp(item.decision_method.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+    assert.match(historical, /## 历史验收标准/);
+    assert.doesNotMatch(content, /resumeWork\(/);
+    for (const live of state.requirements) {
+      assert.match(current, new RegExp(live.statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    }
+  } finally {
+    registry.close();
+    store.close();
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("completed Goal handoff names the public resume tool and keeps historical Run/Evidence/Risk out of current protocol", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "goalboard-session-handoff-resume-"));
+  const boardId = "project-handoff-resume";
+  const goalId = "goal-handoff-resume";
+  const { store, contract: openContract } = createContract(path.join(directory, "board.db"), boardId, goalId);
+  const coordinator = new GoalProjectApplication(store);
+  const registry = await openWorkSessionRegistry({ homeDirectory: path.join(directory, ".goalboard") });
+  try {
+    coordinator.goalEvents.configure({
+      board_id: boardId,
+      goal_id: goalId,
+      actor_id: "owner",
+      actor_kind: "user",
+      expected_version: coordinator.goalEvents.readState(boardId, goalId).config.version,
+      idempotency_key: `${goalId}-type`,
+      types: [{
+        type_id: "handoff-result",
+        version: 1,
+        name: "结果",
+        purpose: "可核对的交付",
+        semantic_family: "delivery",
+        source: { kind: "runtime", label: "交接测试" },
+        fields: [{ field_id: "result", name: "结果", purpose: "当前交付", format: "text", required: true }],
+      }],
+    });
+    coordinator.goalEvents.report({
+      board_id: boardId,
+      goal_id: goalId,
+      actor_id: "owner",
+      actor_kind: "user",
+      idempotency_key: `${goalId}-support`,
+      events: [{
+        type_id: "handoff-result",
+        type_version: 1,
+        title: "交接结果已可核对",
+        fields: { result: "当前要求已满足" },
+        judgments: [{ requirement_id: `${goalId}-criterion`, verdict: "supports" }],
+      }],
+    });
+    const beforeClose = coordinator.goalEvents.readState(boardId, goalId);
+    coordinator.goalEvents.submitClosure({
+      board_id: boardId,
+      goal_id: goalId,
+      actor_id: "owner",
+      actor_kind: "user",
+      idempotency_key: `${goalId}-complete`,
+      kind: "complete",
+      result: "当前要求已满足",
+      reason: "验证完成后续必须显式继续",
+      expected_config_version: beforeClose.config.version,
+      expected_agreement_version: beforeClose.agreement.version,
+    });
+    const source = registry.explicitlyLinkSession({
+      runtime_id: "handoff-resume-fixture",
+      native_runtime_session_id: "isolated-resume-source",
+      actor_id: "user",
+      user_confirmed: true,
+      project_id: boardId,
+      current_goal_id: goalId,
+      workspace_path: directory,
+    });
+    const content = buildSessionHandoffPackage({
+      source_session: source,
+      project_name: "完成后续交接",
+      timeline: [],
+      goal_contract: sessionHandoffGoalContext(coordinator, boardId, goalId),
+    });
+    const current = handoffCurrentSection(content);
+    const historical = handoffHistorySection(content);
+    assert.match(current, /goalboard_v1_event_resume/);
+    assert.match(current, /必须显式继续/);
+    assert.doesNotMatch(content, /resumeWork\(/);
+    assert.doesNotMatch(current, /## 当前 Run|有效 Evidence|待检查角色/);
+    assert.match(historical, /## 历史 Run/);
+    assert.match(historical, new RegExp(`${goalId}-run`));
+    assert.match(historical, /## 历史 Evidence/);
+    assert.match(historical, /artifact:\/\/handoff-history/);
+    assert.match(historical, /## 历史 Risk/);
+    assert.match(historical, /历史交接风险/);
+    assert.equal(openContract.goal.goal_id, goalId);
+  } finally {
+    registry.close();
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

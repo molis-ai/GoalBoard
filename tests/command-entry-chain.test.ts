@@ -3,20 +3,28 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createGoalBoardLocalHost, createGoalCapability, goalBoardHostProjectReference,
-  initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
+import { createGoalBoardLocalHost, goalBoardHostProjectReference, initializeBoardCapability, snapshotBoardCapability } from "@adeptify/goalboard-app-local-host";
 import { GoalBoardServer } from "../apps/desktop/launchers/mcp/server.js";
 import { runV1Cli } from "@adeptify/goalboard-app-local-host";
-import type { ClaimRunDecision, SubmitEvidenceResult, SubmitReviewResult } from "@adeptify/goalboard-plugin-goals";
+import { GoalBoardV1Error } from "@adeptify/goalboard-plugin-goals";
+import type { GoalEventStateView, ReportGoalEventsResult } from "@adeptify/goalboard-contracts/modules/goals";
 
-test("actual CLI and MCP command handlers finish one Goal with isolated authority and idempotent Evidence", async () => {
+test("actual CLI snapshot and MCP event handlers finish one Goal without the retired claim/run protocol", async () => {
   const directory = mkdtempSync(join(tmpdir(), "goalboard-command-chain-"));
   const databasePath = join(directory, "project.db");
   const boardId = "command-chain";
   const host = createGoalBoardLocalHost();
   const reference = goalBoardHostProjectReference({ databasePath, boardId });
   const client = host.client(reference);
-  const mcp = new GoalBoardServer("runtime", { databasePath, boardId, webBaseUrl: "http://127.0.0.1:4173" }, null, host);
+  const runtimeHost = {
+    homeDirectory: directory,
+    runtimeContext: {
+      runtime_id: "chain",
+      stable_work_context_id: "session",
+      host_declares_stable: true,
+    },
+  };
+  const mcp = new GoalBoardServer("runtime", { databasePath, boardId, webBaseUrl: "http://127.0.0.1:4173" }, runtimeHost, host);
   async function cli<T>(operation: string, input: Record<string, unknown>): Promise<T> {
     const lines: string[] = [];
     const original = console.log;
@@ -28,76 +36,67 @@ test("actual CLI and MCP command handlers finish one Goal with isolated authorit
       console.log = original;
     }
   }
-  const snapshot = () => client.invoke(snapshotBoardCapability, { board_id: boardId });
-  const projection = () => host.withProject(reference, ({ coordinator }) =>
-    coordinator.executionValidation.query.getGoalActionProjection({ board_id: boardId, goal_id: "leaf" }));
   try {
     await client.invoke(initializeBoardCapability, {
       board_id: boardId, title: "真实命令链", actor_id: "user", idempotency_key: "init",
     });
-    await client.invoke(createGoalCapability, {
-      board_id: boardId, actor_id: "user", idempotency_key: "create",
-      goal: {
-        goal_id: "leaf", title: "跨入口验收", outcome: "命令迁移后仍可完成同一 Goal", why: "证明真实入口一致",
-        business_logic: "CLI 领取，MCP 提交完成报告与证据，CLI 完成复核。", promised_outputs: ["可复核结果"],
-        definition_state: "accepted", decomposition_state: "closed_leaf",
-        acceptance_criteria: [{ criterion_id: "result", statement: "完成跨入口链", decision_method: "automated_check",
-          pass_condition: "最终 Goal 满足且无重复 Evidence", required_evidence: ["test"] }],
-      },
+    const created = JSON.parse(await mcp.callTool("goalboard_v1_goal_intent_create", {
+      title: "跨入口验收", outcome: "命令迁移后仍可完成同一 Goal", idempotency_key: "create",
+    }));
+    const goal_id = created.goal.goal_id as string;
+    await mcp.callTool("goalboard_v1_event_configure", {
+      goal_id, expected_version: 0, idempotency_key: "cfg",
+      types: [{
+        type_id: "result", version: 1, name: "结果", purpose: "可核对的交付",
+        semantic_family: "delivery", source: { kind: "runtime", label: "命令链" },
+        fields: [{ field_id: "result", name: "结果", purpose: "当前交付", format: "text", required: true }],
+      }],
     });
-    const ready = await projection();
-    const selected = await cli<ClaimRunDecision>("select-goal", {
-      board_id: boardId, goal_id: "leaf", actor_id: "executor", action_id: ready.primary_action!.action_id,
-      action_token: ready.action_token, idempotency_key: "select",
+    const configured = JSON.parse(await mcp.callTool("goalboard_v1_goal_state", { goal_id })) as GoalEventStateView;
+    await mcp.callTool("goalboard_v1_event_agree", {
+      goal_id, idempotency_key: "agree",
+      expected_config_version: configured.config.version,
+      expected_agreement_version: configured.agreement.version,
+      new_requirements: [{ requirement_id: "result", statement: "完成跨入口链" }],
     });
-    assert.equal(selected.allowed, true);
-    assert.ok(selected.run);
-    const beforeDenied = await snapshot();
-    await assert.rejects(mcp.callTool("goalboard_v1_run_report", {
-      board_id: boardId, payload: { board_id: "model-other-board", run_id: selected.run.run_id,
-        actor_id: "not-owner", state: "completed", idempotency_key: "denied" },
-    }), (error: unknown) => error instanceof Error && "code" in error && error.code === "run.not_owner");
-    assert.deepEqual(await snapshot(), beforeDenied, "denied reporting must not mutate runs or history");
-
-    await mcp.callTool("goalboard_v1_run_report", {
-      board_id: boardId, payload: { board_id: "model-other-board", run_id: selected.run.run_id,
-        actor_id: "executor", state: "completed", idempotency_key: "report" },
-    });
-    const evidenceInput = {
-      board_id: boardId, payload: { board_id: "model-other-board", goal_id: "leaf", run_id: selected.run.run_id,
-        actor_id: "executor", criterion_ids: ["result"], kind: "test", result: "passed",
-        locator: "test://command-chain", locator_context: { project_root: "/untrusted-model-root", workspace_id: "model-workspace" },
-        idempotency_key: "evidence" },
+    const reportInput = {
+      goal_id, idempotency_key: "report",
+      events: [{
+        type_id: "result", type_version: 1, title: "跨入口记录已接通",
+        fields: { result: "MCP 写入、CLI 读取同一份事实" },
+        judgments: [{ requirement_id: "result", verdict: "supports" }],
+      }],
     };
-    const evidence = JSON.parse(await mcp.callTool("goalboard_v1_evidence_submit", evidenceInput)) as SubmitEvidenceResult;
-    assert.equal(evidence.evidence.board_id, boardId);
-    assert.equal(evidence.evidence.locator_workspace_id, null, "model-supplied locator context cannot override the host");
-    const replay = JSON.parse(await mcp.callTool("goalboard_v1_evidence_submit", evidenceInput)) as SubmitEvidenceResult;
+    const reported = JSON.parse(await mcp.callTool("goalboard_v1_event_report", reportInput)) as ReportGoalEventsResult;
+    assert.equal(reported.work_status, "open");
+    const replay = JSON.parse(await mcp.callTool("goalboard_v1_event_report", reportInput)) as ReportGoalEventsResult;
     assert.equal(replay.replayed, true);
-    assert.equal(replay.evidence.evidence_id, evidence.evidence.evidence_id);
-    assert.equal(replay.observed_event_cursor, evidence.observed_event_cursor);
+    assert.equal(replay.events[0]?.event_id, reported.events[0]?.event_id);
 
-    const awaitingReview = await snapshot();
-    const obligation = awaitingReview.review_obligations.find((item) => item.goal_id === "leaf" && item.role === "self_verifier")!;
-    const reviewProjection = await projection();
-    const reviewAction = reviewProjection.actions.find((item) => item.kind === "review" && item.target_id === obligation.obligation_id)!;
-    const reviewSelection = await cli<ClaimRunDecision>("select-goal", {
-      board_id: boardId, goal_id: "leaf", actor_id: "reviewer", role: "self_verifier",
-      action_id: reviewAction.action_id, action_token: reviewProjection.action_token, idempotency_key: "select-review",
+    await assert.rejects(
+      () => mcp.callTool("goalboard_v1_event_report", { ...reportInput, board_id: boardId, idempotency_key: "denied-board" }),
+      (error: unknown) => error instanceof GoalBoardV1Error && error.code === "mcp.connection_override_denied",
+    );
+    await assert.rejects(
+      () => runV1Cli(["select-goal", "--db", databasePath, "--json", JSON.stringify({
+        board_id: boardId, goal_id, actor_id: "executor", idempotency_key: "retired",
+      })], { localHost: host }),
+      /未知 V1 operation: select-goal/,
+    );
+
+    const ready = JSON.parse(await mcp.callTool("goalboard_v1_goal_state", { goal_id })) as GoalEventStateView;
+    await mcp.callTool("goalboard_v1_event_close", {
+      goal_id, idempotency_key: "close", kind: "complete",
+      reason: "跨入口事件记录已核对", result: "可复核结果",
+      expected_config_version: ready.config.version,
+      expected_agreement_version: ready.agreement.version,
     });
-    assert.equal(reviewSelection.allowed, true);
-    const reviewed = await cli<SubmitReviewResult>("review-submit", {
-      board_id: boardId, goal_id: "leaf", obligation_id: obligation.obligation_id,
-      actor_id: "reviewer", actor_kind: "runtime", verdict: "pass", evidence_refs: [evidence.evidence.evidence_id],
-      reasoning: "同一 Goal 的执行和证据已核对", idempotency_key: "review",
-    });
-    assert.equal(reviewed.transition.projection.display_status, "completed");
-    const final = await snapshot();
-    assert.equal(final.goals.find((goal) => goal.goal_id === "leaf")!.fulfillment_state, "satisfied");
-    assert.equal(final.evidence.filter((item) => item.goal_id === "leaf").length, 1);
-    assert.equal(final.reviews.filter((item) => item.goal_id === "leaf").length, 1);
-    assert.ok(final.claims.filter((item) => item.goal_id === "leaf").every((item) => item.state === "released"));
-    assert.ok(final.runs.filter((item) => item.goal_id === "leaf").every((item) => item.state === "completed"));
+    const state = JSON.parse(await mcp.callTool("goalboard_v1_goal_state", { goal_id })) as GoalEventStateView;
+    assert.equal(state.work_status, "completed");
+    const final = await client.invoke(snapshotBoardCapability, { board_id: boardId });
+    assert.equal(final.goals.find((goal) => goal.goal_id === goal_id)?.title, "跨入口验收");
+    assert.equal(final.claims.length, 0);
+    assert.equal(final.runs.length, 0);
     assert.deepEqual(await cli("snapshot", { board_id: boardId }), final);
   } finally {
     await mcp.close();

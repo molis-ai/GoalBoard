@@ -21,20 +21,22 @@ export type { RuntimeSessionAdapterResult } from "@adeptify/goalboard-contracts/
 export interface SessionHandoffGoalContext {
   board: { board_id: string };
   goal: GoalRecord;
-  work_state: { work_state: string; next_action: string | null; pending_review_roles: readonly string[] };
   runs: readonly ExecutionRunRecord[];
   evidence: readonly EvidenceRecord[];
   risks: readonly RiskRecord[];
-  event_work?: boolean;
-  event_facts?: {
+  event_work: boolean;
+  event_facts: {
     work_status: string;
     outcome: string;
     next_step: string | null;
     pending_decisions: readonly string[];
     current_decisions: readonly string[];
     gaps: readonly string[];
+    requirements: readonly string[];
     stale_summary: boolean;
-  };
+    resume_required: boolean;
+    closure_reason?: string | null;
+  } | null;
 }
 
 export interface SessionTimelineEvent {

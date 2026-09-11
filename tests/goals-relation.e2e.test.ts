@@ -3,89 +3,99 @@ import test from "node:test";
 import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 
-test("Goals relation UI preserves incoming direction, creation, cancel, deactivation and reloaded history", { timeout: 60_000 }, async (t) => {
+test("Goals relation UI preserves incoming direction, historical reading and reload", { timeout: 60_000 }, async (t) => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage } = browser;
+  const relationId = "legacy-inactive-extends-v1";
+  const creationReason = 'historical incoming "extends" <preserved>';
+  const deactivationReason = "Result no longer needs this relation";
+  store.db.prepare(`
+    INSERT INTO goal_relations (
+      relation_id, board_id, from_goal_id, to_goal_id, type, state, reason, created_by, created_at, deactivated_at
+    ) VALUES (?, ?, ?, ?, 'extends', 'inactive', ?, 'history-fixture', ?, ?)
+  `).run(relationId, DEMO_BOARD_ID, "PLATFORM", "V1", creationReason, "2026-09-01T01:00:00.000Z", "2026-09-01T02:00:00.000Z");
+  store.db.prepare(`
+    INSERT INTO events (
+      event_id, board_id, actor_id, type, object_type, object_id, reason, payload_json, at
+    ) VALUES (?, ?, 'history-fixture', 'relation.deactivated', 'relation', ?, ?, ?, ?)
+  `).run(
+    "legacy-inactive-extends-v1-event",
+    DEMO_BOARD_ID,
+    relationId,
+    deactivationReason,
+    JSON.stringify({ from_goal_id: "PLATFORM", to_goal_id: "V1", type: "extends" }),
+    "2026-09-01T02:00:00.000Z",
+  );
+  const seeded = store.snapshot(DEMO_BOARD_ID);
+  const seededRelation = seeded.relations.find((relation) => relation.relation_id === relationId)!;
+  assert.equal(seededRelation.from_goal_id, "PLATFORM");
+  assert.equal(seededRelation.to_goal_id, "V1");
+  assert.equal(seededRelation.type, "extends");
+  assert.equal(seededRelation.state, "inactive");
+  assert.equal(seededRelation.reason, creationReason);
   await command("Emulation.setDeviceMetricsOverride", { width: 1280, height: 1000, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await command("Page.navigate", { url: origin + "/goals/V1" }, sessionId);
   await command("Page.bringToFront", {}, sessionId);
-  const dom = (selector: string) => "document.querySelector(" + JSON.stringify(selector) + ")";
+  const incoming = seeded.relations.filter((relation) =>
+    relation.to_goal_id === "V1" && relation.type === "part_of" && relation.state === "active");
+  assert.ok(incoming.some((relation) => relation.from_goal_id === "PLATFORM"));
+  const platform = seeded.goals.find((goal) => goal.goal_id === "PLATFORM")!;
   const panel = "#goal-factor-panel-relations-V1";
-  const form = panel + " [data-relation-form]";
-  const submit = form + ' button[type="submit"]';
+  const record = "#relation-" + relationId;
   async function openRelations() {
     await waitFor("document.readyState === 'complete' && document.querySelector('[data-goal-event-document]')");
     await click('[data-event-reader="description"]');
     await waitFor("document.querySelector('[data-event-panel=\"description\"]') && document.querySelector('[data-event-panel=\"description\"]').hidden === false");
     await waitFor("document.querySelector('#goal-factor-tab-relations-V1')");
     await click("#goal-factor-tab-relations-V1");
+    await waitFor("document.querySelector('#goal-factor-panel-relations-V1') && document.querySelector('#goal-factor-panel-relations-V1').hidden === false");
   }
-  const change = async (name: string, value: string) => evaluate("(() => { const field = " + dom(form) +
-    ".elements.namedItem(" + JSON.stringify(name) + "); field.value = " + JSON.stringify(value) +
-    "; field.dispatchEvent(new Event('change', {bubbles:true})); return true; })()");
-  const expectReceipt = async (message: string) => waitFor("[...document.querySelectorAll('[data-factor-write-receipt], [data-toast]')].some(node => node.textContent.includes(" + JSON.stringify(message) + "))");
   await openRelations();
-  await click(panel + " [data-relation-editor] > summary");
-  await change("target_goal_id", "PLATFORM");
-  await change("relation_intent", "enables");
-  assert.deepEqual(await evaluate("[" + dom(form) + ".elements.direction.value," + dom(form) + ".elements.type.value]"), ["incoming", "depends_on"]);
-  await change("relation_intent", "other");
-  assert.deepEqual(await evaluate("[" + dom(form) + ".elements.direction.value," + dom(form) + ".elements.type.value]"), ["", ""]);
-  await change("direction", "incoming");
-  await change("type", "extends");
-  const preview = await evaluate<string>(dom(form + " [data-relation-live-preview] strong") + ".textContent");
-  const target = before.goals.find(goal => goal.goal_id === "PLATFORM")!;
-  const current = before.goals.find(goal => goal.goal_id === "V1")!;
-  assert.equal(preview, target.title + " → 扩展 → " + current.title);
-  await click(submit);
-  await waitFor(dom(form + " [name=reason]") + ".getAttribute('aria-invalid') === 'true'");
-  assert.equal(store.snapshot(DEMO_BOARD_ID).relations.length, before.relations.length);
-  const reason = 'Browser direction "incoming" <preserved>';
-  await change("reason", reason);
-  await click(submit);
-  await expectReceipt("关系已建立");
-  const saved = store.snapshot(DEMO_BOARD_ID);
-  assert.equal(saved.relations.length, before.relations.length + 1);
-  const relation = saved.relations.find(relation => relation.reason === reason);
-  assert.ok(relation);
-  assert.equal(relation.from_goal_id, "PLATFORM");
-  assert.equal(relation.to_goal_id, "V1");
-  assert.equal(relation.type, "extends");
-  assert.equal(relation.state, "active");
-  assert.equal(saved.runs.length, before.runs.length);
-  await reloadPage();
-  await openRelations();
-  const record = "#relation-" + relation.relation_id;
-  await waitFor(dom(record));
-  await click(record + " [data-relation-deactivate-open]");
-  assert.equal(await evaluate(dom(record + " [data-relation-deactivate-form]") + ".hidden"), false);
-  await click(record + " [data-relation-deactivate-cancel]");
-  assert.equal(await evaluate(dom(record + " [data-relation-deactivate-form]") + ".hidden"), true);
-  assert.equal(store.snapshot(DEMO_BOARD_ID).relations.find(entry => entry.relation_id === relation.relation_id)?.state, "active");
-  await click(record + " [data-relation-deactivate-open]");
-  const remove = record + ' [data-relation-deactivate-form] button[type="submit"]';
-  await click(remove);
-  assert.equal(await evaluate(dom(record + " [name=reason]") + ".validity.valueMissing"), true);
-  assert.equal(store.snapshot(DEMO_BOARD_ID).relations.find(entry => entry.relation_id === relation.relation_id)?.state, "active");
-  const deactivationReason = "Result no longer needs this relation";
-  await evaluate(dom(record + " [name=reason]") + ".value = " + JSON.stringify(deactivationReason));
-  await click(remove);
-  await expectReceipt("关系已解除");
-  const after = store.snapshot(DEMO_BOARD_ID);
-  const deactivated = after.relations.find(entry => entry.relation_id === relation.relation_id)!;
-  assert.equal(deactivated.state, "inactive");
-  assert.ok(deactivated.deactivated_at);
-  assert.equal(deactivated.reason, reason);
-  assert.equal(deactivated.from_goal_id, "PLATFORM");
-  assert.equal(deactivated.to_goal_id, "V1");
-  assert.equal(after.relations.length, before.relations.length + 1);
-  assert.equal(after.runs.length, before.runs.length);
-  await reloadPage();
-  await openRelations();
+  const panelText = await evaluate<string>("document.querySelector('#goal-factor-panel-relations-V1')?.textContent || ''");
+  assert.match(panelText, new RegExp(platform.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(panelText, /包含/);
+  const platformKind = await evaluate<string>(
+    "document.querySelector('#goal-factor-panel-relations-V1 [data-select-goal=\"PLATFORM\"]')?.closest('.relation-record:not(.relation-record--inactive)')?.querySelector('.relation-kind')?.textContent || ''",
+  );
+  assert.equal(platformKind, "包含");
   await click(panel + " .relation-inactive-history > summary");
-  assert.match(await evaluate<string>(dom(record) + ".textContent"), /Result no longer needs this relation/);
-  assert.equal(await evaluate(dom(record + " [data-relation-deactivate-open]")), null);
-  assert.equal(await evaluate(dom(record + " .relation-kind") + ".textContent"), "由此扩展");
+  await waitFor("document.querySelector(" + JSON.stringify(record) + ")");
+  const inactiveText = await evaluate<string>("document.querySelector(" + JSON.stringify(record) + ")?.textContent || ''");
+  assert.match(inactiveText, /Result no longer needs this relation/);
+  assert.match(inactiveText, new RegExp(creationReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(await evaluate("document.querySelector(" + JSON.stringify(record + " [data-relation-deactivate-open]") + ")"), null);
+  assert.equal(await evaluate<string>("document.querySelector(" + JSON.stringify(record + " .relation-kind") + ")?.textContent || ''"), "由此扩展");
+  const beforeRelations = seeded.relations.map((relation) => ({
+    relation_id: relation.relation_id,
+    from_goal_id: relation.from_goal_id,
+    to_goal_id: relation.to_goal_id,
+    type: relation.type,
+    state: relation.state,
+    reason: relation.reason,
+    deactivated_at: relation.deactivated_at,
+  }));
+  await reloadPage();
+  await openRelations();
+  const afterKind = await evaluate<string>(
+    "document.querySelector('#goal-factor-panel-relations-V1 [data-select-goal=\"PLATFORM\"]')?.closest('.relation-record:not(.relation-record--inactive)')?.querySelector('.relation-kind')?.textContent || ''",
+  );
+  assert.equal(afterKind, "包含");
+  await click(panel + " .relation-inactive-history > summary");
+  await waitFor("document.querySelector(" + JSON.stringify(record) + ")");
+  assert.match(await evaluate<string>("document.querySelector(" + JSON.stringify(record) + ")?.textContent || ''"), /Result no longer needs this relation/);
+  assert.equal(await evaluate<string>("document.querySelector(" + JSON.stringify(record + " .relation-kind") + ")?.textContent || ''"), "由此扩展");
+  const after = store.snapshot(DEMO_BOARD_ID);
+  assert.deepEqual(after.relations.map((relation) => ({
+    relation_id: relation.relation_id,
+    from_goal_id: relation.from_goal_id,
+    to_goal_id: relation.to_goal_id,
+    type: relation.type,
+    state: relation.state,
+    reason: relation.reason,
+    deactivated_at: relation.deactivated_at,
+  })), beforeRelations);
+  assert.equal(after.relations.find((relation) => relation.relation_id === relationId)?.state, "inactive");
+  assert.equal(before.relations.some((relation) => relation.relation_id === relationId), false);
 });

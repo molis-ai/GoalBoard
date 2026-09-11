@@ -24,6 +24,12 @@ test("event document pointer path covers requirement form, concern body, note, s
         { field_id: "details", name: "打开与核对方法", purpose: "可复现的使用路径", format: "longtext", required: true },
       ],
     }],
+  });
+  const configured = app.goalEvents.readState(DEMO_BOARD_ID, goalId);
+  app.goalEvents.setAgreement({
+    ...base, idempotency_key: "review-ui-requirement",
+    expected_config_version: configured.config.version,
+    expected_agreement_version: configured.agreement.version,
     new_requirements: [{ requirement_id: "restart", statement: "重启后仍能接续同一个目标", bound_type_id: "delivery" }],
   });
   app.goalEvents.report({

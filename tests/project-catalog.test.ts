@@ -10,6 +10,7 @@ import { withGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
+import { insertHistoricalClaim, insertHistoricalRun } from "./historical-sql-fixture.js";
 
 async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-project-catalog-"));
@@ -59,32 +60,26 @@ function createLegacyBoard(databasePath: string): void {
         from_goal_id: "legacy-b",
         to_goal_id: "legacy-a",
         type: "depends_on",
-        state: "active",
         reason: "legacy relation",
       },
       { actor_id: "user", idempotency_key: "legacy-relation" },
     );
-    const claim = coordinator.executionValidation.commands.claimGoal({
+    insertHistoricalClaim(store.db, {
+      claim_id: "legacy-claim",
       board_id: "legacy-board",
       goal_id: "legacy-a",
       actor_id: "runtime",
-      role: "executor",
-      idempotency_key: "legacy-claim",
-    }).claim;
-    assert.ok(claim);
-    const run = coordinator.executionValidation.commands.startRun({
+      state: "released",
+    });
+    insertHistoricalRun(store.db, {
+      run_id: "legacy-run",
       board_id: "legacy-board",
-      claim_id: claim.claim_id,
-      actor_id: "runtime",
-      idempotency_key: "legacy-run",
-    }).run;
-    coordinator.executionValidation.commands.reportRun({
-      board_id: "legacy-board",
-      run_id: run.run_id,
+      goal_id: "legacy-a",
+      claim_id: "legacy-claim",
       actor_id: "runtime",
       state: "completed",
-      output_refs: ["fixture://legacy"],
-      idempotency_key: "legacy-report",
+      ended_at: "2026-09-02T00:02:00.000Z",
+      output_refs_json: JSON.stringify(["fixture://legacy"]),
     });
   } finally {
     store.db.pragma("wal_checkpoint(TRUNCATE)");
@@ -330,11 +325,13 @@ test("demo data is classified, idempotently opened, reset, and removable without
           demoSnapshot.goals.find((goal) => goal.goal_id === "INTERFACES")?.title,
           "让不同 AI 对话看到同一项目进度",
         );
-        assert.equal(
-          demoSnapshot.candidates.find((candidate) => candidate.proposed_goal.title === "让旧数据升级前先看到安全说明")?.proposed_goal.title,
-          "让旧数据升级前先看到安全说明",
+        assert.equal(demoSnapshot.candidates.length, 0);
+        const demoApp = new GoalProjectApplication(demoStore);
+        assert.equal(demoApp.goalEvents.isEventStateOwner(DEMO_BOARD_ID, "CORE"), true);
+        assert.match(
+          JSON.stringify(demoApp.goalEvents.listEvents(DEMO_BOARD_ID, "INTERFACES", { limit: 20 })),
+          /升级前应先看到安全说明/,
         );
-        assert.equal(demoSnapshot.risks.find((risk) => risk.risk_id === "RISK-FIRST-RESTART")?.state, "open");
         assert.ok(demoSnapshot.goals.find((goal) => goal.goal_id === "AUTO-CONNECT")?.trashed_at);
         new GoalProjectApplication(demoStore).goals.commands.createGoal(
           DEMO_BOARD_ID,
@@ -360,7 +357,7 @@ test("demo data is classified, idempotently opened, reset, and removable without
         const resetSnapshot = resetStore.snapshot(DEMO_BOARD_ID);
         assert.equal(resetSnapshot.goals.some((goal) => goal.goal_id === "temporary-demo-change"), false);
         assert.ok(resetSnapshot.goals.find((goal) => goal.goal_id === "AUTO-CONNECT")?.trashed_at);
-        assert.equal(resetSnapshot.risks.find((risk) => risk.risk_id === "RISK-FIRST-RESTART")?.state, "open");
+        assert.equal(new GoalProjectApplication(resetStore).goalEvents.isEventStateOwner(DEMO_BOARD_ID, "CORE"), true);
       } finally {
         resetStore.close();
       }
@@ -1051,19 +1048,25 @@ test("project deletion needs separate confirmation, protects active work, and re
           },
           { actor_id: "user", idempotency_key: "create-active-project-work" },
         );
-        const claim = coordinator.executionValidation.commands.claimGoal({
+        insertHistoricalClaim(store.db, {
+          claim_id: "claim-active-project-work",
           board_id: project.board_id,
           goal_id: "active-project-work",
           actor_id: "runtime-codex",
-          idempotency_key: "claim-active-project-work",
-        }).claim;
-        assert.ok(claim);
-        runId = coordinator.executionValidation.commands.startRun({
+          state: "active",
+          released_at: null,
+          release_reason: null,
+        });
+        insertHistoricalRun(store.db, {
+          run_id: "run-active-project-work",
           board_id: project.board_id,
-          claim_id: claim.claim_id,
+          goal_id: "active-project-work",
+          claim_id: "claim-active-project-work",
           actor_id: "runtime-codex",
-          idempotency_key: "start-active-project-work",
-        }).run.run_id;
+          state: "started",
+          ended_at: null,
+        });
+        runId = "run-active-project-work";
       } finally {
         store.close();
       }
@@ -1077,14 +1080,15 @@ test("project deletion needs separate confirmation, protects active work, and re
 
       const cleanupStore = new LocalProjectDatabase(project.database_path);
       try {
-        new GoalProjectApplication(cleanupStore).executionValidation.commands.reportRun({
-          board_id: project.board_id,
-          run_id: runId,
-          actor_id: "runtime-codex",
-          state: "abandoned",
-          block_reason: "测试结束，允许删除",
-          idempotency_key: "finish-active-project-work",
-        });
+        new GoalProjectApplication(cleanupStore);
+        cleanupStore.db.prepare(`
+          UPDATE claims SET state = 'released', released_at = ?, release_reason = ?
+          WHERE claim_id = 'claim-active-project-work'
+        `).run("2026-09-02T00:10:00.000Z", "测试结束，允许删除");
+        cleanupStore.db.prepare(`
+          UPDATE runs SET state = 'abandoned', block_reason = ?, ended_at = ?
+          WHERE run_id = ?
+        `).run("测试结束，允许删除", "2026-09-02T00:10:00.000Z", runId);
       } finally {
         cleanupStore.close();
       }

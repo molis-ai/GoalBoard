@@ -54,7 +54,7 @@ export class GoalArchiveCommands {
       const activeGoalCleared = input.archived
         ? this.context.repository.clearActiveGoalIfMatches(boardId, input.goal_id, now)
         : false;
-      this.context.repository.appendEvent({
+      const cursor = this.context.repository.appendEvent({
         eventId: randomUUID(),
         boardId,
         actorId: write.actor_id,
@@ -65,15 +65,6 @@ export class GoalArchiveCommands {
         payload: { active_goal_cleared: activeGoalCleared },
         at: now,
       });
-      const cursor = input.archived
-        ? this.hooks.reopenCompoundAncestorsForUntrustedChild(
-            boardId,
-            input.goal_id,
-            write.actor_id,
-            now,
-            "子 Goal 已归档",
-          )
-        : this.hooks.reconcileCompoundAncestors(boardId, input.goal_id, write.actor_id, now);
       const outcome = {
         goal: this.context.requireGoal(boardId, input.goal_id),
         active_goal_cleared: activeGoalCleared,
@@ -175,13 +166,6 @@ export class GoalArchiveCommands {
           UPDATE goals SET trashed_at = ?, trashed_by = ?, updated_at = ?
           WHERE board_id = ? AND goal_id = ?
         `).run(now, write.actor_id, now, boardId, input.goal_id);
-        this.hooks.reopenCompoundAncestorsForUntrustedChild(
-          boardId,
-          input.goal_id,
-          write.actor_id,
-          now,
-          "子 Goal 已移入回收站",
-        );
         const deactivatedRelationIds: string[] = [];
         for (const relation of activeRelations) {
           const relationId = rowText(relation.relation_id);
@@ -256,7 +240,6 @@ export class GoalArchiveCommands {
       `).all(boardId, input.goal_id, input.goal_id) as Row[];
       const restoredRelationIds: string[] = [];
       const pendingRelationIds: string[] = [];
-      const restoredPartOfChildIds: string[] = [];
       for (const relation of recoverableRelations) {
         const relationId = rowText(relation.relation_id);
         const availableEndpoints = this.context.repository.db.prepare(`
@@ -274,13 +257,6 @@ export class GoalArchiveCommands {
           .prepare("UPDATE goal_trash_relation_records SET restored_at = ? WHERE relation_id = ? AND restored_at IS NULL")
           .run(now, relationId);
         restoredRelationIds.push(relationId);
-        const type = this.context.repository.db
-          .prepare("SELECT type, from_goal_id FROM goal_relations WHERE relation_id = ?")
-          .get(relationId) as Row;
-        if (rowText(type.type) === "part_of") restoredPartOfChildIds.push(rowText(type.from_goal_id));
-      }
-      for (const childGoalId of restoredPartOfChildIds) {
-        this.hooks.reconcileCompoundAncestors(boardId, childGoalId, write.actor_id, now);
       }
       const cursor = this.context.repository.appendEvent({
         eventId: randomUUID(),

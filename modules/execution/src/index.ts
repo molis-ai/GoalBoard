@@ -1,10 +1,8 @@
 import type {
   ExecutionApplicationApi,
-  ExecutionCommandApi,
   ExecutionQueryApi,
 } from "@adeptify/goalboard-contracts/modules/execution";
 
-import { ExecutionLifecycle, type ExecutionLifecycleOptions } from "./lifecycle.js";
 import { ExecutionRepository, type ExecutionSqliteDatabase } from "./repository.js";
 
 export const packageDescriptor = {
@@ -16,36 +14,28 @@ export const packageDescriptor = {
   migrationGoals: ["goal-reorg-f2", "goal-reorg-ex1", "goal-reorg-ex4"],
   ssot: "docs/SSOT-MATRIX.md",
   capabilities: [
-    "execution.claim-lifecycle.v1",
-    "execution.run-lifecycle.v1",
+    "execution.query.v1",
     "execution.repository.v1",
-    "execution.recovery.v1",
   ],
 } as const;
 
 export type GoalBoardPackageDescriptor = typeof packageDescriptor;
-export { executionImpactPolicy } from "./impact-policy.js";
 
-export interface ExecutionModuleOptions extends ExecutionLifecycleOptions {
+export interface ExecutionModuleOptions {
   db: ExecutionSqliteDatabase;
 }
 
 export class ExecutionModule implements ExecutionApplicationApi {
   readonly repository: ExecutionRepository;
-  readonly lifecycle: ExecutionLifecycle;
   readonly query: ExecutionQueryApi;
-  readonly commands: ExecutionCommandApi;
 
   constructor(options: ExecutionModuleOptions) {
     this.repository = new ExecutionRepository(options.db);
-    this.lifecycle = new ExecutionLifecycle(this.repository, options);
-    this.commands = this.lifecycle;
     this.query = executionQueries(this.repository);
   }
 }
 
 export { ExecutionError, type ExecutionErrorFactory } from "./errors.js";
-export { ExecutionLifecycle, type ExecutionLifecycleOptions } from "./lifecycle.js";
 export {
   migrateClarifierRoles,
   migrateExecutionActionColumns,
@@ -59,7 +49,6 @@ export {
   createExecutionSchema,
   mapExecutionClaim,
   mapExecutionRun,
-  type ExecutionEventInput,
   type ExecutionSqliteDatabase,
   type ExecutionSqliteStatement,
 } from "./repository.js";
@@ -69,7 +58,6 @@ function executionQueries(repository: ExecutionRepository): ExecutionQueryApi {
       activeClaimCount: (boardId, at) => repository.activeClaimCount(boardId, at),
       nonterminalRunCount: boardId => repository.nonterminalRunCount(boardId),
       activeRunIdsForGoal: (...args) => repository.activeRunIdsForGoal(...args),
-      latestCompletedWorkRunEventSeq: (...args) => repository.latestCompletedWorkRunEventSeq(...args),
       listClaimsForGoal: (...args) => repository.listClaimsForGoal(...args),
       latestRunForGoal: (...args) => repository.latestRunForGoal(...args),
       latestClaimForGoal: (...args) => repository.latestClaimForGoal(...args),

@@ -65,64 +65,6 @@ export interface EvidenceLocatorContext {
   workspace_id?: string | null;
 }
 
-export interface AuthorizedEvidenceSubmissionInput {
-  board_id: string;
-  goal_id: string;
-  contract_revision: number;
-  criterion_ids: string[];
-  producer_actor_id: string;
-  run_id?: string | null;
-  review_id?: string | null;
-  kind: EvidenceKind;
-  locator: string;
-  locator_context?: EvidenceLocatorContext;
-  digest?: string | null;
-  result: EvidenceResult;
-}
-
-export interface CorrectEvidenceInput {
-  board_id: string;
-  goal_id: string;
-  actor_id: string;
-  target_evidence_id: string;
-  action: EvidenceCorrectionAction;
-  replacement_evidence_id?: string | null;
-  reason: string;
-}
-
-export interface AttachEvidenceReviewInput {
-  board_id: string;
-  evidence_id: string;
-  review_id: string;
-}
-
-export interface EvidenceSubmissionResult {
-  evidence: EvidenceRecord;
-  observed_event_cursor: number;
-}
-
-export interface EvidenceCorrectionResult {
-  correction: EvidenceCorrectionRecord;
-  target_evidence: EvidenceRecord;
-  replacement_evidence: EvidenceRecord | null;
-  invalidates_passing_evidence: boolean;
-  observed_event_cursor: number;
-}
-
-export interface EvidenceCriterionCoverageInput {
-  board_id: string;
-  goal_id: string;
-  criterion_id: string;
-  compatible_contract_revisions: number[];
-}
-
-export interface EvidenceCriteriaCoverageInput {
-  board_id: string;
-  goal_id: string;
-  criterion_ids: string[];
-  compatible_contract_revisions: number[];
-}
-
 export interface EvidenceReviewReference {
   evidence: EvidenceRecord;
   submitted_event_seq: number;
@@ -137,18 +79,6 @@ export interface EvidenceProjectReferenceSource {
   locator_workspace_root: string | null;
 }
 
-export interface EvidenceCoverageProjectionInput {
-  goal_id: string;
-  compatible_contract_revisions: number[];
-  evidence: EvidenceRecord[];
-}
-
-export interface EvidenceCriterionProjectionInput {
-  criterion_id: string;
-  decision_method: string;
-  evidence: EvidenceRecord[];
-}
-
 export interface EvidenceQueryApi {
   listLifecycleEvents(boardId: string): import("../platform/storage.js").StoredModuleEvent[];
   getEvidence(boardId: string, evidenceId: string): EvidenceRecord | null;
@@ -156,18 +86,8 @@ export interface EvidenceQueryApi {
   listCorrections(boardId: string): EvidenceCorrectionRecord[];
   getReviewReference(evidenceId: string): EvidenceReviewReference | null;
   getProjectReferenceSource(boardId: string, evidenceId: string): EvidenceProjectReferenceSource | null;
-  latestCriterionReworkSeq(boardId: string, goalId: string, criterionId: string): number;
-  hasPassingEvidence(input: EvidenceCriterionCoverageInput): boolean;
-  uncoveredCriterionIds(input: EvidenceCriteriaCoverageInput): string[];
-}
-
-export interface EvidenceCommandApi {
-  submitAuthorizedEvidence(input: AuthorizedEvidenceSubmissionInput): EvidenceSubmissionResult;
-  correctEvidence(input: CorrectEvidenceInput): EvidenceCorrectionResult;
-  attachReview(input: AttachEvidenceReviewInput): EvidenceRecord;
 }
 
 export interface EvidenceVerificationApplicationApi {
   query: EvidenceQueryApi;
-  commands: EvidenceCommandApi;
 }

@@ -146,6 +146,7 @@ export function mapGoalTreeProposal(
     proposal_id: text(row.proposal_id), board_id: text(row.board_id), origin: "native",
     root_goal_id: optionalText(row.root_goal_id), submitted_by: text(row.submitted_by),
     discovered_in_run_id: optionalText(row.discovered_in_run_id),
+    submitted_session_id: optionalText(row.submitted_session_id),
     state: text(row.state) as GoalTreeProposalRecord["state"], version: number(row.version),
     supersedes_proposal_id: optionalText(row.supersedes_proposal_id) ?? optionalText(row.supersedes_legacy_proposal_id),
     base_event_cursor: number(row.base_event_cursor), summary: text(row.summary),

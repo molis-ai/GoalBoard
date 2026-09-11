@@ -41,18 +41,26 @@ export class GoalTreeBaselineQuery {
   }
 }
 
-function semanticObject(current: unknown, object: ProposalAffectedObject, item: ItemChange): unknown {
+function semanticObject(current: unknown, object: ProposalAffectedObject, _item: ItemChange): unknown {
   if (!current || typeof current !== "object" || Array.isArray(current)) return current;
   const record = current as Record<string, unknown>;
-  if (object.object_type === "goal" && (item.kind === "goal" || item.kind === "contract")) {
-    const fields = ["goal_id", "board_id", "title", "outcome", "why", "business_logic", "in_scope", "out_of_scope",
-      "constraints", "required_inputs", "promised_outputs", "decomposition_review", "definition_state", "decomposition_state",
-      "trashed_at", "trashed_by", "archived_at", "archived_by", "priority", "acceptance_criteria"];
-    return Object.fromEntries(fields.map(field => [field, record[field]]));
+  if (object.object_type === "goal") {
+    return {
+      goal_id: record.goal_id,
+      board_id: record.board_id,
+      trashed_at: record.trashed_at,
+      archived_at: record.archived_at,
+    };
   }
-  if (object.object_type === "goal") return { goal_id: record.goal_id, board_id: record.board_id,
-    definition_state: record.definition_state, decomposition_state: record.decomposition_state,
-    trashed_at: record.trashed_at, archived_at: record.archived_at };
+  if (object.object_type === "relation") {
+    return {
+      relation_id: record.relation_id,
+      from_goal_id: record.from_goal_id,
+      to_goal_id: record.to_goal_id,
+      type: record.type,
+      state: record.state,
+    };
+  }
   return Object.fromEntries(Object.entries(record).filter(([field]) => !["created_at", "updated_at", "decided_at", "deactivated_at"].includes(field)));
 }
 

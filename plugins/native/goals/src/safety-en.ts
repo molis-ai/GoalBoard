@@ -13,6 +13,7 @@ export const GOALS_SAFETY_EN: Record<string, string> = {
   "当前状态不再施加领取或完成门禁。": "The current state no longer gates claiming or completion.",
   "当前会阻止所有关联 Goal 被标记为完成。": "It currently blocks every linked Goal from being marked done.",
   "这是一条持续观察的事实，不直接阻塞领取或完成。": "This is a watched fact. It does not directly block claiming or completion.",
+  "这是历史事实。当前可以记录事实、查看要求，或阅读原始历史。": "This is a historical fact. You can record facts, inspect current requirements, or read the original history.",
   "受影响 Goal": "Affected Goals",
   "按名称或 ID 筛选": "Filter by name or ID",
   "发生概率": "Likelihood",

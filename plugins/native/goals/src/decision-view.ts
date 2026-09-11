@@ -28,9 +28,4 @@ export interface GoalsDecisionGroup<T extends GoalsSafetyItem = GoalsSafetyItem>
   ownerGoalId: string | null;
   item: T | null;
   goalTreeProposals: GoalTreeProposalRecord[];
-  contractProposals: ContractProposalRecord[];
-  candidates: CandidateGoalRecord[];
-  rewires: RewireRecord[];
-  humanReview: boolean;
-  risks: RiskRecord[];
 }

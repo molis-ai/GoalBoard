@@ -1,6 +1,6 @@
 import type { GoalRelationRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import { allGoalViews } from "./proposal-ui-model.js";
-import { goalRiskHasUserAction as riskHasUserAction, goalRiskStateEffect, RISK_STATE_LABELS } from "./risk-presentation.js";
+import { goalRiskStateEffect, RISK_STATE_LABELS } from "./risk-presentation.js";
 import { GOALS_RELATION_LABELS as RELATION_LABELS } from "./relation-presentation.js";
 import type { GoalsDecisionView, GoalsDecisionEvent } from "./decision-view.js";
 import type { GoalsSafetyItem } from "./safety-ui-model.js";
@@ -83,12 +83,7 @@ function recentDecisionResults(view: GoalsDecisionView): RecentDecisionResult[] 
         kindLabel: L("风险处理"),
         state: L(RISK_STATE_LABELS[risk.state]),
         title: risk.description,
-        effects: [riskHasUserAction(risk, view)
-          ? L("当前结果：{state}，仍会留在待决定中。{effect}", {
-              state: L(RISK_STATE_LABELS[risk.state]),
-              effect: stateEffect,
-            })
-          : L("当前结果：{state}。{effect}", {
+        effects: [L("历史结果：{state}。{effect}", {
               state: L(RISK_STATE_LABELS[risk.state]),
               effect: stateEffect,
             })],

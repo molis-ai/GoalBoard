@@ -7,7 +7,6 @@ import { readPersonalPlanningMethodPacks } from "./personal-planning-methods.js"
 import { runtimeGoalTreeDecisionAuthority } from "./runtime-decision.js";
 import { createGoalBoardLocalHost, goalBoardHostProjectReference, type GoalBoardLocalHost } from "./project-host.js";
 import { GoalBoardProjectCatalogError } from "./project-catalog.js";
-import { normalizeRuntimeWorkContext } from "./project-catalog.js";
 import { reconcileLegacySessionCatalog } from "./session-migration.js";
 import { createRuntimePanelSessionLinker } from "./runtime-panel-session.js";
 import { prepareLocalProjectStorage } from "./project-storage.js";
@@ -15,7 +14,7 @@ import { RuntimeSessionHost } from "./runtime-session.js";
 import { RuntimeProjectConnection } from "./runtime-project-connection.js";
 import { runtimeContextHostFromEnvironment } from "./runtime-context.js";
 import { assertMcpToolAllowed, requireMcpRuntimeContextHost } from "./mcp-authority.js";
-import { injectRuntimeEventActor } from "./mcp-event-identity.js";
+import { injectRuntimeIdentity } from "./mcp-event-identity.js";
 import type { LocalWebCatalogRunner } from "./web-project-settings.js";
 
 export type GoalBoardMcpAudience = "runtime" | "management";
@@ -58,9 +57,9 @@ export class LocalMcpServer {
         readGuidance: (connection) => this.localHost.client(goalBoardHostProjectReference({
           databasePath: connection.database_path, boardId: connection.board_id, projectId: connection.project_id,
         })).invoke(readProjectGuidanceCapability, { board_id: connection.board_id }),
-        readResumeFacts: (connection) => this.localHost.client(goalBoardHostProjectReference({
+        readResumeFacts: (connection, focusGoalIds) => this.localHost.client(goalBoardHostProjectReference({
           databasePath: connection.database_path, boardId: connection.board_id, projectId: connection.project_id,
-        })).invoke(projectResumeFactsCapability, { board_id: connection.board_id }),
+        })).invoke(projectResumeFactsCapability, { board_id: connection.board_id, focus_goal_ids: [...focusGoalIds] }),
         readSession: (host, reconcileLegacy) => this.runtimeSessions.read(host, reconcileLegacy),
       }),
     });
@@ -168,7 +167,7 @@ export class LocalMcpServer {
     });
     const client = this.localHost.client(reference);
     const trustedArguments = this.audience === "runtime"
-      ? injectRuntimeEventActor(name, arguments_, this.runtimeContextHost, callContext)
+      ? injectRuntimeIdentity(name, arguments_, this.runtimeContextHost, callContext, runtimeConnection!)
       : arguments_;
     return dispatchMcpProjectTool(client, name, trustedArguments, {
       audience: this.audience,
@@ -176,11 +175,6 @@ export class LocalMcpServer {
         : arguments_.web_base_url ?? process.env.GOALBOARD_WEB_URL ?? "http://127.0.0.1:4173"),
       projectId: runtimeConnection?.projectId,
       createError: createPresentationError,
-      evidenceLocatorContext: () => {
-        const workspace = this.runtimeContextHost
-          ? normalizeRuntimeWorkContext(this.runtimeContextHost.runtimeContext).workspace : undefined;
-        return { project_root: workspace?.canonical_path ?? null, workspace_id: workspace?.workspace_id ?? null };
-      },
       decisionAuthority: (confirmation) => runtimeGoalTreeDecisionAuthority(
         this.runtimeContextHost ? this.requireRuntimeContextHost(callContext) : null, callContext, confirmation,
       ),

@@ -40,9 +40,6 @@ export interface GovernanceSqliteDatabase {
   pragma(source: string): unknown;
 }
 
-export interface StoredReviewInput extends ReviewRecord {}
-export interface StoredReviewObligationInput extends ReviewObligationRecord {}
-
 export class GovernanceRepository {
   constructor(private readonly db: GovernanceSqliteDatabase) {}
 
@@ -183,74 +180,6 @@ export class GovernanceRepository {
       itemsByProposal.get(text(row.proposal_id)) ?? [],
       decisionsByProposal.get(text(row.proposal_id)) ?? [],
     ));
-  }
-
-  insertReview(review: StoredReviewInput): void {
-    this.db.prepare(`INSERT INTO reviews (
-      review_id, board_id, goal_id, obligation_id, claim_id, actor_id,
-      verdict, evidence_refs_json, reasoning, submitted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(review.review_id, review.board_id, review.goal_id, review.obligation_id,
-        review.claim_id, review.actor_id, review.verdict, json(review.evidence_refs),
-        review.reasoning, review.submitted_at);
-  }
-
-  insertReviewObligation(obligation: StoredReviewObligationInput): void {
-    this.db.prepare(`INSERT INTO review_obligations (
-      obligation_id, board_id, goal_id, contract_revision, role, required_count,
-      independence_rule, criterion_scope_json, state, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(obligation.obligation_id, obligation.board_id, obligation.goal_id,
-        obligation.contract_revision, obligation.role, obligation.required_count,
-        obligation.independence_rule, json(obligation.criterion_scope),
-        obligation.state, obligation.created_at);
-  }
-
-  updateReviewObligation(
-    obligationId: string,
-    update: { state?: ReviewObligationRecord["state"]; criterion_scope?: string[] },
-  ): void {
-    if (update.state !== undefined) {
-      this.db.prepare("UPDATE review_obligations SET state = ? WHERE obligation_id = ?")
-        .run(update.state, obligationId);
-    }
-    if (update.criterion_scope !== undefined) {
-      this.db.prepare("UPDATE review_obligations SET criterion_scope_json = ? WHERE obligation_id = ?")
-        .run(json(update.criterion_scope), obligationId);
-    }
-  }
-
-  latestCompletedWorkRunEventSeq(boardId: string, goalId: string): number {
-    const row = this.db.prepare(`SELECT COALESCE(MAX(event.seq), 0) AS seq
-      FROM events event JOIN runs run ON run.run_id = event.object_id
-      WHERE event.board_id = ? AND event.type = 'run.completed'
-        AND run.goal_id = ? AND run.role IN ('executor', 'revalidator')`)
-      .get(boardId, goalId) as GovernanceRow | undefined;
-    return Number(row?.seq ?? 0);
-  }
-
-  latestNeedsChangesReviewEventSeq(boardId: string, goalId: string): number {
-    const row = this.db.prepare(`SELECT COALESCE(MAX(event.seq), 0) AS seq
-      FROM events event JOIN reviews review ON review.review_id = event.object_id
-      WHERE event.board_id = ? AND event.type = 'review.submitted'
-        AND review.goal_id = ? AND review.verdict = 'needs_changes'`)
-      .get(boardId, goalId) as GovernanceRow | undefined;
-    return Number(row?.seq ?? 0);
-  }
-
-  waivePendingObligationsForRevision(goalId: string, contractRevision: number): void {
-    this.db.prepare(`UPDATE review_obligations SET state = 'waived'
-      WHERE goal_id = ? AND contract_revision = ? AND state = 'pending'`)
-      .run(goalId, contractRevision);
-  }
-
-  passingReviewActorCountAfterEventSeq(obligationId: string, eventSeq: number): number {
-    const row = this.db.prepare(`SELECT COUNT(DISTINCT review.actor_id) AS count
-      FROM reviews review
-      JOIN events event ON event.object_id = review.review_id AND event.type = 'review.submitted'
-      WHERE review.obligation_id = ? AND review.verdict = 'pass' AND event.seq > ?`)
-      .get(obligationId, eventSeq);
-    return Number((row as GovernanceRow | undefined)?.count ?? 0);
   }
 
   appendEvent(input: {

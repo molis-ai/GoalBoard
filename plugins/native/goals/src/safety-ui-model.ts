@@ -1,15 +1,15 @@
 import type { RiskRecord, ImpactBindingRecord } from "@adeptify/goalboard-contracts/modules/goals";
-import type { GoalActionProjection, GoalDisplayStatus } from "./execution-validation-contract.js";
-import type { GoalPresentationState } from "./tree-order.js";
+import type { GoalDisplayStatus, GoalPresentationState } from "./tree-order.js";
 
 export interface GoalsSafetyRisk extends RiskRecord { goal_ids: string[]; }
 export interface GoalsSafetyItem {
   goal: { goal_id: string; title: string; archived_at: string | null; trashed_at?: string | null; priority: number; created_at: string };
   status: GoalPresentationState;
   display_status?: GoalDisplayStatus;
-  action_projection: Pick<GoalActionProjection, "actions">;
   risks: GoalsSafetyRisk[];
   impacts: ImpactBindingRecord[];
+  pending_reviews?: string[];
+  review_obligations?: Array<{ state: string; role: string }>;
 }
 export interface GoalsSafetyView { goals: GoalsSafetyItem[]; archived_goals: GoalsSafetyItem[]; }
 export interface GoalsSafetyUiPrimitives {

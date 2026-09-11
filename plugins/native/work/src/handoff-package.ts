@@ -9,20 +9,23 @@ export function buildSessionHandoffPackage(input: {
   goal_contract: SessionHandoffGoalContext;
   timeline: readonly SessionTimelineEvent[];
 }): string {
-  const { goal, work_state: workState, event_work: eventWork, event_facts: eventFacts } = input.goal_contract;
-  const currentRuns = input.goal_contract.runs
-    .filter((run) => run.state === "started" || run.state === "blocked")
+  const { goal, event_work: eventWork, event_facts: eventFacts } = input.goal_contract;
+  const historicalRuns = input.goal_contract.runs
     .map((run) => `${run.run_id} · ${run.state} · ${run.role} · ${run.actor_id} · ${run.started_at}`);
-  const effectiveEvidence = input.goal_contract.evidence
-    .filter((item) => item.lifecycle_state === "effective")
+  const historicalEvidence = input.goal_contract.evidence
     .map((item) => `${item.result} · ${item.kind}: ${item.locator}`);
   const outputRefs = input.goal_contract.runs
     .flatMap((run) => run.output_refs)
     .filter((item, index, items) => item && items.indexOf(item) === index);
-  const openRisks = input.goal_contract.risks
-    .filter((risk) => risk.state === "open" || risk.state === "triggered")
-    .map((risk) => `${risk.description}；处理：${risk.treatment_plan}`);
+  const historicalRisks = input.goal_contract.risks
+    .map((risk) => `${risk.description}；状态：${risk.state}；处理：${risk.treatment_plan}`);
   const timeline = minimalSessionContext(input.timeline);
+  const resumeRequired = eventFacts?.resume_required === true;
+  const currentStatus = eventFacts?.work_status
+    ?? (goal.trashed_at ? "trashed" : goal.archived_at ? "archived" : "open");
+  const nextStep = resumeRequired
+    ? "已结束的 Goal 需要显式继续：调用 goalboard_v1_event_resume 并说明原因，不能按普通差距自动恢复。"
+    : eventFacts?.next_step || "按当前约定继续记录。";
   const eventSection = eventWork && eventFacts
     ? [
         "## 当前事件工作",
@@ -30,14 +33,22 @@ export function buildSessionHandoffPackage(input: {
         `- 协议：事件记录，不要领取角色或开始 Run`,
         `- 工作状态：${eventFacts.work_status}`,
         `- 当前约定：${eventFacts.outcome || "无"}`,
-        `- 下一步：${eventFacts.next_step || "无"}`,
+        `- 下一步：${nextStep}`,
+        `- 继续边界：${resumeRequired ? "必须显式继续，调用 goalboard_v1_event_resume 并说明原因" : "可按当前约定继续"}`,
+        ...(eventFacts.closure_reason ? [`- 收尾原因：${eventFacts.closure_reason}`] : []),
         `- 摘要是否过时：${eventFacts.stale_summary ? "是" : "否"}`,
         "",
-        listSection("待决定（不要重复已决定内容）", eventFacts.pending_decisions),
-        listSection("当前有效决定", eventFacts.current_decisions),
-        listSection("未满足要求", eventFacts.gaps),
+        listSection("当前要求", eventFacts.requirements ?? []),
+        listSection("待决定（不要重复已决定内容）", eventFacts.pending_decisions ?? []),
+        listSection("当前有效决定", eventFacts.current_decisions ?? []),
+        listSection("未满足要求", eventFacts.gaps ?? []),
       ]
     : [];
+  const historicalAcceptance = goal.acceptance_criteria.flatMap((criterion) => [
+    `- ${criterion.statement}`,
+    `  - 通过条件：${criterion.pass_condition}`,
+    `  - 判定方式：${criterion.decision_method}`,
+  ]);
   const lines = [
     `# Handoff：${goal.title}`,
     "",
@@ -57,8 +68,8 @@ export function buildSessionHandoffPackage(input: {
     `- 目标结果：${goal.outcome}`,
     `- 为什么：${goal.why}`,
     `- 业务逻辑：${goal.business_logic}`,
-    `- 当前工作状态：${eventWork ? eventFacts?.work_status ?? workState.work_state : workState.work_state}`,
-    `- 下一动作：${eventWork ? eventFacts?.next_step ?? "按当前差距继续" : workState.next_action ?? "无"}`,
+    `- 当前工作状态：${currentStatus}`,
+    `- 下一动作：${nextStep}`,
     "",
     ...eventSection,
     listSection("范围内", goal.in_scope),
@@ -66,19 +77,16 @@ export function buildSessionHandoffPackage(input: {
     listSection("约束", goal.constraints),
     listSection("所需输入", goal.required_inputs),
     listSection("承诺输出", goal.promised_outputs),
-    listSection("当前 Run", currentRuns),
-    "## 验收标准",
+    "## 历史记录（只读）",
     "",
-    ...goal.acceptance_criteria.flatMap((criterion) => [
-      `- [ ] ${criterion.statement}`,
-      `  - 通过条件：${criterion.pass_condition}`,
-      `  - 判定方式：${criterion.decision_method}`,
-    ]),
+    "## 历史验收标准",
     "",
-    listSection("有效 Evidence", effectiveEvidence),
+    ...(historicalAcceptance.length > 0 ? historicalAcceptance : ["- 无"]),
+    "",
+    listSection("历史 Run", historicalRuns),
+    listSection("历史 Evidence", historicalEvidence),
     listSection("产物与输出引用", outputRefs),
-    listSection("开放 Risk", openRisks),
-    listSection("待检查角色", eventWork ? [] : workState.pending_review_roles),
+    listSection("历史 Risk", historicalRisks),
     "## 最近 Session 上下文",
     "",
     ...(timeline.length > 0
@@ -88,12 +96,14 @@ export function buildSessionHandoffPackage(input: {
           event.content,
           "",
         ])
-      : ["没有可安全带入的逐轮上下文；请以 Goal Contract 和引用为准。", ""]),
+      : ["没有可安全带入的逐轮上下文；请以当前事件约定和引用为准。", ""]),
     "## 继续执行",
     "",
-    eventWork
-      ? "先读取当前 goal_state，再从差距继续。已决定的内容不要再问。不要领取角色或开始 Run。重要事实写回同一个 Goal。"
-      : "先核对当前仓库与 GoalBoard 状态，再从“下一动作”继续。重要决定、产物、Evidence 和阻塞仍写回同一个 Goal；不要创建第二套 Goal 状态。",
+    resumeRequired
+      ? "这条 Goal 已经完成或取消。继续前必须显式继续：调用 goalboard_v1_event_resume 并说明原因。不要当作普通未完成工作继续，也不要领取角色或开始 Run。"
+      : eventWork
+        ? "先读取当前 goal_state，再从当前约定、要求和待决定继续。已决定的内容不要再问。不要领取角色或开始 Run。重要事实写回同一个 Goal。"
+        : "先核对当前仓库与 GoalBoard 状态，再按当前 Goal 事实继续。重要决定仍写回同一个 Goal；不要创建第二套 Goal 状态。",
   ];
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }

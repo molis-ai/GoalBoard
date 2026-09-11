@@ -165,8 +165,9 @@ export class GoalEventFactsRepository {
     this.db.prepare(`
       INSERT INTO goal_event_requirements (
         requirement_id, board_id, goal_id, statement, bound_type_id,
-        created_at, created_in_config_version, actor_id, source_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, created_in_config_version, actor_id, source_json,
+        human_decision_required, current_status, revision, support_valid_after_seq
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.requirement_id,
       input.board_id,
@@ -177,6 +178,32 @@ export class GoalEventFactsRepository {
       input.created_in_config_version,
       input.actor_id,
       input.source == null ? null : sqliteJson(input.source),
+      input.human_decision_required ? 1 : 0,
+      input.current_status,
+      input.revision,
+      input.support_valid_after_seq,
+    );
+  }
+
+  updateRequirementCurrent(input: {
+    requirementId: string;
+    statement: string;
+    humanDecisionRequired: boolean;
+    currentStatus: GoalEventExtraRequirement["current_status"];
+    revision: number;
+    supportValidAfterSeq: number;
+  }): void {
+    this.db.prepare(`
+      UPDATE goal_event_requirements
+      SET statement = ?, human_decision_required = ?, current_status = ?, revision = ?, support_valid_after_seq = ?
+      WHERE requirement_id = ?
+    `).run(
+      input.statement,
+      input.humanDecisionRequired ? 1 : 0,
+      input.currentStatus,
+      input.revision,
+      input.supportValidAfterSeq,
+      input.requirementId,
     );
   }
 
@@ -263,6 +290,17 @@ export class GoalEventFactsRepository {
     const row = this.db.prepare(`
       SELECT * FROM goal_work_events WHERE event_id = ? AND board_id = ? AND goal_id = ?
     `).get(eventId, boardId, goalId) as Row | undefined;
+    return row ? mapWorkEvent(row) : null;
+  }
+
+  getIntentCreatedEvent(boardId: string, goalId: string): StoredWorkEvent | null {
+    const row = this.db.prepare(`
+      SELECT * FROM goal_work_events
+      WHERE board_id = ? AND goal_id = ? AND kind = 'system'
+        AND json_extract(payload_json, '$.operation') = 'intent_created'
+      ORDER BY journal_seq ASC
+      LIMIT 1
+    `).get(boardId, goalId) as Row | undefined;
     return row ? mapWorkEvent(row) : null;
   }
 
@@ -390,6 +428,10 @@ function mapRequirement(row: Row): GoalEventExtraRequirement {
     bound_type_id: row.bound_type_id == null ? undefined : rowText(row.bound_type_id),
     created_in_config_version: Number(row.created_in_config_version),
     actor_id: rowText(row.actor_id),
+    human_decision_required: Number(row.human_decision_required) === 1,
+    current_status: rowText(row.current_status || "active") as GoalEventExtraRequirement["current_status"],
+    revision: Number(row.revision ?? 1),
+    support_valid_after_seq: Number(row.support_valid_after_seq ?? 0),
     ...(source ? { source } : {}),
   };
 }

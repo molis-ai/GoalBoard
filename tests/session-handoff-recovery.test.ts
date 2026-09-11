@@ -12,6 +12,7 @@ import { SessionDirectoryService } from "@adeptify/goalboard-plugin-work";
 import { SessionHandoffService } from "@adeptify/goalboard-plugin-work";
 import { GoalBoardSessionRegistry } from "@adeptify/goalboard-module-private-work-context";
 import type { RuntimeSessionTransport } from "@adeptify/goalboard-contracts/services/runtime-host";
+import { sessionHandoffGoalContext } from "./historical-sql-fixture.js";
 
 function definitelyRejected(message: string): Error {
   return Object.assign(new Error(message), { deliveryAccepted: false, retryable: true });
@@ -26,27 +27,22 @@ function contractFixture(databasePath: string, boardId: string, goalId: string) 
     actor_id: "owner",
     idempotency_key: `${boardId}-init`,
   });
-  coordinator.goals.commands.createGoal(
-    boardId,
-    {
-      goal_id: goalId,
-      title: "恢复 Handoff",
-      outcome: "失败后不会重复创建目标 Session",
-      why: "外部 Runtime 调用可能部分成功",
-      business_logic: "保存 package 和 lineage 后只重试缺失阶段。",
-      definition_state: "accepted",
-      decomposition_state: "closed_leaf",
-      acceptance_criteria: [{
-        criterion_id: `${goalId}-criterion`,
-        statement: "重试复用目标 Session",
-        decision_method: "automated_check",
-        pass_condition: "thread/start 只调用一次",
-        required_evidence: ["test"],
-      }],
-    },
-    { actor_id: "owner", idempotency_key: `${goalId}-create` },
-  );
-  return { store, contract: coordinator.readGoalContract(boardId, goalId) };
+  coordinator.goalEvents.createIntent({
+    board_id: boardId,
+    goal_id: goalId,
+    title: "恢复 Handoff",
+    outcome: "失败后不会重复创建目标 Session",
+    why: "外部 Runtime 调用可能部分成功",
+    business_logic: "保存 package 和 lineage 后只重试缺失阶段。",
+    actor_id: "owner",
+    actor_kind: "user",
+    idempotency_key: `${goalId}-create`,
+    requirements: [{
+      requirement_id: `${goalId}-criterion`,
+      statement: "重试复用目标 Session",
+    }],
+  });
+  return { store, contract: sessionHandoffGoalContext(coordinator, boardId, goalId) };
 }
 
 function services(registry: GoalBoardSessionRegistry, transport: RuntimeSessionTransport) {

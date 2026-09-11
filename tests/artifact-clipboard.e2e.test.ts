@@ -11,6 +11,7 @@ import { DEMO_BOARD_ID, seedDemoBoard } from "@adeptify/goalboard-app-local-host
 import { GoalProjectApplication } from "@adeptify/goalboard-app-local-host";
 import { LocalProjectDatabase } from "@adeptify/goalboard-app-local-host";
 import { createGoalBoardWebServer } from "../apps/desktop/launchers/web/server.js";
+import { insertHistoricalEvidence } from "./historical-sql-fixture.js";
 
 // This checks the real browser clipboard, not the automation tool's virtual clipboard.
 test("migrated result reference copies exact text and handles denied clipboard permission without changing facts", { timeout: 30_000 }, async (t) => {
@@ -36,11 +37,17 @@ test("migrated result reference copies exact text and handles denied clipboard p
     store.close();
     await rm(directory, { recursive: true, force: true });
   });
-  const coordinator = new GoalProjectApplication(store);
+  new GoalProjectApplication(store);
   const reference = "artifact://迁移结果/季度?version=1&note=原始引用";
-  coordinator.executionValidation.commands.submitEvidence({
-    board_id: DEMO_BOARD_ID, goal_id: "V1", actor_id: "fixture-user", criterion_ids: ["V1-C1"],
-    kind: "artifact", locator: reference, result: "inconclusive", idempotency_key: "clipboard-fixture",
+  insertHistoricalEvidence(store.db, {
+    evidence_id: "clipboard-fixture",
+    board_id: DEMO_BOARD_ID,
+    goal_id: "V1",
+    producer_actor_id: "fixture-user",
+    criterion_ids: ["V1-C1"],
+    kind: "artifact",
+    locator: reference,
+    result: "inconclusive",
   });
   server = createGoalBoardWebServer({ databasePath, boardId: DEMO_BOARD_ID, homeDirectory: directory,
     controlToken: "artifact-clipboard-test-control-token-0123456789" });

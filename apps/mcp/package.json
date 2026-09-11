@@ -42,8 +42,7 @@
     ],
     "ssot": "docs/SSOT-MATRIX.md",
     "capabilities": [
-      "mcp.goals-command-adapter.v1",
-      "mcp.execution-validation-adapter.v1"
+      "mcp.goals-command-adapter.v1"
     ]
   }
 }

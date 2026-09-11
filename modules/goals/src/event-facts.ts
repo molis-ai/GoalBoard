@@ -5,7 +5,9 @@ import type {
   ApplyGoalConcernInput,
   CiteGoalDecisionInput,
   ConfigureGoalEventsResult,
-  ContinueGoalEventWorkInput,
+  CreateGoalIntentRequirementInput,
+  CreateGoalIntentResult,
+  GoalIntentSourceKind,
   GoalEventAdoptedPlanningRequest,
   GoalEventConfigView,
   GoalEventFactsApi,
@@ -16,7 +18,6 @@ import type {
   GoalEventListPage,
   GoalEventListQuery,
   GoalEventRequirementStatus,
-  GoalEventTimelineItem,
   GoalEventTimelinePage,
   GoalEventTypeDefinitionInput,
   GoalEventTrustedDecisionRecord,
@@ -26,27 +27,25 @@ import type {
   RecordGoalProgressSummaryInput,
   RecordGoalUserDecisionInput,
   ReportGoalEventsInput,
-  ReportGoalEventsResult,
+  ReportGoalEventsRecordedResult,
   RequestGoalDecisionInput,
   ResolvedPlanningEventAdoption,
   RecordGoalNoteInput,
-  ReopenCompletedEventWorkInput,
   ResumeGoalEventWorkInput,
   SetGoalEventAgreementInput,
   SubmitGoalEventClosureInput,
 } from "@adeptify/goalboard-contracts/modules/goals";
 import { GoalsCommandContext, requestHash } from "./command-support.js";
 import { GoalEventFactsRepository, type StoredWorkEvent } from "./event-facts-repository.js";
-import { GoalEventFactsConfig, configurationPayload } from "./event-facts-config.js";
+import { GoalEventFactsConfig } from "./event-facts-config.js";
 import { GoalEventState } from "./event-state.js";
 import { GoalEventStateRepository } from "./event-state-repository.js";
-import { normalizeAdoptedPlanning, ownStringRecord } from "./event-facts-validation.js";
+import { normalizeAdoptedPlanning, parseOptionalReportProgress } from "./event-facts-validation.js";
 import { instantiatePlanningRequirementId } from "./planning/event-adoption.js";
-import { requirementCurrentlySatisfied } from "./event-state-authorization.js";
-import { parseGoalEventSystemPayload } from "./event-system-payload.js";
-import { completionRiskReasons } from "./lifecycle-reasons.js";
-import { resolveGoalPolicy } from "./query.js";
+import { applyGoalEventAgreementChange, readCurrentGoalEventRequirements } from "./event-facts-requirements.js";
+import { mapReportEvent, mapStoredWorkEvent, mapTimelineItem } from "./event-facts-mapping.js";
 import type { GoalEventCompletionContext } from "./event-state-completion.js";
+import { GoalEventIntent } from "./event-intent.js";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -57,6 +56,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
   private readonly records: GoalEventFactsRepository;
   private readonly configWrites: GoalEventFactsConfig;
   private readonly state: GoalEventState;
+  private readonly intent: GoalEventIntent;
 
   constructor(private readonly context: GoalsCommandContext) {
     this.records = new GoalEventFactsRepository(context.repository.db);
@@ -70,10 +70,11 @@ export class GoalEventFacts implements GoalEventFactsApi {
         actorKind: (kind) => this.actorKind(kind),
         configVersion: (boardId, goalId) => this.records.getConfig(boardId, goalId)?.current_version ?? 0,
         readCurrentRequirements: (boardId, goalId) => this.readCurrentRequirements(boardId, goalId),
-        addRequirements: (input, goal) => this.addAgreementRequirements(input, goal),
+        applyAgreementChange: (input, goal) => applyGoalEventAgreementChange(this.context, this.records, this.configWrites, input, goal),
         readCompletionContext: (boardId, goalId) => this.readCompletionContext(boardId, goalId),
       },
     );
+    this.intent = new GoalEventIntent(context, this.records, this.state, (kind) => this.actorKind(kind));
   }
 
   configure(input: ConfigureGoalEventsInput): ConfigureGoalEventsResult {
@@ -84,9 +85,8 @@ export class GoalEventFacts implements GoalEventFactsApi {
       types: input.types ?? [],
       adopted_planning: input.adopted_planning ?? [],
       requirement_bindings: input.requirement_bindings ?? [],
-      new_requirements: input.new_requirements ?? [],
     });
-    return this.context.repository.immediate(() => this.configureInTransaction(input, hash));
+    return this.context.repository.immediate(() => this.configureInTransaction(input, hash, false));
   }
 
   configureRequested(
@@ -101,7 +101,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
       adopted_planning: input.adopted_planning ?? null,
       adopt_default_requirement_ids: input.adopt_default_requirement_ids ?? [],
       requirement_bindings: input.requirement_bindings ?? [],
-      new_requirements: input.new_requirements ?? [],
+      expected_agreement_version: input.expected_agreement_version ?? null,
     });
     return this.context.repository.immediate(() => {
       const replay = this.context.replay<Omit<ConfigureGoalEventsResult, "replayed">>(
@@ -132,12 +132,19 @@ export class GoalEventFacts implements GoalEventFactsApi {
           requirement_id: instantiatePlanningRequirementId(input.goal_id, requirement.requirement_id),
           statement: requirement.statement,
           bound_type_id: requirement.bound_type_id,
+          human_decision_required: false,
           source: {
             kind: "planning" as const,
             template_requirement_id: requirement.requirement_id,
             methods: requirement.sources ?? [],
           },
         }));
+      if (instantiated.length && !Number.isInteger(input.expected_agreement_version)) {
+        throw this.context.error(
+          "event_agreement.expected_agreement_version_required",
+          "采用规划默认要求时需要 expected_agreement_version",
+        );
+      }
       const innerInput: ConfigureGoalEventsInput = {
         board_id: input.board_id,
         goal_id: input.goal_id,
@@ -147,7 +154,6 @@ export class GoalEventFacts implements GoalEventFactsApi {
         idempotency_key: input.idempotency_key,
         types: [...resolved.types, ...(input.types ?? [])],
         requirement_bindings: input.requirement_bindings,
-        new_requirements: [...instantiated, ...(input.new_requirements ?? [])],
         ...(requested === undefined ? {} : { adopted_planning: resolved.adopted_planning }),
       };
       const innerHash = requestHash({
@@ -157,9 +163,26 @@ export class GoalEventFacts implements GoalEventFactsApi {
         types: innerInput.types ?? [],
         adopted_planning: innerInput.adopted_planning ?? [],
         requirement_bindings: innerInput.requirement_bindings ?? [],
-        new_requirements: innerInput.new_requirements ?? [],
       });
-      const result = this.configureInTransaction(innerInput, innerHash);
+      let result = this.configureInTransaction(innerInput, innerHash, instantiated.length > 0);
+      if (instantiated.length) {
+        const agreed = this.state.setAgreement({
+          board_id: input.board_id,
+          goal_id: input.goal_id,
+          actor_id: input.actor_id,
+          actor_kind: input.actor_kind,
+          idempotency_key: `${input.idempotency_key}:defaults`,
+          expected_config_version: result.config.version,
+          expected_agreement_version: input.expected_agreement_version!,
+          new_requirements: instantiated,
+        });
+        result = {
+          config: this.configView(input.board_id, input.goal_id),
+          event_id: agreed.event_id,
+          observed_event_cursor: agreed.observed_event_cursor,
+          replayed: result.replayed,
+        };
+      }
       this.context.remember(
         input.board_id,
         input.actor_id,
@@ -173,7 +196,11 @@ export class GoalEventFacts implements GoalEventFactsApi {
     });
   }
 
-  private configureInTransaction(input: ConfigureGoalEventsInput, hash: string): ConfigureGoalEventsResult {
+  private configureInTransaction(
+    input: ConfigureGoalEventsInput,
+    hash: string,
+    pendingRequirementAdds = false,
+  ): ConfigureGoalEventsResult {
       const replay = this.context.replay<Omit<ConfigureGoalEventsResult, "replayed">>(
         input.board_id, input.actor_id, "configure_goal_events", input.idempotency_key, hash,
       );
@@ -194,7 +221,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
       const nextVersion = currentVersion + 1;
       const at = this.context.now().toISOString();
       const addedTypes = this.configWrites.applyTypes(goal, input, nextVersion, at);
-      const addedRequirements = this.configWrites.applyRequirements(goal, input, addedTypes, nextVersion, at);
+      const addedRequirements = this.configWrites.applyRequirements(goal, [], input.actor_id, addedTypes, nextVersion, at);
       const addedBindings = this.configWrites.applyBindings(goal, input, addedTypes, addedRequirements, nextVersion, at);
       const adoptedPlanning = normalizeAdoptedPlanning(
         this.error,
@@ -203,11 +230,18 @@ export class GoalEventFacts implements GoalEventFactsApi {
       );
       if (
         addedTypes.length === 0
-        && addedRequirements.length === 0
         && addedBindings.length === 0
         && JSON.stringify(adoptedPlanning) === JSON.stringify(currentVersion === 0 ? [] : this.records.listAdoptedPlanning(goal.board_id, goal.goal_id, currentVersion))
       ) {
-        throw this.context.error("event_config.no_changes", "配置没有增加类型、类型版本、要求或规划来源");
+        if (!pendingRequirementAdds) {
+          throw this.context.error("event_config.no_changes", "配置没有增加类型、类型版本、绑定或规划来源");
+        }
+        return {
+          config: this.configView(goal.board_id, goal.goal_id),
+          event_id: "",
+          observed_event_cursor: this.context.repository.eventCursor(goal.board_id),
+          replayed: false,
+        };
       }
 
       const eventId = `gevt-${randomUUID()}`;
@@ -272,19 +306,27 @@ export class GoalEventFacts implements GoalEventFactsApi {
       return { ...outcome, replayed: false };
   }
 
-  report(input: ReportGoalEventsInput): ReportGoalEventsResult {
+  report(input: ReportGoalEventsInput): ReportGoalEventsRecordedResult {
+    const progress = parseOptionalReportProgress((code, message, details) => this.context.error(code, message, details), input.progress);
     const hash = requestHash({
       board_id: input.board_id,
       goal_id: input.goal_id,
       events: input.events,
+      progress,
     });
     return this.context.repository.immediate(() => {
-      const replay = this.context.replay<Omit<ReportGoalEventsResult, "replayed">>(
+      const replay = this.context.replay<Omit<ReportGoalEventsRecordedResult, "replayed">>(
         input.board_id, input.actor_id, "report_goal_events", input.idempotency_key, hash,
       );
       if (replay) return { ...replay, replayed: true };
 
       const goal = this.requireWritableGoal(input.board_id, input.goal_id);
+      if (!this.state.isEventStateOwner(goal.board_id, goal.goal_id)) {
+        throw this.context.error(
+          "event_state.not_owner",
+          "这个 Goal 还没有事件状态归属。请先保存意图或登记事件配置，不要把旧完成入口和新状态效果混用",
+        );
+      }
       if (!Array.isArray(input.events) || input.events.length === 0) {
         throw this.context.error("event_report.empty_batch", "至少需要一条工作事实");
       }
@@ -327,15 +369,21 @@ export class GoalEventFacts implements GoalEventFactsApi {
         };
         this.records.insertWorkEvent(event);
         this.records.insertJudgments(eventId, item.judgments);
-        stored.push(this.toReportEvent(event));
+        stored.push(mapReportEvent(this.records, event));
       }
-      const contradicted = [...new Set(prepared.flatMap((item) =>
-        item.judgments.filter((judgment) => judgment.verdict === "contradicts").map((judgment) => judgment.requirement_id),
-      ))];
-      this.state.reassessAfterReports(goal, input.actor_id, actorKind, contradicted);
+      const judged = [...new Set(prepared.flatMap((item) => item.judgments.map((judgment) => judgment.requirement_id)))];
+      this.state.reassessAfterReports(goal, input.actor_id, actorKind, judged);
+      if (progress) {
+        this.state.writeProgress(goal, input.actor_id, actorKind, {
+          summary: progress.summary,
+          based_on_cursor: this.records.maxGoalCursor(goal.board_id, goal.goal_id),
+          next_step: progress.next_step,
+          next_actor: progress.next_actor,
+        });
+      }
       const outcome = {
         events: stored,
-        observed_event_cursor: stored[stored.length - 1]!.journal_seq,
+        observed_event_cursor: this.context.repository.eventCursor(goal.board_id),
       };
       this.context.remember(goal.board_id, input.actor_id, "report_goal_events", input.idempotency_key, hash, outcome, at);
       return { ...outcome, replayed: false };
@@ -359,7 +407,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
     }
     const rows = this.records.listWorkEvents(boardId, goalId, afterCursor, limit);
     return {
-      events: rows.map((row) => this.toWorkEvent(row)),
+      events: rows.map((row) => mapStoredWorkEvent(this.records, row)),
       next_cursor: rows.length === limit ? rows[rows.length - 1]!.journal_seq : null,
       observed_event_cursor: this.context.repository.eventCursor(boardId),
     };
@@ -368,7 +416,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
   listLatestEvents(boardId: string, goalId: string, query: GoalEventHistoryQuery = {}): GoalEventHistoryPage {
     const rows = this.latestWorkEventRows(boardId, goalId, query);
     return {
-      events: rows.map((row) => this.toWorkEvent(row)),
+      events: rows.map((row) => mapStoredWorkEvent(this.records, row)),
       next_cursor: rows.length === (query.limit ?? DEFAULT_PAGE_SIZE) ? rows[rows.length - 1]!.journal_seq : null,
       observed_event_cursor: this.context.repository.eventCursor(boardId),
     };
@@ -377,7 +425,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
   listLatestTimeline(boardId: string, goalId: string, query: GoalEventHistoryQuery = {}): GoalEventTimelinePage {
     const rows = this.latestWorkEventRows(boardId, goalId, query);
     return {
-      items: rows.map((row) => this.toTimelineItem(row)),
+      items: rows.map((row) => mapTimelineItem(this.records, row)),
       next_cursor: rows.length === (query.limit ?? DEFAULT_PAGE_SIZE) ? rows[rows.length - 1]!.journal_seq : null,
       observed_event_cursor: this.context.repository.eventCursor(boardId),
     };
@@ -390,7 +438,7 @@ export class GoalEventFacts implements GoalEventFactsApi {
       throw this.context.error("event_list.invalid_limit", `最新报告最多 ${MAX_LATEST_REPORTS} 条`);
     }
     return {
-      reports: this.records.listLatestReportEvents(boardId, goalId, limit).map((row) => this.toReportEvent(row)),
+      reports: this.records.listLatestReportEvents(boardId, goalId, limit).map((row) => mapReportEvent(this.records, row)),
       observed_event_cursor: this.context.repository.eventCursor(boardId),
     };
   }
@@ -399,73 +447,25 @@ export class GoalEventFacts implements GoalEventFactsApi {
     this.context.requireGoal(boardId, goalId);
     const row = this.records.getWorkEvent(boardId, goalId, eventId);
     if (!row) throw this.context.error("event.not_found", `事件不存在: ${eventId}`);
-    return this.toWorkEvent(row);
+    return mapStoredWorkEvent(this.records, row);
   }
 
   readCurrentRequirements(boardId: string, goalId: string): GoalEventRequirementStatus[] {
-    const goal = this.context.requireGoal(boardId, goalId);
-    const bindings = this.records.listBindings(boardId, goalId);
-    const extra = this.records.listExtraRequirements(boardId, goalId);
-    const latest = new Map<string, GoalEventRequirementStatus["current_report"]>();
-    const conclusions = new GoalEventStateRepository(this.context.repository.db).latestConclusions(boardId, goalId);
-    for (const row of this.records.listLatestJudgments(boardId, goalId)) {
-      if (latest.has(row.requirement_id)) continue;
-      latest.set(row.requirement_id, {
-        event_id: row.event_id,
-        actor_id: row.actor_id,
-        actor_kind: row.actor_kind,
-        verdict: row.verdict,
-        received_at: row.received_at,
-        journal_seq: row.journal_seq,
-        independent_verification: false,
-        substitutes_human_decision: false,
-      });
+    return readCurrentGoalEventRequirements(this.context, this.records, boardId, goalId);
+  }
+
+  readIntentSourceKind(boardId: string, goalId: string): GoalIntentSourceKind | null {
+    this.context.requireGoal(boardId, goalId);
+    const row = this.records.getIntentCreatedEvent(boardId, goalId);
+    const value = row?.payload.source_kind;
+    if (value === "web" || value === "onboarding" || value === "feed" || value === "runtime" || value === "tree") {
+      return value;
     }
-    const boundByRequirement = new Map<string, string[]>();
-    for (const binding of bindings) {
-      boundByRequirement.set(binding.requirement_id, [...(boundByRequirement.get(binding.requirement_id) ?? []), binding.type_id]);
-    }
-    for (const requirement of extra) {
-      if (requirement.bound_type_id) {
-        const current = boundByRequirement.get(requirement.requirement_id) ?? [];
-        if (!current.includes(requirement.bound_type_id)) current.push(requirement.bound_type_id);
-        boundByRequirement.set(requirement.requirement_id, current);
-      }
-    }
-    const criteria = goal.acceptance_criteria.map((criterion) => ({
-      requirement_id: criterion.criterion_id,
-      goal_id: goal.goal_id,
-      statement: criterion.statement,
-      origin: {
-        kind: "acceptance_criterion" as const,
-        decision_method: criterion.decision_method,
-        pass_condition: criterion.pass_condition,
-      },
-      bound_type_ids: boundByRequirement.get(criterion.criterion_id) ?? [],
-      human_decision_required: criterion.decision_method === "human_decision",
-      current_report: latest.get(criterion.criterion_id) ?? null,
-      user_conclusion: conclusions.get(criterion.criterion_id) ?? null,
-      currently_satisfied: false,
-    }));
-    const extras = extra.map((requirement) => ({
-      requirement_id: requirement.requirement_id,
-      goal_id: goal.goal_id,
-      statement: requirement.statement,
-      origin: {
-        kind: "goal_event_requirement" as const,
-        config_version: requirement.created_in_config_version,
-        ...(requirement.source ? { planning: requirement.source } : {}),
-      },
-      bound_type_ids: boundByRequirement.get(requirement.requirement_id) ?? [],
-      human_decision_required: false,
-      current_report: latest.get(requirement.requirement_id) ?? null,
-      user_conclusion: conclusions.get(requirement.requirement_id) ?? null,
-      currently_satisfied: false,
-    }));
-    return [...criteria, ...extras].map((item) => ({
-      ...item,
-      currently_satisfied: requirementCurrentlySatisfied(item),
-    }));
+    return null;
+  }
+
+  readObservedEventCursor(boardId: string): number {
+    return this.context.repository.eventCursor(boardId);
   }
 
   private readCompletionContext(boardId: string, goalId: string): GoalEventCompletionContext {
@@ -477,16 +477,12 @@ export class GoalEventFacts implements GoalEventFactsApi {
         AND r.type = 'depends_on' AND r.state = 'active'
       ORDER BY g.goal_id
     `).all(boardId, goalId) as Array<{ goal_id: string; title: string; fulfillment_state: string }>;
-    const policy = resolveGoalPolicy(this.context.repository.listActivePolicyBindings(boardId, goalId));
-    const blockingRisks = completionRiskReasons(this.context, goalId)
-      .filter((reason) => reason.facts?.blocking_mode === "completion")
-      .map((reason) => ({ risk_id: reason.subject_id, description: reason.message }));
     return {
       open_dependencies: openDependencies
         .filter((row) => row.fulfillment_state !== "satisfied")
         .map((row) => ({ goal_id: row.goal_id, title: row.title })),
-      human_approval_required: policy.human_approval === true,
-      blocking_risks: blockingRisks,
+      human_approval_required: false,
+      blocking_risks: [],
     };
   }
 
@@ -507,14 +503,37 @@ export class GoalEventFacts implements GoalEventFactsApi {
     board_id: string;
     goal_id: string;
     actor_id: string;
-    source: "intent" | "configuration" | "continue";
+    source: "intent" | "configuration" | "continue" | "migration";
     outcome?: string;
   }): void {
     this.state.adoptOwner(input);
   }
 
-  continueWithEventWork(input: ContinueGoalEventWorkInput) {
-    return this.state.continueWithEventWork(input);
+  replayIntent(boardId: string, actorId: string, idempotencyKey: string, hash: string): CreateGoalIntentResult | null {
+    return this.intent.replay(boardId, actorId, idempotencyKey, hash);
+  }
+
+  rememberIntent(
+    boardId: string,
+    actorId: string,
+    idempotencyKey: string,
+    hash: string,
+    result: CreateGoalIntentResult,
+    at: string,
+  ): void {
+    this.intent.remember(boardId, actorId, idempotencyKey, hash, result, at);
+  }
+
+  recordIntentArtifacts(input: {
+    board_id: string;
+    goal_id: string;
+    actor_id: string;
+    actor_kind?: "user" | "runtime";
+    source_kind?: GoalIntentSourceKind;
+    outcome?: string;
+    requirements?: CreateGoalIntentRequirementInput[];
+  }): void {
+    this.intent.recordArtifacts(input);
   }
 
   recordProgress(input: RecordGoalProgressSummaryInput) {
@@ -556,15 +575,14 @@ export class GoalEventFacts implements GoalEventFactsApi {
     return this.state.recordNote(input);
   }
 
-  reopenCompletedEventWork(input: ReopenCompletedEventWorkInput) {
-    return this.state.reopenCompletedEventWork(input);
-  }
-
   private requireWritableGoal(boardId: string, goalId: string): GoalRecord {
     this.context.requireBoard(boardId);
     const goal = this.context.requireGoal(boardId, goalId);
     if (goal.trashed_at) {
       throw this.context.error("goal.trashed", "回收站中的 Goal 不能登记事件配置或上报工作事实");
+    }
+    if (goal.archived_at) {
+      throw this.context.error("goal.archived", "已归档的 Goal 不能登记事件配置或上报工作事实");
     }
     return goal;
   }
@@ -584,27 +602,6 @@ export class GoalEventFacts implements GoalEventFactsApi {
     };
   }
 
-  private addAgreementRequirements(input: SetGoalEventAgreementInput, goal: GoalRecord): void {
-    if (!input.new_requirements?.length) return;
-    const at = this.context.now().toISOString();
-    const configVersion = this.records.getConfig(goal.board_id, goal.goal_id)?.current_version ?? 0;
-    this.configWrites.applyRequirements(
-      goal,
-      {
-        board_id: input.board_id,
-        goal_id: input.goal_id,
-        actor_id: input.actor_id,
-        actor_kind: input.actor_kind,
-        expected_version: input.expected_config_version ?? configVersion,
-        idempotency_key: input.idempotency_key,
-        new_requirements: input.new_requirements,
-      },
-      [],
-      configVersion,
-      at,
-    );
-  }
-
   private latestWorkEventRows(boardId: string, goalId: string, query: GoalEventHistoryQuery) {
     this.context.requireGoal(boardId, goalId);
     const beforeCursor = query.before_cursor;
@@ -616,76 +613,6 @@ export class GoalEventFacts implements GoalEventFactsApi {
       throw this.context.error("event_list.invalid_limit", `每页最多 ${MAX_PAGE_SIZE} 条`);
     }
     return this.records.listLatestWorkEvents(boardId, goalId, beforeCursor ?? null, limit);
-  }
-
-  private toTimelineItem(row: StoredWorkEvent): GoalEventTimelineItem {
-    const event = this.toWorkEvent(row);
-    return {
-      event_id: event.event_id,
-      journal_seq: event.journal_seq,
-      received_at: event.received_at,
-      title: event.title,
-      kind: event.kind,
-      type_id: event.kind === "report" ? event.type?.type_id ?? row.type_id : null,
-      type_name: event.kind === "report" ? event.type?.name ?? null : event.kind === "configuration" ? "配置" : "系统",
-      semantic_family: event.kind === "report" ? event.type?.semantic_family ?? null : null,
-      system_operation: event.kind === "system" ? event.payload.operation : null,
-      actor_id: event.actor_id,
-      actor_kind: event.actor_kind,
-    };
-  }
-
-  private toWorkEvent(row: StoredWorkEvent): GoalWorkEventRecord {
-    if (row.kind === "configuration") return this.toConfigurationEvent(row);
-    if (row.kind === "system") return this.toSystemEvent(row);
-    return this.toReportEvent(row);
-  }
-
-  private toSystemEvent(row: StoredWorkEvent): Extract<GoalWorkEventRecord, { kind: "system" }> {
-    return {
-      ...this.workEventBase(row),
-      kind: "system",
-      type: null,
-      payload: parseGoalEventSystemPayload(row.payload),
-      judgments: this.records.listJudgments(row.event_id),
-    };
-  }
-
-  private toConfigurationEvent(row: StoredWorkEvent): GoalWorkEventRecord {
-    return {
-      ...this.workEventBase(row),
-      kind: "configuration",
-      type: null,
-      payload: configurationPayload(row.payload),
-      judgments: this.records.listJudgments(row.event_id),
-    };
-  }
-
-  private toReportEvent(row: StoredWorkEvent): GoalReportWorkEventRecord {
-    const type = row.type_id != null && row.type_version != null
-      ? this.records.getType(row.board_id, row.goal_id, row.type_id, row.type_version)
-      : null;
-    return {
-      ...this.workEventBase(row),
-      kind: "report",
-      type,
-      payload: ownStringRecord(row.payload),
-      judgments: this.records.listJudgments(row.event_id),
-    };
-  }
-
-  private workEventBase(row: StoredWorkEvent) {
-    return {
-      event_id: row.event_id,
-      board_id: row.board_id,
-      goal_id: row.goal_id,
-      title: row.title,
-      actor_id: row.actor_id,
-      actor_kind: row.actor_kind,
-      received_at: row.received_at,
-      journal_seq: row.journal_seq,
-      config_version: row.config_version,
-    };
   }
 
   private actorKind(kind: "user" | "runtime" | undefined): "user" | "runtime" | null {

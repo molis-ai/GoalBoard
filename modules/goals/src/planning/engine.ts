@@ -1,4 +1,3 @@
-import { recordedContractCoverageBlocksClosure } from "./decomposition-coverage.js";
 import type { AddGoalRelationInput } from "@adeptify/goalboard-contracts/modules/goals";
 import { randomUUID } from "node:crypto";
 
@@ -11,7 +10,6 @@ import type {
   PlanningGraphIssue,
   PlanningMethodComposition,
   PlanningMethodPack,
-  PlanningMetric,
   PlanningProposalItem,
   PlanningRelationChange,
   ResolvedPlanningEventAdoption,
@@ -19,14 +17,12 @@ import type {
 } from "@adeptify/goalboard-contracts/modules/goals";
 
 import { GoalsCommandContext } from "../command-support.js";
-import { GoalContractPlanning } from "./contract-structure.js";
-import { GoalProposalCoordination } from "./proposal-coordination.js";
 import {
   analyzeGoalChangeImpact,
-  planningMetrics,
   projectPlanningRelations,
   validatePlanningGraph,
   validatePlanningProposalGraph,
+  type PlanningWorkStatus,
 } from "./goal-graph.js";
 import { resolvePlanningEventAdoption } from "./event-adoption.js";
 import {
@@ -35,25 +31,16 @@ import {
   resolvePlanningMethodPacks,
 } from "./method-packs.js";
 
-type GraphGoal = Pick<
-  GoalRecord,
-  "goal_id" | "decomposition_state" | "fulfillment_state" | "trashed_at"
->;
 type GraphRelation = Pick<
   GoalRelationRecord,
   "relation_id" | "from_goal_id" | "to_goal_id" | "type" | "state"
 >;
 
 export class GoalsPlanningEngine implements GoalsPlanningApi {
-  readonly contracts: GoalContractPlanning;
-  readonly proposals: GoalProposalCoordination;
   constructor(
     private readonly context: GoalsCommandContext,
     private readonly personalMethods: readonly PlanningMethodPack[] = [],
-  ) {
-    this.contracts = new GoalContractPlanning(context);
-    this.proposals = new GoalProposalCoordination(context);
-  }
+  ) {}
 
   validateRelationAddition(boardId: string, input: AddGoalRelationInput): Pick<PlanningGraphIssue, "code" | "message"> | null {
     this.context.requireBoard(boardId);
@@ -64,15 +51,6 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
         to_goal_id: input.to_goal_id, type: input.type, reason: input.reason,
       }])).find(candidate => candidate.relation_ids.includes(projectedId));
     return issue ? { code: issue.code, message: issue.message } : null;
-  }
-
-  compoundCoverageBlocksClosure(boardId: string, goalId: string): boolean {
-    this.context.requireBoard(boardId);
-    const goals = this.context.repository.listGoals(boardId);
-    const goal = goals.find(candidate => candidate.goal_id === goalId);
-    return goal ? recordedContractCoverageBlocksClosure(goal, {
-      goals, relations: this.context.repository.listRelations(boardId),
-    }) : true;
   }
 
   effectiveMethods(boardId: string): PlanningMethodPack[] {
@@ -165,6 +143,7 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
       this.context.repository.listGoals(boardId),
       this.context.repository.listRelations(boardId),
       changedGoalIds,
+      this.currentWork(boardId),
     );
   }
 
@@ -196,15 +175,10 @@ export class GoalsPlanningEngine implements GoalsPlanningApi {
     return validatePlanningGraph(goals, relations);
   }
 
-  validateProposalGraph(
-    goals: readonly Pick<GoalRecord, "goal_id" | "trashed_at">[],
-    relations: readonly GraphRelation[],
-    items: readonly PlanningProposalItem[],
-  ): PlanningGraphIssue[] {
-    return validatePlanningProposalGraph(goals, relations, items);
-  }
-
-  metrics(goals: readonly GraphGoal[], relations: readonly GraphRelation[]): Map<string, PlanningMetric> {
-    return planningMetrics(goals, relations);
+  private currentWork(boardId: string): Map<string, PlanningWorkStatus> {
+    const rows = this.context.repository.db.prepare(
+      "SELECT goal_id, work_status FROM goal_event_work_status WHERE board_id = ?",
+    ).all(boardId) as Array<{ goal_id: string; work_status: string }>;
+    return new Map(rows.map((row) => [row.goal_id, row.work_status as PlanningWorkStatus]));
   }
 }

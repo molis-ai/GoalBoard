@@ -44,7 +44,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
       return trigger ? activateFocusSection(trigger) : false;
     };
 
-    const decisionActionSelector = "[data-human-review-form], [data-goal-tree-decision-form], [data-contract-decision-form], [data-candidate-decision-form], [data-rewire-decision-form], [data-risk-state-form]";
+    const decisionActionSelector = "[data-goal-tree-decision-form]";
 
     const activateDecisionFeedItem = (itemId) => {
       setFeedPreset("inbox_message", false);

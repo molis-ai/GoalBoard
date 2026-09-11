@@ -7,7 +7,7 @@ export function findGoalTreeItem<T extends GoalsTreeItem>(view: GoalsTreeView<T>
   return [...view.goals, ...view.archived_goals].find(item => item.goal.goal_id === goalId) ?? null;
 }
 export function visibleGoalStatus(item: Pick<GoalsTreeItem, "status" | "display_status">): GoalVisibleStatus {
-  if (item.status === "replaced" || item.status === "archived" || item.status === "trashed") {
+  if (item.status === "archived" || item.status === "trashed") {
     return item.status;
   }
   return item.display_status;
@@ -51,7 +51,7 @@ export function displayedPassedCriterionIds(item: GoalsTreeItem): string[] {
 }
 
 export function isBlockedWorkStatus(status: GoalPresentationState): boolean {
-  return status.endsWith("_blocked") || status === "replaced" || status === "invalidated";
+  return status.endsWith("_blocked") || status === "invalidated";
 }
 
 export function partOfChildViews<T extends GoalsTreeItem>(parentId: string, view: GoalsTreeView<T>): T[] {

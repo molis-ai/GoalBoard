@@ -9,8 +9,8 @@ import type {
 import {
   currentActionDecision,
   decisionHasEffect,
+  pendingBlocksCompletion,
   requirementCurrentlySatisfied,
-  scopeAppliesToComplete,
 } from "./event-state-authorization.js";
 import { agreementView } from "./event-state-repository.js";
 import type { GoalEventStateRepository } from "./event-state-repository.js";
@@ -88,10 +88,12 @@ export function completionUnmetReasons(input: {
     });
   }
   for (const pending of input.pendingDecisions) {
-    if (!scopeAppliesToComplete(pending.scope)) continue;
+    if (!pendingBlocksCompletion(pending, input.requirements)) continue;
     reasons.push({
       code: "event_closure.pending_decision",
-      message: `还有针对完成动作的待决定：「${pending.question}」`,
+      message: pending.purpose === "requirement_acceptance"
+        ? `还有针对当前要求的待验收决定：「${pending.question}」`
+        : `还有针对完成动作的待决定：「${pending.question}」`,
       request_id: pending.request_id,
     });
   }

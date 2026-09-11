@@ -1,7 +1,6 @@
 import type { HostCapabilityDefinition } from "@adeptify/goalboard-contracts/platform/app-host";
 import type { CreateGoalInput, GoalsApplicationApi, GoalRecord } from "@adeptify/goalboard-contracts/modules/goals";
 import type { BoardSnapshot } from "./goal-entry-contract.js";
-import type { GoalActionProjection } from "./execution-validation-contract.js";
 import type { LegacyV3ImportInput, V3ImportReport } from "./board-import-contract.js";
 
 export interface InitializeBoardInput {
@@ -38,7 +37,21 @@ export const projectResumeFactsCapability = {
   capability_id: "io.goalboard.local-host.project.resume-facts",
   version: 1,
   operation: "query",
-} as HostCapabilityDefinition<{ board_id: string }, { goals: GoalRecord[]; projections: GoalActionProjection[] }>;
+} as HostCapabilityDefinition<{ board_id: string; focus_goal_ids?: string[] }, {
+  goals: Array<{
+    goal_id: string;
+    title: string;
+    work_status: "open" | "completed" | "cancelled";
+    completion_effect: boolean;
+    can_record: boolean;
+    next_hint: string;
+    unmet_requirement_count: number;
+    pending_decision_count: number;
+    blocking_concern_count: number;
+    updated_at: string;
+  }>;
+  observed_event_cursor: number;
+}>;
 
 export const trashedGoalsCapability = {
   capability_id: "io.goalboard.local-host.goals.trashed",

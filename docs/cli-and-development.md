@@ -12,11 +12,11 @@ Home 安装、Runtime 接入、常驻 Web 服务和卸载的实现统一在 `app
 
 修改 workspace 源码后必须重新构建。`pnpm build` 最后通过 `apps/local-host/tooling/write-build-manifest.mjs` 调用 Local Host 的构建记录生成函数，覆盖根源码、workspace 包源码/配置和构建脚本；不要单独生成记录掩盖旧构建。新建 workspace 层级时同步 installer fingerprint 的包发现范围与构建列表。定向回归包括 `tests/install.test.ts`、`tests/service.test.ts`、`tests/uninstall.test.ts`、`tests/uninstall-catalog.test.ts`，真实 Web/Desktop 调用由对应集成测试覆盖。DV4 完整发布验收尚未完成，不能把这些回归当成可发布证明。
 
-## 父 Goal 的覆盖澄清
+## 当前Goal、父目标与依赖
 
-父 Goal 已收口但子 Contract 实质修订时，仍可产生覆盖核对的 `clarify` 动作。定义澄清与覆盖是否过期的判断归 `plugins/native/goals/src/clarification-policy.ts`；动作投影、领取/Explain、work-state 和完成状态核对共用它。Draft Dialogue 消费公开 work-state，不能另写“accepted 就不可澄清”的门禁。
+当前工作由事件状态表示，公开读取使用 `goal_state`。父目标按自己的当前约定、报告、要求和适用阻塞判断完成，子目标数量不构成完成证明。未完成依赖影响正式完成，但不禁止记录普通笔记或部分结果。
 
-只有有效且覆盖过期的父 Goal 可进入这条入口；缺失映射、已有 Claim、待用户决定、归档/回收/替代、权限及过期 token 的限制不变。领取或对话不修改 Contract，覆盖更新仍走 Proposal → Check → 用户决定。回归见 `tests/coverage-clarifier.test.ts`。
+结构影响与图合法性由 Goals Module 的规划图计算，当前候选读取事件work_status，不读取旧叶子分类。关系变化通过当前有限Goal Tree提案及受保护用户决定处理；不再生成clarifier Claim、Draft Dialogue或旧动作token。回归见 `tests/goal-tree-event-flow.test.ts`、`tests/goal-events-state.test.ts` 和 `tests/planning-engine.test.ts`。
 
 ## 一次性 V3 导入
 
@@ -31,7 +31,7 @@ goalboard v1 import-v3 \
   --file legacy-goal-board.json
 ```
 
-导入只保留 Goal 名称和父子结构、inputs/outputs、root constraints、coverage disposition 与来源身份。业务逻辑、验收、accepted/satisfied、依赖、Risk、Policy、Evidence 和 Review 都不会被伪造，导入报告会把它们列入 `regenerate`。目标 Board 已存在时导入会拒绝覆盖。
+导入保留Goal标题与原结果、父子结构、范围、inputs/outputs、root constraints、coverage disposition和原始来源。现有事务同时接通当前事件归属，`goal_state.intent.source_kind` 为 `migration`；导入后可立即从Runtime或Web记录普通笔记，重启后仍可继续。不会合成验收要求、完成或用户批准，也不生成原V3没有的依赖。需要进一步明确交付时使用当前约定与要求。目标Board已存在时拒绝覆盖。
 
 management MCP 提供同一 Coordinator 上的 `goalboard_v1_import_v3`；Runtime MCP 不暴露导入。
 
@@ -40,16 +40,11 @@ management MCP 提供同一 Coordinator 上的 `goalboard_v1_import_v3`；Runtim
 公开 CLI 顶层提供本体安装、常驻服务、demo、安全卸载，以及 `goalboard v1 <operation>` 管理接口：
 
 ```text
-init | create-goal | snapshot | contract | ready | explain | claim | release
-run-start | run-report | revalidate | evidence-submit | review-submit | complete
-draft-dialogue-start | draft-dialogue-turn | draft-dialogue-resume
+init | snapshot | import-v3 | active-goal
 goal-tree-propose | goal-tree-read | goal-tree-check | goal-tree-decide
-relation-add | impact-add | policy-set | risk-add | risk-state | active-goal
-contract-propose | contract-decide | candidate-submit | dependency-propose
-candidate-decide | rewire-confirm | import-v3
 ```
 
-复杂 payload 可以通过 `--json` 或 `--file payload.json` 传入。CLI 是用户/管理和本地调试入口，不是 Runtime 的服务故障回退。
+复杂输入可以通过 `--json` 或 `--file payload.json` 传入。旧create-goal、Claim/Run、Evidence/Review和Contract/Candidate/Rewire等命令已退役，旧名字会报未知操作。日常笔记、报告、约定、收尾与继续使用MCP或Web，CLI没有同义事件写命令。CLI是用户/管理和本地调试入口，不是Runtime的服务故障回退。
 
 ## 项目结构
 
@@ -65,16 +60,16 @@ packages/plugin-runtime/     FD3 本地 Plugin 生命周期参考实现
 packages/plugin-sdk/         FD3 Manifest 与 Integration Plugin 定义 API
 plugins/official-integrations/
                              官方 Manifest、Provider Adapter 与安装 package
-apps/workbench/              AP3 Shell/Slot/资产 + FD4/GW4/EX4 产品接线与执行验收 UI
+apps/workbench/              Shell/Slot/资产、当前Goal导航与原生Plugin页面接线
 apps/desktop/                AP4 Desktop Shell、Panel、Capsule 与 Tauri native adapter
-apps/cli/                    GW4 Goals + EX4 execution-validation adapter；完整协议迁移由 DV1 继续
-apps/mcp/                    GW4 Goals + EX4 execution-validation adapter；schema/context 由 DV1/DV2 继续
+apps/cli/                    当前管理命令的解析、Host调用与输出
+apps/mcp/                    当前工具schema、项目连接、事件/结构命令与回执
 packages/ui-host/            UI Contribution registry、surface render 与 Slot mount 校验
 packages/design-system/      AP3 主题偏好、浏览器视觉基础与分层样式
 plugins/native/feed/         FD4 Feed/Attention/Source UI 和 HTTP route table
-modules/goals/               Goals Query + GW1–GW4 Command/Lifecycle/Planning 与公开应用端口
+modules/goals/               当前事件、约定/要求、完成状态、图/规划、指导与历史读取
 modules/governance-collaboration/
-                             EX3 Review/Proposal/Decision 事实、状态机与公开应用端口
+                             当前用户决定、有限结构提案、来源与历史事实
 tooling/plugin-cli/          Plugin CLI 边界；真实开发工具由 DV3 实现
 scripts/workspace-packages.mjs
                              48 包清单、manifest、入口、README 与 Contract 接线检查
@@ -91,15 +86,16 @@ desktop/                     macOS App 的 Cargo/Tauri 发布配置；源码位�
 examples/seed-demo.mts       调用产品 demo 生命周期的开发脚本
 docs/screenshots/            README 产品截图
 skills/goal-advance/         Runtime 工作协议
-tests/v1.test.ts             公共应用、CLI、迁移与协议回归
-tests/goals-command-module.test.ts
-                             Goals 公开 Command API、幂等与状态副作用回归
-tests/goals-app-adapters.test.ts
-                             Workbench/MCP/CLI Goal adapter 一致性、幂等与错误回归
-tests/execution-validation-app-adapters.test.ts
-                             CLI/MCP/Workbench 跨入口执行、权限、恢复与 UI contribution 回归
-tests/governance-collaboration-module.test.ts
-                             Governance 公开 API、确认来源、状态迁移与原子回滚回归
+tests/goal-events-state.test.ts
+                             当前要求、决定、完成与继续的状态转换
+tests/goal-event-migration.test.ts
+                             真实旧库升级、原历史和批准的保留
+tests/goal-tree-event-flow.test.ts
+                             有限树提案、用户决定、图与事务边界
+tests/command-entry-chain.test.ts
+                             当前MCP/Host/CLI入口组合与持久化
+tests/host-entry-consistency.test.ts
+                             组合调用、并发排队与Host资源生命周期
 tests/mcp.test.ts            MCP audience、权限与连接回归
 tests/web.test.ts            Web 数据与交互回归
 tests/desktop-tui.test.ts    第三栏启动、面板与本机 PTY 回归

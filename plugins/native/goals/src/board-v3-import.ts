@@ -1,4 +1,4 @@
-import type { GoalsCommandApi, GoalsQueryApi } from "@adeptify/goalboard-contracts/modules/goals";
+import type { GoalEventFactsApi, GoalsCommandApi, GoalsQueryApi } from "@adeptify/goalboard-contracts/modules/goals";
 import type { LegacyV3ImportInput, V3ImportReport } from "./board-import-contract.js";
 
 export interface LegacyV3ImportPorts {
@@ -6,6 +6,7 @@ export interface LegacyV3ImportPorts {
   query: Pick<GoalsQueryApi, "getBoard">;
   initializeBoard: GoalsCommandApi["initializeBoard"];
   commands: Pick<GoalsCommandApi, "createGoal" | "addRelation" | "importLegacyCoverage" | "completeLegacyBoardImport">;
+  adoptOwner: GoalEventFactsApi["adoptOwner"];
 }
 
 function safeId(value: string): string {
@@ -40,30 +41,21 @@ export function importLegacyV3Board(
     }
     for (const legacyGoal of legacy.goals) {
       const migratedId = idMap[legacyGoal.id];
-      const hasChildren = legacy.goals.some((item) => item.parent === legacyGoal.id);
       ports.commands.createGoal(
         input.target_board_id,
         {
           goal_id: migratedId,
           title: legacyGoal.one_liner,
           outcome: legacyGoal.one_liner,
-          why: "从 Clarification Agent V3 迁入，保留原目标树供重新确认",
-          business_logic: "旧数据没有完整的业务逻辑说明；这个 Goal 保持草稿，用户补全业务行为和验收条件后才能接受和领取。",
+          why: "从 Clarification Agent V3 迁入，保留原目标树",
+          business_logic: "",
           in_scope: legacyGoal.covers,
           constraints: legacy.root_goal.constraints,
           required_inputs: legacyGoal.inputs,
           promised_outputs: legacyGoal.outputs,
           definition_state: "draft",
-          decomposition_state: hasChildren ? "closed_compound" : "closed_leaf",
-          acceptance_criteria: [
-            {
-              criterion_id: `${migratedId}:regenerate-acceptance`,
-              statement: "用户重新定义这个 Goal 的可判定验收条件",
-              decision_method: "human_decision",
-              pass_condition: "验收条件被用户补全并重新接受 Goal",
-              required_evidence: ["human_verdict"],
-            },
-          ],
+          decomposition_state: "abstract",
+          acceptance_criteria: [],
         },
         {
           actor_id: input.actor_id,
@@ -71,6 +63,13 @@ export function importLegacyV3Board(
           reason: "从 V3 导入可安全保留的 Goal 结构",
         },
       );
+      ports.adoptOwner({
+        board_id: input.target_board_id,
+        goal_id: migratedId,
+        actor_id: input.actor_id,
+        source: "migration",
+        outcome: legacyGoal.one_liner,
+      });
     }
     for (const legacyGoal of legacy.goals) {
       if (!legacyGoal.parent || !idMap[legacyGoal.parent]) continue;
@@ -116,11 +115,9 @@ export function importLegacyV3Board(
       ],
       regenerate: [
         "每个 Goal 的非技术业务逻辑",
-        "可判定验收条件与 Evidence",
-        "accepted / satisfied 状态",
+        "当前约定与可判定要求",
         "依赖、Impact Surface、Risk 与 Policy",
-        "Review 独立性和用户确认",
-        "未关闭的澄清票",
+        "未关闭的澄清说明",
       ],
       goal_id_map: idMap,
       observed_event_cursor: cursor,

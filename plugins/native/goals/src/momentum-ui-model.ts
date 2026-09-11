@@ -3,8 +3,8 @@ import type { GoalMomentumGoalInput } from "./momentum-model.js";
 
 export interface GoalsMomentumItem extends GoalsTreeItem {
   goal: GoalsTreeItem["goal"] & { updated_at: string };
-  work_state: string;
-  reasons: Array<{ code: string; severity: string; message: string }>;
+  work_state?: string;
+  reasons?: Array<{ code: string; severity: string; message: string }>;
   runs: GoalMomentumGoalInput["runs"];
   evidence: GoalMomentumGoalInput["evidence"];
   reviews: GoalMomentumGoalInput["reviews"];

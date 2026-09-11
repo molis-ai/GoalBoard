@@ -5,8 +5,42 @@ import type { GoalsHttpContext } from "./types.js";
 
 const WEB_ACTOR = "web-user";
 
+const HTTP_ALLOWED: Record<string, readonly string[]> = {
+  "event-configure": [
+    "idempotency_key", "expected_version", "expected_agreement_version",
+    "types", "adopted_planning", "adopt_default_requirement_ids", "requirement_bindings",
+  ],
+  "event-report": ["idempotency_key", "events", "progress"],
+  "event-progress": ["idempotency_key", "based_on_cursor", "summary", "next_step", "next_actor"],
+  "event-concern": [
+    "idempotency_key", "action", "concern_id", "title", "statement", "scope",
+    "blocks_closure", "reason", "supporting_event_ids", "cited_decision_id",
+  ],
+  "event-decision-request": [
+    "idempotency_key", "question", "options", "purpose", "proposed_change", "scope",
+  ],
+  "event-agree": [
+    "idempotency_key", "expected_agreement_version", "expected_config_version",
+    "outcome", "new_requirements", "revise_requirements", "retire_requirement_ids",
+  ],
+  "event-close": ["idempotency_key", "kind", "result", "reason", "expected_config_version", "expected_agreement_version"],
+  "event-note": ["idempotency_key", "body", "note"],
+  "event-resume": ["idempotency_key", "reason"],
+};
+
+function rejectUnknownHttp(action: string, body: Record<string, unknown>): void {
+  const allowed = new Set(HTTP_ALLOWED[action] ?? []);
+  const unexpected = Object.keys(body).filter((key) => !allowed.has(key));
+  if (unexpected.length) {
+    throw Object.assign(new Error(`不能使用未许可字段：${unexpected.join("、")}`), {
+      code: "event_http.unexpected_field",
+      details: { fields: unexpected },
+    });
+  }
+}
+
 export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<boolean> {
-  const goalMatch = context.pathname.match(/^\/api\/goals\/([^/]+)\/(event-state|event-timeline|event-configure|event-report|event-progress|event-concern|event-decision-request|event-agree|event-close|event-resume|event-continue|event-note)$/);
+  const goalMatch = context.pathname.match(/^\/api\/goals\/([^/]+)\/(event-state|event-timeline|event-configure|event-report|event-progress|event-concern|event-decision-request|event-agree|event-close|event-resume|event-note)$/);
   const eventMatch = context.pathname.match(/^\/api\/goals\/([^/]+)\/events\/([^/]+)$/);
   const historyMatch = context.pathname.match(/^\/api\/goals\/([^/]+)\/history\/([^/]+)$/);
   if (!goalMatch && !eventMatch && !historyMatch) return false;
@@ -54,6 +88,7 @@ export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<bo
     }
     if (context.method !== "POST") return false;
     const body = await context.readBody();
+    rejectUnknownHttp(action, body);
     const idempotencyKey = String(body.idempotency_key ?? context.idempotencyHeader ?? `${action}-${randomUUID()}`);
     const actor = { board_id: boardId, goal_id: goalId, actor_id: WEB_ACTOR, actor_kind: "user" as const, idempotency_key: idempotencyKey };
     if (action === "event-configure") {
@@ -65,14 +100,17 @@ export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<bo
         adopt_default_requirement_ids: Array.isArray(body.adopt_default_requirement_ids)
           ? body.adopt_default_requirement_ids.map((value) => String(value))
           : undefined,
+        expected_agreement_version: body.expected_agreement_version == null
+          ? undefined
+          : requiredInt(body.expected_agreement_version, "expected_agreement_version"),
         requirement_bindings: Array.isArray(body.requirement_bindings) ? body.requirement_bindings as never : undefined,
-        new_requirements: Array.isArray(body.new_requirements) ? body.new_requirements as never : undefined,
       }));
     }
     if (action === "event-report") {
       return writeOk(context, context.goalEvents.report({
         ...actor,
         events: Array.isArray(body.events) ? body.events as never : [],
+        ...(Object.hasOwn(body, "progress") ? { progress: body.progress as never } : {}),
       }));
     }
     if (action === "event-progress") {
@@ -103,6 +141,8 @@ export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<bo
         ...actor,
         question: String(body.question ?? ""),
         options: Array.isArray(body.options) ? body.options as never : [],
+        purpose: body.purpose as never,
+        proposed_change: body.proposed_change && typeof body.proposed_change === "object" ? body.proposed_change as never : undefined,
         scope: body.scope && typeof body.scope === "object" ? body.scope as never : undefined,
       }));
     }
@@ -113,6 +153,10 @@ export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<bo
         expected_config_version: requiredInt(body.expected_config_version, "expected_config_version"),
         outcome: optionalText(body.outcome),
         new_requirements: Array.isArray(body.new_requirements) ? body.new_requirements as never : undefined,
+        revise_requirements: Array.isArray(body.revise_requirements) ? body.revise_requirements as never : undefined,
+        retire_requirement_ids: Array.isArray(body.retire_requirement_ids)
+          ? body.retire_requirement_ids.map((value) => String(value))
+          : undefined,
       }));
     }
     if (action === "event-close") {
@@ -136,29 +180,9 @@ export async function handleGoalEventHttp(context: GoalsHttpContext): Promise<bo
       }));
     }
     if (action === "event-resume") {
-      const resumeKind = String(body.resume_kind ?? "");
-      const resumeInput = { ...actor, reason: String(body.reason ?? "") };
-      if (resumeKind === "resume_cancelled") {
-        return writeOk(context, context.goalEvents.resumeWork(resumeInput));
-      }
-      if (resumeKind === "reopen_event_completed") {
-        return writeOk(context, context.goalEvents.reopenCompletedEventWork(resumeInput));
-      }
-      const status = context.goalEvents.readState(boardId, goalId).work_status;
-      if (status === "cancelled") return writeOk(context, context.goalEvents.resumeWork(resumeInput));
-      if (status === "completed") return writeOk(context, context.goalEvents.reopenCompletedEventWork(resumeInput));
-      try {
-        return writeOk(context, context.goalEvents.reopenCompletedEventWork(resumeInput));
-      } catch (error) {
-        const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : "";
-        if (code === "event_reopen.not_completed") return writeOk(context, context.goalEvents.resumeWork(resumeInput));
-        throw error;
-      }
-    }
-    if (action === "event-continue") {
-      return writeOk(context, context.goalEvents.continueWithEventWork({
+      return writeOk(context, context.goalEvents.resumeWork({
         ...actor,
-        reopen_completed: body.reopen_completed === true,
+        reason: String(body.reason ?? ""),
       }));
     }
     return false;
