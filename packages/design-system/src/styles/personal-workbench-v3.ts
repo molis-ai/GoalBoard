@@ -1405,7 +1405,7 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
     body[data-desktop-shell="true"] .feed-directory-search svg { width: 13px; height: 13px; }
     body[data-desktop-shell="true"] .mobile-switch button {
       min-width: 0;
-      min-height: 32px;
+      min-height: 44px;
       display: inline-flex;
       align-items: center;
       justify-content: center;

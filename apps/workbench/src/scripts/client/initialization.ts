@@ -24,6 +24,7 @@ export const CLIENT_INITIALIZATION_SCRIPT = `    });
         return;
       }
       if (handleGoalFactorKeyboard(event)) return;
+      if (handleMobileSwitchKeyboard(event)) return;
       if (handleTreeKeyboard(event)) return;
       if (event.key === "Escape" && !feedFilterPanel?.hidden) {
         event.preventDefault();
@@ -38,8 +39,14 @@ export const CLIENT_INITIALIZATION_SCRIPT = `    });
     });
     addEventListener("resize", () => {
       const nextCompanionActive = document.body.dataset.desktopShell === "true" && matchMedia("(max-width: 760px)").matches;
-      if (nextCompanionActive && !desktopCompanionActive && selected) setMobileView("document");
+      if (nextCompanionActive && !desktopCompanionActive) {
+        const mode = workspace.dataset.workspaceMode;
+        if (mode === "runtime") setMobileView("tui");
+        else if (mode === "graph") setMobileView("document");
+        else if (selected) setMobileView("document");
+      }
       desktopCompanionActive = nextCompanionActive;
+      applyMobilePanePresence();
       setTreeWidth(treePane.getBoundingClientRect().width, false);
       scheduleGoalGraphLayout();
     });

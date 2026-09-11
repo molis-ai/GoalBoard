@@ -57,6 +57,96 @@ async function fixtureSource(root: string, version: string): Promise<string> {
   return source;
 }
 
+async function fixtureScopedRuntimeSource(root: string, version: string): Promise<{
+  source: string;
+  workspacePackage: string;
+  cacheSentinel: string;
+  payloadSentinel: string;
+  shippedModule: string;
+  shippedAsset: string;
+  nativeBinary: string;
+}> {
+  const source = await fixtureSource(root, version);
+  const workspacePackage = join(source, "apps", "desktop");
+  const nativeDirectory = join(
+    source,
+    "node_modules",
+    ".pnpm",
+    "fixture-native@1.0.0",
+    "node_modules",
+    "fixture-native",
+  );
+  const cacheSentinel = join(workspacePackage, "src-tauri", "target", "cache.sentinel");
+  const payloadSentinel = join(workspacePackage, "resources", "goalboard-runtime", "old-payload.sentinel");
+  const shippedModule = join(workspacePackage, "dist", "index.js");
+  const shippedAsset = join(workspacePackage, "methods", "industry-developer-tools.md");
+  const nativeBinary = join(nativeDirectory, "build", "Release", "addon.node");
+  await Promise.all([
+    mkdir(join(workspacePackage, "dist"), { recursive: true }),
+    mkdir(join(workspacePackage, "methods"), { recursive: true }),
+    mkdir(join(workspacePackage, "src-tauri", "target"), { recursive: true }),
+    mkdir(join(workspacePackage, "resources", "goalboard-runtime"), { recursive: true }),
+    mkdir(join(nativeDirectory, "lib"), { recursive: true }),
+    mkdir(join(nativeDirectory, "build", "Release"), { recursive: true }),
+    mkdir(join(nativeDirectory, "src"), { recursive: true }),
+  ]);
+  const fixtureEntry = (name: string) =>
+    `import { marker } from "fixture-dependency";\nimport { shipped } from "fixture-desktop";\nimport { nativeMarker } from "fixture-native";\nconsole.log("${name}:" + marker + ":" + shipped + ":" + nativeMarker);\n`;
+  await Promise.all([
+    writeFile(
+      join(source, "package.json"),
+      JSON.stringify({
+        name: "fixture-goalboard",
+        version,
+        type: "module",
+        dependencies: {
+          "fixture-dependency": "1.0.0",
+          "fixture-desktop": "workspace:*",
+          "fixture-native": "1.0.0",
+        },
+      }),
+    ),
+    writeFile(join(source, "dist", "cli", "main.js"), fixtureEntry("cli")),
+    writeFile(join(source, "dist", "mcp", "server.js"), fixtureEntry("mcp")),
+    writeFile(join(source, "dist", "web", "server.js"), fixtureEntry("web")),
+    writeFile(
+      join(workspacePackage, "package.json"),
+      JSON.stringify({
+        name: "fixture-desktop",
+        version: "1.0.0",
+        type: "module",
+        exports: "./dist/index.js",
+        files: ["dist", "methods", "README.md"],
+      }),
+    ),
+    writeFile(shippedModule, "export const shipped = 'workspace-dist';\n"),
+    writeFile(shippedAsset, "# shipped method\n"),
+    writeFile(join(workspacePackage, "README.md"), "# desktop\n"),
+    writeFile(cacheSentinel, "build-cache\n"),
+    writeFile(payloadSentinel, "nested-old-payload\n"),
+    writeFile(
+      join(nativeDirectory, "package.json"),
+      JSON.stringify({
+        name: "fixture-native",
+        version: "1.0.0",
+        type: "module",
+        exports: "./lib/index.js",
+        files: ["src/**/*.[ch]pp", "lib/**"],
+      }),
+    ),
+    writeFile(join(nativeDirectory, "lib", "index.js"), "export const nativeMarker = 'native';\n"),
+    writeFile(nativeBinary, "native-binary"),
+    writeFile(join(nativeDirectory, "src", "addon.cpp"), "// source\n"),
+  ]);
+  await symlink("../apps/desktop", join(source, "node_modules", "fixture-desktop"), "dir");
+  await symlink(
+    ".pnpm/fixture-native@1.0.0/node_modules/fixture-native",
+    join(source, "node_modules", "fixture-native"),
+    "dir",
+  );
+  return { source, workspacePackage, cacheSentinel, payloadSentinel, shippedModule, shippedAsset, nativeBinary };
+}
+
 async function withTemporaryDirectory<T>(run: (directory: string) => Promise<T>): Promise<T> {
   const directory = await mkdtemp(join(tmpdir(), "goalboard-install-"));
   try {
@@ -616,5 +706,76 @@ test("public install command is human-readable by default and JSON when requeste
     assert.equal(result.runtime_layout, "self_contained");
     assert.deepEqual(result.next_steps.web_command, [join(home, "bin", "goalboard-web"), "--home", home]);
     assert.equal(await readFile(projectFile, "utf8"), "unchanged");
+  });
+});
+
+test("home install copies declared workspace assets and native files, not excluded caches or nested payloads", async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const fixture = await fixtureScopedRuntimeSource(directory, "1.0.0");
+    const external = join(directory, "outside-cache");
+    await mkdir(external, { recursive: true });
+    await writeFile(join(external, "secret.txt"), "not-in-release");
+    await symlink(external, join(fixture.workspacePackage, "src-tauri", "target", "escape"), "dir");
+    const home = join(directory, "home", ".goalboard");
+    const first = await installGoalBoardHome({ homeDirectory: home, sourceDirectory: fixture.source });
+    assert.equal(first.status, "installed");
+    const installedDesktop = join(first.release_directory, "node_modules", "fixture-desktop");
+    const installedNative = join(first.release_directory, "node_modules", "fixture-native");
+    assert.equal(await readFile(join(installedDesktop, "dist", "index.js"), "utf8"), "export const shipped = 'workspace-dist';\n");
+    assert.equal(await readFile(join(installedDesktop, "methods", "industry-developer-tools.md"), "utf8"), "# shipped method\n");
+    assert.equal(await readFile(join(installedNative, "build", "Release", "addon.node"), "utf8"), "native-binary");
+    assert.equal(await readFile(join(installedNative, "lib", "index.js"), "utf8"), "export const nativeMarker = 'native';\n");
+    await assert.rejects(stat(join(installedDesktop, "src-tauri", "target", "cache.sentinel")));
+    await assert.rejects(stat(join(installedDesktop, "resources", "goalboard-runtime", "old-payload.sentinel")));
+    const output = await execFileAsync(process.execPath, [first.launchers.cli], { cwd: directory });
+    assert.equal(output.stdout.trim(), "cli:embedded:workspace-dist:native");
+
+    await writeFile(fixture.cacheSentinel, "changed-build-cache\n");
+    await writeFile(fixture.payloadSentinel, "changed-nested-payload\n");
+    assert.equal((await installGoalBoardHome({ homeDirectory: home, sourceDirectory: fixture.source })).status, "unchanged");
+    assert.equal(await readFile(join(installedDesktop, "dist", "index.js"), "utf8"), "export const shipped = 'workspace-dist';\n");
+
+    await writeFile(fixture.shippedModule, "export const shipped = 'workspace-refreshed';\n");
+    const refreshed = await installGoalBoardHome({ homeDirectory: home, sourceDirectory: fixture.source });
+    assert.equal(refreshed.status, "refreshed");
+    assert.equal(
+      await readFile(join(refreshed.release_directory, "node_modules", "fixture-desktop", "dist", "index.js"), "utf8"),
+      "export const shipped = 'workspace-refreshed';\n",
+    );
+    const refreshedOutput = await execFileAsync(process.execPath, [refreshed.launchers.cli], { cwd: directory });
+    assert.equal(refreshedOutput.stdout.trim(), "cli:embedded:workspace-refreshed:native");
+  });
+});
+
+test("home install fails when a workspace package is missing declared files or uses unsupported globs", async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const missing = await fixtureScopedRuntimeSource(directory, "1.0.0");
+    await rm(join(missing.workspacePackage, "methods"), { recursive: true, force: true });
+    await assert.rejects(
+      () => installGoalBoardHome({ homeDirectory: join(directory, "home-missing"), sourceDirectory: missing.source }),
+      (error: unknown) =>
+        error instanceof GoalBoardHomeInstallError
+        && error.code === "source.asset_missing"
+        && /Missing release asset in fixture-desktop: methods/.test(error.message),
+    );
+
+    const globs = await fixtureScopedRuntimeSource(directory, "1.0.1");
+    await writeFile(
+      join(globs.workspacePackage, "package.json"),
+      JSON.stringify({
+        name: "fixture-desktop",
+        version: "1.0.0",
+        type: "module",
+        exports: "./dist/index.js",
+        files: ["dist/**", "methods", "README.md"],
+      }),
+    );
+    await assert.rejects(
+      () => installGoalBoardHome({ homeDirectory: join(directory, "home-globs"), sourceDirectory: globs.source }),
+      (error: unknown) =>
+        error instanceof GoalBoardHomeInstallError
+        && error.code === "source.invalid"
+        && /Unsupported release files entry in fixture-desktop: dist\/\*\*/.test(error.message),
+    );
   });
 });

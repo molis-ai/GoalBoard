@@ -154,7 +154,7 @@ Each architecture ships separately because GoalBoard's SQLite and PTY native add
 - Runtime integration, terminal launch, and accepted Goal changes require explicit action or confirmation.
 - All current work uses event records. Database upgrades and V3 import preserve real history and connect Goals to current state; old Draft/Claim/Run writes are retired.
 - GoalBoard manages Goal facts and the execution loop; it does not replace a Harness or Agent Orchestration.
-- The event workflow is currently used for local internal trial and has not been published as a new release.
+- v0.2.0 introduces the event workflow and retires the legacy Runtime write protocol. See the [release notes](docs/releases/v0.2.0.md) for compatibility and upgrade steps. Public macOS installers remain pending Developer ID signing and Apple notarization.
 
 ## Further reading
 

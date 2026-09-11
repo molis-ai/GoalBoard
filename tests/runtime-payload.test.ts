@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -64,6 +64,127 @@ test("real workspace payload installs offline from an unrelated directory and pr
     assert.deepEqual(await readFile(join(installed.skill_directory, "goal-advance", "methods", methodPath)),
       await readFile(join(process.cwd(), "modules", "goals", "methods", methodPath)));
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+async function fixtureScopedRuntimeSource(root: string, version: string): Promise<{
+  source: string;
+  workspacePackage: string;
+}> {
+  const source = join(root, `source-${version}`);
+  const dependencyDirectory = join(
+    source,
+    "node_modules",
+    ".pnpm",
+    "fixture-dependency@1.0.0",
+    "node_modules",
+    "fixture-dependency",
+  );
+  const workspacePackage = join(source, "apps", "desktop");
+  const nativeDirectory = join(
+    source,
+    "node_modules",
+    ".pnpm",
+    "fixture-native@1.0.0",
+    "node_modules",
+    "fixture-native",
+  );
+  await Promise.all([
+    mkdir(join(source, "dist", "cli"), { recursive: true }),
+    mkdir(join(source, "dist", "mcp"), { recursive: true }),
+    mkdir(join(source, "dist", "web"), { recursive: true }),
+    mkdir(join(source, "skills", "goal-advance"), { recursive: true }),
+    mkdir(dependencyDirectory, { recursive: true }),
+    mkdir(join(workspacePackage, "dist"), { recursive: true }),
+    mkdir(join(workspacePackage, "methods"), { recursive: true }),
+    mkdir(join(workspacePackage, "src-tauri", "target"), { recursive: true }),
+    mkdir(join(workspacePackage, "resources", "goalboard-runtime"), { recursive: true }),
+    mkdir(join(nativeDirectory, "lib"), { recursive: true }),
+    mkdir(join(nativeDirectory, "build", "Release"), { recursive: true }),
+    mkdir(join(nativeDirectory, "src"), { recursive: true }),
+  ]);
+  const fixtureEntry = (name: string) =>
+    `import { marker } from "fixture-dependency";\nimport { shipped } from "fixture-desktop";\nimport { nativeMarker } from "fixture-native";\nconsole.log("${name}:" + marker + ":" + shipped + ":" + nativeMarker);\n`;
+  await Promise.all([
+    writeFile(
+      join(source, "package.json"),
+      JSON.stringify({
+        name: "fixture-goalboard",
+        version,
+        type: "module",
+        dependencies: {
+          "fixture-dependency": "1.0.0",
+          "fixture-desktop": "workspace:*",
+          "fixture-native": "1.0.0",
+        },
+      }),
+    ),
+    writeFile(join(source, "dist", "cli", "main.js"), fixtureEntry("cli")),
+    writeFile(join(source, "dist", "mcp", "server.js"), fixtureEntry("mcp")),
+    writeFile(join(source, "dist", "web", "server.js"), fixtureEntry("web")),
+    writeFile(join(source, "skills", "goal-advance", "SKILL.md"), "# Fixture Skill\n"),
+    writeFile(
+      join(dependencyDirectory, "package.json"),
+      JSON.stringify({ name: "fixture-dependency", version: "1.0.0", type: "module", exports: "./index.js" }),
+    ),
+    writeFile(join(dependencyDirectory, "index.js"), "export const marker = 'embedded';\n"),
+    writeFile(
+      join(workspacePackage, "package.json"),
+      JSON.stringify({
+        name: "fixture-desktop",
+        version: "1.0.0",
+        type: "module",
+        exports: "./dist/index.js",
+        files: ["dist", "methods", "README.md"],
+      }),
+    ),
+    writeFile(join(workspacePackage, "dist", "index.js"), "export const shipped = 'workspace-dist';\n"),
+    writeFile(join(workspacePackage, "methods", "industry-developer-tools.md"), "# shipped method\n"),
+    writeFile(join(workspacePackage, "README.md"), "# desktop\n"),
+    writeFile(join(workspacePackage, "src-tauri", "target", "cache.sentinel"), "build-cache\n"),
+    writeFile(join(workspacePackage, "resources", "goalboard-runtime", "old-payload.sentinel"), "nested-old-payload\n"),
+    writeFile(
+      join(nativeDirectory, "package.json"),
+      JSON.stringify({
+        name: "fixture-native",
+        version: "1.0.0",
+        type: "module",
+        exports: "./lib/index.js",
+        files: ["src/**/*.[ch]pp", "lib/**"],
+      }),
+    ),
+    writeFile(join(nativeDirectory, "lib", "index.js"), "export const nativeMarker = 'native';\n"),
+    writeFile(join(nativeDirectory, "build", "Release", "addon.node"), "native-binary"),
+    writeFile(join(nativeDirectory, "src", "addon.cpp"), "// source\n"),
+  ]);
+  await symlink(".pnpm/fixture-dependency@1.0.0/node_modules/fixture-dependency", join(source, "node_modules", "fixture-dependency"), "dir");
+  await symlink("../apps/desktop", join(source, "node_modules", "fixture-desktop"), "dir");
+  await symlink(".pnpm/fixture-native@1.0.0/node_modules/fixture-native", join(source, "node_modules", "fixture-native"), "dir");
+  return { source, workspacePackage };
+}
+
+test("runtime payload keeps declared workspace assets and native files, not desktop caches or nested payloads", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "goalboard-runtime-payload-scope-"));
+  try {
+    const fixture = await fixtureScopedRuntimeSource(directory, "1.0.0");
+    const payload = join(directory, "payload");
+    const created = await createGoalBoardRuntimePayload({
+      sourceDirectory: fixture.source,
+      destinationDirectory: payload,
+      nodeExecutablePath: process.execPath,
+    });
+    assert.equal(created.directory, payload);
+    const desktop = join(payload, "node_modules", "fixture-desktop");
+    const native = join(payload, "node_modules", "fixture-native");
+    assert.equal(await readFile(join(desktop, "dist", "index.js"), "utf8"), "export const shipped = 'workspace-dist';\n");
+    assert.equal(await readFile(join(desktop, "methods", "industry-developer-tools.md"), "utf8"), "# shipped method\n");
+    assert.equal(await readFile(join(native, "build", "Release", "addon.node"), "utf8"), "native-binary");
+    await assert.rejects(stat(join(desktop, "src-tauri", "target", "cache.sentinel")));
+    await assert.rejects(stat(join(desktop, "resources", "goalboard-runtime", "old-payload.sentinel")));
+    const output = await exec(process.execPath, [join(payload, "dist", "cli", "main.js")], { cwd: payload });
+    assert.equal(output.stdout.trim(), "cli:embedded:workspace-dist:native");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("failed payload preparation leaves an existing Desktop resource untouched", async () => {

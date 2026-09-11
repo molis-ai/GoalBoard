@@ -5,6 +5,7 @@ import { GoalBoardHomeInstallError } from "./home-contract.js";
 import type { InspectedSource, RuntimeDependencyPackage } from "./home-contract.js";
 import { pathState, readText, readJsonIfPresent } from "./home-files.js";
 import { collectRuntimeDependencies } from "./home-dependencies.js";
+import { runtimeDependencyReleaseEntries } from "./package-release-files.js";
 import { releaseAssetPaths } from "./release-assets.js";
 
 export async function inspectSource(
@@ -92,7 +93,7 @@ export async function computeSourceContentDigest(
     dependencies.push({
       name: dependency.name,
       version: dependency.version,
-      digest: await digestPaths(dependency.directory, ["."]),
+      digest: await digestPaths(dependency.directory, await runtimeDependencyReleaseEntries(dependency.directory)),
     });
   }
   return createHash("sha256")

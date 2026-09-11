@@ -154,7 +154,7 @@ pnpm desktop:start:macos
 - Runtime 接入、终端启动和正式 Goal 变化都需要明确操作或确认。
 - 当前工作统一使用事件记录。旧库升级和V3导入保留真实历史并接通当前状态；旧Draft/Claim/Run写入口已退役。
 - GoalBoard 管理 Goal 事实与执行闭环，不替代 Harness 或 Agent Orchestration。
-- 事件工作流当前用于本地内部试用，尚未作为新版本发布。
+- v0.2.0 引入事件工作流，并退役旧 Runtime 写协议。兼容与升级步骤见[发布说明](docs/releases/v0.2.0.md)；公开 macOS 安装包仍待 Developer ID 签名与 Apple 公证完成后提供。
 
 ## 更多文档
 

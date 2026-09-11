@@ -4,6 +4,7 @@ import path from "node:path";
 import { GoalBoardHomeInstallError, SCHEMA_VERSION, INSTALLER_ID } from "./home-contract.js";
 import type { InspectedSource, ReleaseManifest, PromotedRelease } from "./home-contract.js";
 import { pathState, writeAtomic, readJsonIfPresent } from "./home-files.js";
+import { copyReleaseEntries, runtimeDependencyReleaseEntries } from "./package-release-files.js";
 import { releaseAssetPaths } from "./release-assets.js";
 
 export async function createRelease(
@@ -49,24 +50,12 @@ export async function createRelease(
   }
   for (const dependency of source.runtimeDependencies) {
     const target = path.join(embeddedNodeModules, dependency.name);
-    // Runtime dependencies are collected recursively and flattened into the
-    // release's top-level node_modules. Package-manager links inside a
-    // dependency's own node_modules are therefore build inputs, not files we
-    // should copy into the self-contained release.
-    await assertContainedDependencyLinks(dependency.directory, {
-      ignoredTopLevelDirectories: ["node_modules"],
-    });
+    // Workspace packages keep their declared files. Registry packages stay
+    // complete except package-manager node_modules, which are flattened.
+    const entries = await runtimeDependencyReleaseEntries(dependency.directory);
+    await assertContainedDependencyLinks(dependency.directory, { onlyEntries: entries });
     await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.cp(dependency.directory, target, {
-      recursive: true,
-      force: false,
-      errorOnExist: true,
-      dereference: true,
-      filter(sourcePath) {
-        const relative = path.relative(dependency.directory, sourcePath);
-        return relative === "" || relative.split(path.sep)[0] !== "node_modules";
-      },
-    });
+    await copyReleaseEntries(dependency.directory, target, entries);
   }
   const planningMethodsDirectory = path.join(
     embeddedNodeModules,
@@ -120,10 +109,21 @@ export async function createRelease(
 
 export async function assertContainedDependencyLinks(
   rootDirectory: string,
-  options: { ignoredTopLevelDirectories?: readonly string[] } = {},
+  options: { ignoredTopLevelDirectories?: readonly string[]; onlyEntries?: readonly string[] } = {},
 ): Promise<void> {
   const ignoredTopLevelDirectories = new Set(options.ignoredTopLevelDirectories ?? []);
-  const pending = [rootDirectory];
+  const pending: string[] = [];
+  const starts = options.onlyEntries
+    ? options.onlyEntries.map((entry) => path.join(rootDirectory, entry))
+    : [rootDirectory];
+  for (const start of starts) {
+    const state = await fs.lstat(start);
+    if (state.isSymbolicLink()) {
+      await assertLinkStaysInsideRelease(rootDirectory, start);
+      continue;
+    }
+    if (state.isDirectory()) pending.push(start);
+  }
   while (pending.length > 0) {
     const directory = pending.pop()!;
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
@@ -134,16 +134,20 @@ export async function assertContainedDependencyLinks(
         continue;
       }
       if (!entry.isSymbolicLink()) continue;
-      const target = await fs.readlink(entryPath);
-      const resolved = path.resolve(path.dirname(entryPath), target);
-      const relative = path.relative(rootDirectory, resolved);
-      if (path.isAbsolute(target) || relative === ".." || relative.startsWith(`..${path.sep}`)) {
-        throw new GoalBoardHomeInstallError(
-          "source.invalid",
-          `GoalBoard 依赖链接指向安装 release 外部，无法生成自包含安装: ${entryPath}`,
-        );
-      }
+      await assertLinkStaysInsideRelease(rootDirectory, entryPath);
     }
+  }
+}
+
+async function assertLinkStaysInsideRelease(rootDirectory: string, entryPath: string): Promise<void> {
+  const target = await fs.readlink(entryPath);
+  const resolved = path.resolve(path.dirname(entryPath), target);
+  const relative = path.relative(rootDirectory, resolved);
+  if (path.isAbsolute(target) || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    throw new GoalBoardHomeInstallError(
+      "source.invalid",
+      `GoalBoard 依赖链接指向安装 release 外部，无法生成自包含安装: ${entryPath}`,
+    );
   }
 }
 

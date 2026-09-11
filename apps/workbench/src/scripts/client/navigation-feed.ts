@@ -98,6 +98,31 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       return true;
     };
 
+    const currentModuleDirectory = () => activeDesktopSurface === "feed" || activeDesktopSurface === "sources" || activeDesktopSurface === "sessions"
+      ? activeDesktopSurface
+      : "goals";
+
+    const syncMobileNavigationChrome = () => {
+      const view = workspace?.dataset.mobileView || "tree";
+      const graphVisible = workspace?.dataset.workspaceMode === "graph" && view === "document";
+      const directoryRootActive = view === "tree" && treePane?.dataset.desktopDirectory === "root" && !graphVisible;
+      const treeTab = document.querySelector('[data-mobile-target="tree"]');
+      treeTab?.setAttribute("aria-controls", graphVisible ? "goal-momentum-pane" : "goal-tree-pane");
+      document.querySelectorAll(".mobile-switch [role='tab']").forEach((button) => {
+        const target = button.dataset.mobileTarget;
+        const active = button.hasAttribute("data-mobile-directory-root")
+          ? directoryRootActive
+          : target === "tree"
+            ? graphVisible || (view === "tree" && !directoryRootActive)
+            : target === "document"
+              ? view === "document" && !graphVisible
+              : target === view && !directoryRootActive;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-selected", String(active));
+        button.tabIndex = active ? 0 : -1;
+      });
+    };
+
     const setDesktopDirectory = (directory, persist = true, focusTarget = true, origin = null) => {
       if (!desktopDirectoryPanels.length || !treePane?.dataset.desktopDirectory) return;
       const available = new Set(desktopDirectoryPanels.map((panel) => panel.dataset.directoryPanel));
@@ -108,18 +133,7 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       }
       treePane.dataset.desktopDirectory = next;
       desktopDirectoryPanels.forEach((panel) => { panel.hidden = panel.dataset.directoryPanel !== next; });
-      if (mobileDirectoryTab) {
-        const rootActive = next === "root";
-        mobileDirectoryTab.classList.toggle("is-active", rootActive);
-        mobileDirectoryTab.setAttribute("aria-selected", String(rootActive));
-        if (rootActive) {
-          mobileTreeTab?.classList.remove("is-active");
-          mobileTreeTab?.setAttribute("aria-selected", "false");
-        } else if (workspace?.dataset.mobileView === "tree") {
-          mobileTreeTab?.classList.add("is-active");
-          mobileTreeTab?.setAttribute("aria-selected", "true");
-        }
-      }
+      syncMobileNavigationChrome();
       if (focusTarget) {
         requestAnimationFrame(() => {
           const nextPanel = desktopDirectoryPanels.find((panel) => panel.dataset.directoryPanel === next);

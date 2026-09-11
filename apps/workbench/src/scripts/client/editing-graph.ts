@@ -64,19 +64,61 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       route, controlHeaders: goalboardControlHeaders, refreshBoard: (...args) => refreshBoard(...args),
       showToast, navigate: (url) => location.assign(globalThis.goalboardNavigationUrl(url)),
     });
+    const applyMobilePanePresence = () => {
+      const graph = workspace.querySelector("[data-goal-momentum]");
+      const narrow = matchMedia("(max-width: 760px)").matches;
+      const view = workspace.dataset.mobileView || "tree";
+      const mode = workspace.dataset.workspaceMode;
+      const visiblePane = !narrow
+        ? null
+        : mode === "graph" && view !== "tree"
+          ? graph
+          : view === "tui"
+            ? tuiPane
+            : view === "document"
+              ? documentPane
+              : treePane;
+      const panes = [treePane, documentPane, tuiPane, graph].filter(Boolean);
+      const active = document.activeElement;
+      const shouldMoveFocus = Boolean(active && narrow && visiblePane && panes.some((pane) => pane !== visiblePane && pane.contains(active)));
+      panes.forEach((pane) => {
+        if (!narrow) {
+          pane.removeAttribute("inert");
+          return;
+        }
+        pane.toggleAttribute("inert", pane !== visiblePane);
+      });
+      if (!shouldMoveFocus || !visiblePane) return;
+      const switchRoot = document.querySelector(".mobile-switch");
+      const selectedTab = switchRoot?.querySelector("[aria-selected='true']");
+      if (selectedTab instanceof HTMLElement) selectedTab.focus();
+      else if (visiblePane instanceof HTMLElement) visiblePane.focus({ preventScroll: true });
+    };
+
     const setMobileView = (view) => {
       workspace.dataset.mobileView = view;
       document.querySelector(".topbar")?.setAttribute("data-mobile-surface", view);
-      const directoryRootActive = view === "tree" && treePane?.dataset.desktopDirectory === "root";
-      if (mobileDirectoryTab) {
-        mobileDirectoryTab.classList.toggle("is-active", directoryRootActive);
-        mobileDirectoryTab.setAttribute("aria-selected", String(directoryRootActive));
-      }
-      document.querySelectorAll("[data-mobile-target]").forEach((button) => {
-        const active = button.dataset.mobileTarget === view && !(directoryRootActive && view === "tree");
-        button.classList.toggle("is-active", active);
-        button.setAttribute("aria-selected", String(active));
-      });
+      syncMobileNavigationChrome();
+      applyMobilePanePresence();
+    };
+
+    const handleMobileSwitchKeyboard = (event) => {
+      const switchRoot = event.target?.closest?.(".mobile-switch");
+      if (!switchRoot || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return false;
+      const tabs = [...switchRoot.querySelectorAll("[role='tab']")];
+      const current = event.target?.closest?.("[role='tab']");
+      const index = tabs.indexOf(current);
+      if (index < 0) return false;
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : (index + ((event.key === "ArrowRight" || event.key === "ArrowDown") ? 1 : -1) + tabs.length) % tabs.length;
+      event.preventDefault();
+      const next = tabs[nextIndex];
+      next?.focus();
+      next?.click();
+      return true;
     };
 
     const { graphElement, loadGoalGraph, updateGraphVisibility, readMomentumState,
@@ -119,6 +161,7 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
         else void loadGoalGraph();
       }
       if (matchMedia("(max-width: 760px)").matches) setMobileView(nextMode === "runtime" ? "tui" : "document");
+      else applyMobilePanePresence();
       if (persist) queueSave();
     };
 

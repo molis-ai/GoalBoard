@@ -306,8 +306,10 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
         : activeDesktopSurface === "goal" && ui?.selected === selected
           ? Number(ui?.documentTop || 0)
           : Number(desktopSurfaceScroll[activeDesktopSurface] || 0);
-      const restoredMobileView = desktopCompanionActive && selected ? "document" : ui?.mobileView || "tree";
+      const restoredMobileView = ui?.mobileView === "tui" || ui?.mobileView === "document" || ui?.mobileView === "tree"
+        ? ui.mobileView
+        : "tree";
       if (matchMedia("(max-width: 760px)").matches) {
         if (restoredMobileView === "tui") setWorkspaceMode("runtime", false);
-        if (restoredMobileView === "document") setWorkspaceMode("focus", false);
+        else if (restoredMobileView === "document" && workspace.dataset.workspaceMode !== "graph") setWorkspaceMode("focus", false);
 `;

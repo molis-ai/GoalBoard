@@ -88,7 +88,7 @@ export class CodexAppServerTransport implements RuntimeSessionTransport {
 
     try {
       await this.requestRaw("initialize", {
-        clientInfo: { name: "goalboard-session-browser", title: "GoalBoard", version: "0.1.14" },
+        clientInfo: { name: "goalboard-session-browser", title: "GoalBoard", version: "0.2.0" },
         capabilities: {
           experimentalApi: false,
           requestAttestation: false,

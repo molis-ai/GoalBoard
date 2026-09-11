@@ -1,6 +1,6 @@
 {
   "name": "@adeptify/goalboard",
-  "version": "0.1.14",
+  "version": "0.2.0",
   "description": "GoalBoard V1\uff1a\u9762\u5411\u4eba\u548c AI Runtime \u7684\u672c\u5730 SQLite \u76ee\u6807\u771f\u76f8\u6e90",
   "type": "module",
   "license": "MIT",

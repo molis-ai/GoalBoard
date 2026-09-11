@@ -864,25 +864,30 @@ export const MOMENTUM_STYLES = `  /* Momentum is an evidence-led workbench: cade
     .theme-picker > summary .theme-caret { display: none; }
     .theme-menu { right: 0; }
     .mobile-switch {
-      padding: 5px 8px;
+      padding: 0 8px;
       gap: 3px;
+      min-height: 44px;
       border-bottom-color: var(--line);
       background: var(--rail);
     }
     .mobile-switch button {
       position: relative;
-      min-height: 33px;
+      min-height: 44px;
       border-radius: 0;
       color: var(--muted);
       font-size: 12px;
       font-weight: 620;
+    }
+    .mobile-switch button:focus-visible {
+      outline: 0;
+      box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--blue) 62%, transparent);
     }
     .mobile-switch button::after {
       content: "";
       position: absolute;
       left: 28%;
       right: 28%;
-      bottom: -5px;
+      bottom: 0;
       height: 2px;
       border-radius: 1px;
       background: transparent;

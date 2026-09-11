@@ -1,5 +1,5 @@
 export const GOALS_EVENT_DOCUMENT_STYLES = `
-  .document-pane:has(.desktop-work-surface:not([hidden]) > .goal-event-document) { min-height: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+  .document-pane:where(:has(.desktop-work-surface:not([hidden]) > .goal-event-document)) { min-height: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
   .desktop-work-surface:has(> .goal-event-document) { min-width: 0; min-height: 0; flex: 1 1 auto; height: 100%; max-height: 100%; overflow: hidden; display: flex; flex-direction: column; }
   .goal-event-document { min-width: 0; min-height: 0; flex: 1 1 auto; height: 100%; max-height: 100%; overflow: hidden; display: flex; flex-direction: column; container-type: inline-size; container-name: goal-event-read; color: var(--ink); }
   .goal-event-document .goal-header { padding: 10px 18px 12px; flex: none; }

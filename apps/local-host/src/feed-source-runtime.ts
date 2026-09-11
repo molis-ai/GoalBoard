@@ -25,7 +25,7 @@ import {
 } from "@adeptify/goalboard-integration-rss";
 
 const APP_ID = "goalboard";
-const APP_VERSION = "0.1.14";
+const APP_VERSION = "0.2.0";
 
 type FetchPort = (input: string | URL, init?: RequestInit) => Promise<Response>;
 

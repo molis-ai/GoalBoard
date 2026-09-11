@@ -3,6 +3,7 @@ import path from "node:path";
 import { collectRuntimeDependencies } from "./home-dependencies.js";
 import { assertFreshRepositoryBuild } from "./home-source.js";
 import { pathState } from "./home-files.js";
+import { copyReleaseEntries, declaredReleaseFileEntries } from "./package-release-files.js";
 
 interface PackageMetadata {
   name: string;
@@ -92,20 +93,7 @@ function publishMetadata(metadata: PackageMetadata, packages: ReadonlyMap<string
 }
 
 async function copyPackageFiles(source: string, destination: string, metadata: PackageMetadata): Promise<void> {
-  await fs.mkdir(destination, { recursive: true });
-  // Our package manifests use explicit relative files/directories, not globs.
-  // Fail on a new unsupported pattern instead of silently omitting its assets.
-  for (const entry of new Set([...metadata.files, "LICENSE", "README.md"])) {
-    if (path.isAbsolute(entry) || entry.split(/[\\/]/).includes("..") || /[*?\[\]{}]/.test(entry)) {
-      throw new Error(`Unsupported release files entry in ${metadata.name}: ${entry}`);
-    }
-    const from = path.join(source, entry);
-    if (!(await pathState(from))) {
-      if (!metadata.files.includes(entry)) continue;
-      throw new Error(`Missing release asset in ${metadata.name}: ${entry}`);
-    }
-    await fs.cp(from, path.join(destination, entry), { recursive: true, dereference: true, errorOnExist: true, force: false });
-  }
+  await copyReleaseEntries(source, destination, await declaredReleaseFileEntries(source, metadata));
 }
 
 async function writePackage(directory: string, metadata: PackageMetadata): Promise<void> {

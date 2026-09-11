@@ -269,6 +269,10 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         const mobileView = mobileTarget.dataset.mobileTarget;
         if (mobileView === "document") setWorkspaceMode("focus", false);
         if (mobileView === "tui") setWorkspaceMode("runtime", false);
+        if (mobileView === "tree") {
+          if (workspace.dataset.workspaceMode === "graph") setWorkspaceMode("focus", false);
+          if (treePane?.dataset.desktopDirectory === "root") setDesktopDirectory(currentModuleDirectory(), true, false);
+        }
         setMobileView(mobileView);
         saveUiState();
         return;

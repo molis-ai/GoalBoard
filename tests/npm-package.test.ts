@@ -27,8 +27,19 @@ test("npm staging packs workspace assets without host binaries or modifying the 
     assert.ok(files.has("node_modules/@adeptify/goalboard-plugin-cli/bin/goalboard-plugin.mjs"));
     assert.ok(files.has("dist/cli/main.js"));
     assert.ok(files.has("vendor/search-evidence-layer/sbom.cdx.json"));
+    const desktopPrefix = "node_modules/@adeptify/goalboard-app-desktop/";
+    assert.ok(files.has(`${desktopPrefix}dist/index.js`));
     for (const file of files) {
       assert.doesNotMatch(file, /\.node$|spawn-helper$|node_modules\/(?:better-sqlite3|node-pty)\//);
+      if (file === desktopPrefix.slice(0, -1) || file.startsWith(desktopPrefix)) {
+        assert.ok(
+          file === `${desktopPrefix}package.json`
+            || file === `${desktopPrefix}README.md`
+            || file === `${desktopPrefix}LICENSE`
+            || file.startsWith(`${desktopPrefix}dist/`),
+          file,
+        );
+      }
     }
     assert.ok(packed.bundled.includes("@adeptify/goalboard-module-goals"));
     for (const name of packed.bundled) {
