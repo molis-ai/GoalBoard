@@ -31,6 +31,8 @@ import {
   type OpenDesktopPanelInput,
 } from "@adeptify/goalboard-contracts/platform/app-host";
 import type {
+  AddProjectPluginInput,
+  BuiltinProjectPluginId,
   AddWorkspaceProjectInput,
   ChangeWorkspaceProjectInput,
   DeleteProjectInput,
@@ -247,6 +249,14 @@ export class GoalBoardProjectCatalog {
 
   listProjects(): GoalBoardProjectRecord[] {
     return this.projects.query.listProjects();
+  }
+
+  listProjectPlugins(projectId: string): BuiltinProjectPluginId[] {
+    return this.projects.query.listProjectPlugins(projectId);
+  }
+
+  addProjectPlugin(input: AddProjectPluginInput): BuiltinProjectPluginId[] {
+    return this.projects.commands.addProjectPlugin(input);
   }
 
   getProject(projectId: string): GoalBoardProjectRecord {

@@ -141,11 +141,15 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
     };
 
     const setTreeWidth = (value, persist = true) => {
-      if (matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;
+      const immersive = document.body.classList.contains("immersive-workbench");
+      if (immersive ? matchMedia("(max-width: 600px)").matches : matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;
       if (!treeResizer) return;
-      const maximum = Math.min(520, Math.max(320, innerWidth * 0.48));
-      const width = Math.round(Math.min(maximum, Math.max(260, Number(value) || 320)));
+      const minimum = immersive ? 236 : 260;
+      const maximum = immersive ? Math.min(520, innerWidth - 360) : Math.min(520, Math.max(320, innerWidth * 0.48));
+      const width = Math.round(Math.min(maximum, Math.max(minimum, Number(value) || 264)));
       workspace.style.setProperty("--tree-width", width + "px");
+      treeResizer.setAttribute("aria-valuemin", String(minimum));
+      treeResizer.setAttribute("aria-valuemax", String(maximum));
       treeResizer.setAttribute("aria-valuenow", String(width));
       scheduleGoalGraphLayout();
       if (persist) queueSave();
@@ -164,6 +168,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
         button.setAttribute("title", nextCollapsed ? L("展开目录") : L("收起目录"));
       });
       treeResizer?.setAttribute("aria-hidden", String(nextCollapsed));
+      immersiveNavigation?.sync();
       scheduleGoalGraphLayout();
       if (persist) queueSave();
     };
@@ -177,7 +182,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
       treeTop: treeScroll.scrollTop,
       documentTop: activeDesktopSurface === "goal" ? documentPane.scrollTop : Number(desktopSurfaceScroll.goal || 0),
       workSurface: activeDesktopSurface,
-      surfaceScroll: { ...desktopSurfaceScroll, [activeDesktopSurface]: documentPane.scrollTop },
+      surfaceScroll: { ...desktopSurfaceScroll, [activeDesktopSurface]: (activeDesktopSurface === "goal" ? documentPane : desktopWorkSurfaces.find(item => item.dataset.workSurface === activeDesktopSurface))?.scrollTop || 0 },
       treeWidth: parseFloat(workspace.style.getPropertyValue("--tree-width")) || treePane.getBoundingClientRect().width,
       tuiWidth: workspace.classList.contains("is-tui-collapsed")
         ? parseFloat(workspace.style.getPropertyValue("--tui-width")) || undefined
@@ -233,8 +238,7 @@ export const CLIENT_DOCUMENTS_STATE_SCRIPT = `    const isAbortError = (error) =
       treeSearch.value = ui?.query || "";
       setSelectedStatuses(ui?.statuses || []);
       restoreMomentumState({
-        momentumOpenOnly: ui?.momentumOpenOnly, momentumPeriod: ui?.momentumPeriod,
-        momentumSelected: ui?.momentumSelected, graphZoom: ui?.graphZoom, graphAutoFit: ui?.graphAutoFit,
+        canvasView: ui?.canvasView,
       });
       filterTree(ui?.query || "");
       if (feedDirectory) {

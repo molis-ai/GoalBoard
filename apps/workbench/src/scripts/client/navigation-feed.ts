@@ -1,6 +1,7 @@
 /** AP3 Workbench client segment: navigation-feed. */
 export const CLIENT_NAVIGATION_FEED_SCRIPT = `
     const renderWorkTabs = () => {
+      immersiveNavigation?.sync();
       if (!workTabs) return;
       const byId = new Map(visibleGoals().map((item) => [item.goal.goal_id, item]));
       const fragment = document.createDocumentFragment();
@@ -60,7 +61,7 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
         return false;
       }
       if (activeDesktopSurface && activeDesktopSurface !== surface) {
-        desktopSurfaceScroll[activeDesktopSurface] = documentPane.scrollTop;
+        desktopSurfaceScroll[activeDesktopSurface] = (activeDesktopSurface === "goal" ? documentPane : desktopWorkSurfaces.find(item => item.dataset.workSurface === activeDesktopSurface))?.scrollTop || 0;
         if (activeDesktopSurface === "goal") goalWorkspaceMode = workspace.dataset.workspaceMode || "focus";
       }
       activeDesktopSurface = surface;
@@ -90,15 +91,17 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       const label = nextSurface.dataset.workSurfaceLabel || surface;
       documentPane.setAttribute("aria-label", label);
       requestAnimationFrame(() => {
-        documentPane.scrollTop = restoreScroll ? Number(desktopSurfaceScroll[surface] || 0) : 0;
+        const scrollPane = surface === "goal" ? documentPane : nextSurface;
+        scrollPane.scrollTop = restoreScroll ? Number(desktopSurfaceScroll[surface] || 0) : 0;
       });
+      pluginWorkbench?.open(surface);
       if (surface === "feed") void ensureFeedWorkbenchLoaded();
       if (surface === "sources" && selectedSource) selectSource(selectedSource, false);
       if (persist) queueSave();
       return true;
     };
 
-    const currentModuleDirectory = () => activeDesktopSurface === "feed" || activeDesktopSurface === "sources" || activeDesktopSurface === "sessions"
+    const currentModuleDirectory = () => activeDesktopSurface === "feed" || activeDesktopSurface === "sources" || activeDesktopSurface === "sessions" || activeDesktopSurface === "artifacts"
       ? activeDesktopSurface
       : "goals";
 
@@ -134,10 +137,13 @@ export const CLIENT_NAVIGATION_FEED_SCRIPT = `
       treePane.dataset.desktopDirectory = next;
       desktopDirectoryPanels.forEach((panel) => { panel.hidden = panel.dataset.directoryPanel !== next; });
       syncMobileNavigationChrome();
+      immersiveNavigation?.sync();
       if (focusTarget) {
         requestAnimationFrame(() => {
           const nextPanel = desktopDirectoryPanels.find((panel) => panel.dataset.directoryPanel === next);
-          const nextFocus = next === "root" && desktopDirectoryOrigin?.isConnected
+          const nextFocus = origin?.closest?.("[data-plugin-strip]")
+            ? origin
+            : next === "root" && desktopDirectoryOrigin?.isConnected
             ? desktopDirectoryOrigin
             : nextPanel?.querySelector('[data-directory-back], [data-directory-open], a[href], button:not([disabled])');
           nextFocus?.focus();

@@ -10,11 +10,13 @@ import type { WebProjectNavigation, WebSettingsSection } from "@adeptify/goalboa
 import { handleLocalRuntimeSettingsHttp, serviceProcessId } from "./web-runtime-settings.js";
 import { installationDiagnostics } from "./web-project-presentation.js";
 import { goalBoardOnboardingStatus } from "./onboarding.js";
+import type { ProjectDeletionWebPorts } from "./web-project-settings.js";
 
 export async function handleLocalCatalogWebRequest(
   request: IncomingMessage, response: ServerResponse, url: URL, serverOptions: WebServerOptions,
   runtimeIntegrations: RuntimeIntegrationService, webService: GoalBoardWebServiceManager, controlToken: string,
   feedSchedulers: Map<string, FeedSchedulerRuntime>, localHost: GoalBoardLocalHost, projects: WebProjectNavigation[], composition: LocalWebComposition,
+  deletionPorts: ProjectDeletionWebPorts,
 ): Promise<void> {
   const { PAGE_CSP, handleOnboarding, renderCapsuleShell, isDesktopShellRequest, planningHttp, projectSettings, servePtyClient } = composition;
   const { renderGoalBoardSettings, renderGoalBoardProjectIndex } = composition.workbenchRenderer;
@@ -63,7 +65,7 @@ export async function handleLocalCatalogWebRequest(
     return;
   }
   if (await handleLocalRuntimeSettingsHttp(request, response, url, runtimeIntegrations, webService)) return;
-  if (await projectSettings.handle(request, response, url, serverOptions.homeDirectory, projects.length)) return;
+  if (await projectSettings.handle(request, response, url, serverOptions.homeDirectory, projects.length, deletionPorts)) return;
   if (request.method === "GET" && url.pathname === "/desktop/pty-client.js") {
     servePtyClient(request, response);
     return;

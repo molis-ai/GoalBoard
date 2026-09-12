@@ -88,7 +88,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
       const active = document.activeElement;
       if (active?.closest?.("[data-live-form], [data-event-form]")) return true;
       const dirtyVisibleForm = [...document.querySelectorAll('[data-live-form][data-live-dirty="true"], [data-event-form][data-live-dirty="true"]')]
-        .some((form) => form.getClientRects().length > 0);
+        .some((form) => form.getClientRects().length > 0 || form.closest("[data-goal-node-workspace]")?.hidden);
       if (dirtyVisibleForm) return true;
       return active?.matches?.('input, textarea, select, [contenteditable="true"]') && Boolean(
         active.closest?.('[data-directory-panel="feed"], [data-directory-panel="sources"], [data-work-surface="feed"], [data-work-surface="sources"]'),
@@ -189,6 +189,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
           feedWorkbench.dataset.loaded = nextFeedWorkbench.dataset.loaded || "true";
           feedWorkbench.dataset.loadedPreset = nextFeedWorkbench.dataset.loadedPreset || "inbox_message";
           state = nextState;
+          projectHome?.sync();
           document.querySelector("#goalboard-data").textContent = JSON.stringify(nextState).replaceAll("<", "\\u003c");
           const deepLinkedEntry = decisionFeedEntryFromHash();
           if (deepLinkedEntry && !nextRows.some((row) => row.dataset.feedEntryId === deepLinkedEntry)) {
@@ -238,6 +239,7 @@ export const CLIENT_REFRESH_DECISIONS_SCRIPT = `      }
           }
         });
         state = nextState;
+        projectHome?.sync();
         document.querySelector("#goalboard-data").textContent = JSON.stringify(nextState).replaceAll("<", "\\u003c");
         selected = goalRefresh.nextSelected;
         if (selected) ensureWorkTab(selected);

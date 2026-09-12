@@ -6,7 +6,7 @@ const GOALS_SELECT_SCRIPT = `    const selectGoal = async (goalId, updateHistory
       }
       const currentView = documentPane.querySelector("[data-goal-view]");
       if (goalId === getSelected() && currentView?.dataset.goalView === goalId) {
-        if (matchMedia("(max-width: 760px)").matches) setWorkspaceMode("focus", false);
+        setWorkspaceMode("focus", false);
         saveUiState();
         return;
       }
@@ -23,7 +23,7 @@ const GOALS_SELECT_SCRIPT = `    const selectGoal = async (goalId, updateHistory
       if (updateHistory) {
         history.pushState({ goalId }, "", goalPageUrl(goalId));
       }
-      if (matchMedia("(max-width: 760px)").matches) setWorkspaceMode("focus", false);
+      setWorkspaceMode("focus", false);
       saveUiState();
     };
 

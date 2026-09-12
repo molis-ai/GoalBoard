@@ -83,6 +83,14 @@ export function migrateCatalog(storage: LocalSqliteStorage, databasePath: string
       metadata.setVersion(10);
       current = 10;
     }
+    if (current === 10) {
+      createProjectsSchema(db);
+      db.exec(`INSERT OR IGNORE INTO project_plugins (project_id, plugin_id, added_at)
+        SELECT project_id, plugin_id, updated_at FROM projects CROSS JOIN
+        (SELECT 'goals' AS plugin_id UNION ALL SELECT 'sessions' UNION ALL SELECT 'feed' UNION ALL SELECT 'artifacts')`);
+      metadata.setVersion(11);
+      current = 11;
+    }
     if (current !== CATALOG_SCHEMA_VERSION) {
       throw new GoalBoardProjectCatalogError(
         "catalog.unsupported_schema",

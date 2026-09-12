@@ -49,6 +49,13 @@ export function createLocalArtifactHttp(ports: { nativeDesktopBootstrapScript: s
         return true;
       }
       const view = readArtifactBrowser(context.query, context.boardId, route.reference);
+      if (request.headers["x-goalboard-fragment"] === "artifact-workbench") {
+        response.writeHead(view.requested && !view.selected ? 404 : 200, {
+          "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "vary": "x-goalboard-fragment",
+        });
+        response.end(artifactWorkbench.fragments({ view, routePrefix: context.routePrefix, primitives }));
+        return true;
+      }
       const html = renderArtifactWorkbenchPage({
         view, routePrefix: context.routePrefix, projectTitle: context.projectTitle,
         lang: htmlLang(), desktopShell: context.desktopShell,

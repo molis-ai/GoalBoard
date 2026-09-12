@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-open-external-url"
+description = "Open a validated HTTP(S) shortcut in the macOS system browser."
+commands.allow = ["open_external_url"]

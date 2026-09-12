@@ -2,6 +2,7 @@ import type { BoardSnapshot, GoalPresentationState as WebGoalStatus, GoalsDocume
 import type { FeedSnapshot, RelayImportAvailability, FeedSourceCatalogView, FeedUiModel } from "@adeptify/goalboard-plugin-feed";
 import type { WebProjectNavigation } from "./settings-navigation.js";
 export interface GoalBoardWebView {
+  enabled_plugins?: import("@adeptify/goalboard-contracts/modules/projects").BuiltinProjectPluginId[];
   snapshot: BoardSnapshot;
   project: WebProjectNavigation | null;
   projects: WebProjectNavigation[];

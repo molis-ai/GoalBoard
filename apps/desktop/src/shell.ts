@@ -13,6 +13,7 @@ export const NATIVE_DESKTOP_BOOTSTRAP_SCRIPT = `(()=>{
     }catch{return input}
   };
   if(!native)return;
+  globalThis.goalboardOpenExternalUrl=(url)=>globalThis.__TAURI__.core.invoke("open_external_url",{url});
   document.documentElement.dataset.nativeDesktop="true";
   const root=document.documentElement;
   root.style.setProperty("--desktop-window-safe-inline-start","88px");

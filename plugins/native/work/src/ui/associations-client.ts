@@ -1,6 +1,6 @@
 /** Browser initializer: only the named ports cross this behavior boundary. */
 export const WORK_ASSOCIATIONS_CLIENT = `
-({ route, parseActionResponse, showDialogStatus }) => {
+({ route, parseActionResponse, showDialogStatus, L }) => {
   const relationsDialog = document.querySelector("[data-session-relations-dialog]");
   const relationsForm = relationsDialog?.querySelector("[data-session-relations-form]");
   const relationsProject = relationsForm?.querySelector("[data-session-relations-project]");
@@ -18,10 +18,10 @@ export const WORK_ASSOCIATIONS_CLIENT = `
     }
     const note = relationsForm?.querySelector("[data-session-relations-note]");
     if (note) note.textContent = sameProject
-      ? "切换或清空当前 Goal 会把旧 Goal 保留为历史。"
+      ? L("切换或清空当前 Goal 会把旧 Goal 保留为历史。")
       : relationsProject?.value
-        ? "转移到另一个 Project 时会清空当前 Goal，并保留原 Goal 历史。"
-        : "移出当前 Project 后，这条 Session 会从本目录消失；原 Runtime 内容不会删除。";
+        ? L("转移到另一个 Project 时会清空当前 Goal，并保留原 Goal 历史。")
+        : L("移出当前 Project 后，这条 Session 会从本目录消失；原 Runtime 内容不会删除。");
     if (relationsSubmit) relationsSubmit.disabled = !relationsConfirm?.checked;
   };
   document.querySelectorAll("[data-open-session-relations]").forEach((button) => button.addEventListener("click", () => {
@@ -42,7 +42,7 @@ export const WORK_ASSOCIATIONS_CLIENT = `
     event.preventDefault();
     if (!relationsDetail?.dataset.detailId || !relationsConfirm?.checked) return;
     relationsSubmit.disabled = true;
-    showDialogStatus(relationsStatus, "正在保存这条 Session 的关系...", false);
+    showDialogStatus(relationsStatus, L("正在保存这条 Session 的关系..."), false);
     try {
       await parseActionResponse(await fetch(route("/api/sessions/" + encodeURIComponent(relationsDetail.dataset.detailId) + "/associations"), {
         method: "PATCH",
@@ -77,10 +77,10 @@ export const WORK_ASSOCIATIONS_CLIENT = `
     const name = archiveForm?.querySelector("[data-session-archive-name]");
     const impact = archiveForm?.querySelector("[data-session-archive-impact]");
     const copy = archiveForm?.querySelector("[data-session-archive-confirm-copy]");
-    if (title) title.textContent = archiveNext ? "归档 Session 记录" : "恢复 Session 记录";
+    if (title) title.textContent = archiveNext ? L("归档 Session 记录") : L("恢复 Session 记录");
     if (name) name.textContent = archiveDetail?.querySelector("h1")?.textContent || archiveDetail?.dataset.detailId || "";
-    if (impact) impact.textContent = archiveNext ? "从默认活跃记录中整理为已归档；仍可筛选和恢复。" : "恢复为可查看记录；所有关系和历史保持不变。";
-    if (copy) copy.textContent = archiveNext ? "确认只归档 GoalBoard 记录，不删除 Runtime 内容。" : "确认恢复这条 GoalBoard Session 记录。";
+    if (impact) impact.textContent = archiveNext ? L("从默认活跃记录中整理为已归档；仍可筛选和恢复。") : L("恢复为可查看记录；所有关系和历史保持不变。");
+    if (copy) copy.textContent = archiveNext ? L("确认只归档 GoalBoard 记录，不删除 Runtime 内容。") : L("确认恢复这条 GoalBoard Session 记录。");
     if (archiveStatus) archiveStatus.hidden = true;
     if (archiveSubmit) archiveSubmit.disabled = true;
     archiveDialog?.showModal();
@@ -90,7 +90,7 @@ export const WORK_ASSOCIATIONS_CLIENT = `
     event.preventDefault();
     if (!archiveDetail?.dataset.detailId || !archiveConfirm?.checked) return;
     archiveSubmit.disabled = true;
-    showDialogStatus(archiveStatus, archiveNext ? "正在归档记录..." : "正在恢复记录...", false);
+    showDialogStatus(archiveStatus, archiveNext ? L("正在归档记录...") : L("正在恢复记录..."), false);
     try {
       await parseActionResponse(await fetch(route("/api/sessions/" + encodeURIComponent(archiveDetail.dataset.detailId) + "/archive"), {
         method: "POST",

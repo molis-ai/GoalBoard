@@ -23,8 +23,10 @@ export const ONBOARDING_CLIENT_SCRIPT = `
     };
     const dismiss = async (kind) => {
       const mode = document.body.dataset.onboardingMode || "update";
+      const returnHref = new URLSearchParams(location.search).get("desktop") === "1"
+        || document.body.dataset.nativeDesktop === "true" ? "/?desktop=1" : "/";
       if (mode === "new_project") {
-        location.assign("/");
+        location.assign(returnHref);
         return;
       }
       dismissButtons.forEach((button) => { button.disabled = true; });
@@ -37,7 +39,7 @@ export const ONBOARDING_CLIENT_SCRIPT = `
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || L("无法保存引导状态"));
-        location.assign("/");
+        location.assign(returnHref);
       } catch (error) {
         setGlobalError(error instanceof Error ? error.message : String(error));
         dismissButtons.forEach((button) => { button.disabled = false; });

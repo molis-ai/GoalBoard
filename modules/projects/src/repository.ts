@@ -1,4 +1,5 @@
 import type {
+  BuiltinProjectPluginId,
   ProjectDeletionRecord,
   ProjectRecord,
   ProjectSelection,
@@ -67,6 +68,16 @@ export class ProjectsRepository {
 
   removeProject(projectId: string): number {
     return Number(this.db.prepare("DELETE FROM projects WHERE project_id = ?").run(projectId).changes);
+  }
+
+  listProjectPlugins(projectId: string): BuiltinProjectPluginId[] {
+    return (this.db.prepare("SELECT plugin_id FROM project_plugins WHERE project_id = ? ORDER BY plugin_id")
+      .all(projectId) as { plugin_id: BuiltinProjectPluginId }[]).map(row => row.plugin_id);
+  }
+
+  addProjectPlugin(projectId: string, pluginId: BuiltinProjectPluginId, at: string): boolean {
+    return Number(this.db.prepare("INSERT INTO project_plugins (project_id, plugin_id, added_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING")
+      .run(projectId, pluginId, at).changes) > 0;
   }
 
   renameProject(projectId: string, displayName: string, updatedAt: string): void {
@@ -299,6 +310,12 @@ export function createProjectsSchema(db: ProjectsSqliteDatabase): void {
     );
     CREATE INDEX IF NOT EXISTS projects_display_name_idx
       ON projects(display_name COLLATE NOCASE, project_id);
+    CREATE TABLE IF NOT EXISTS project_plugins (
+      project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+      plugin_id TEXT NOT NULL CHECK (plugin_id IN ('goals', 'sessions', 'feed', 'artifacts')),
+      added_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, plugin_id)
+    );
     CREATE TABLE IF NOT EXISTS project_events (
       event_id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,

@@ -11,10 +11,11 @@ export function createWorkSessionRenderer(
   project: ProjectOperationsProject | null,
   data: ProjectOperationsData | undefined,
   icon: WorkUiModel["icon"],
+  text?: WorkUiModel["text"],
 ): ProjectOperationsSlice {
   const render = (surface: WorkUiSurface) => host.mount({
     slot: slots[surface === "root" ? "directory" : surface],
-    contribution: { contribution_id: WORK_UI_CONTRIBUTION_ID, surface, model: { project, data, icon } },
+    contribution: { contribution_id: WORK_UI_CONTRIBUTION_ID, surface, model: { project, data, icon, text } },
   }).html;
   return { rootItems: render("root"), directories: render("directory"), surfaces: render("main"), overlays: render("overlay") };
   };

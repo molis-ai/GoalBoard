@@ -65,10 +65,20 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       showToast, navigate: (url) => location.assign(globalThis.goalboardNavigationUrl(url)),
     });
     const applyMobilePanePresence = () => {
+      if (immersiveNavigation) { immersiveNavigation.syncPresence(); return; }
       const graph = workspace.querySelector("[data-goal-momentum]");
       const narrow = matchMedia("(max-width: 760px)").matches;
       const view = workspace.dataset.mobileView || "tree";
       const mode = workspace.dataset.workspaceMode;
+      const canvas = workspace.querySelector('[data-goal-canvas-shell][data-goal-active="true"]');
+      if (canvas) {
+        treePane.toggleAttribute("inert", narrow && view !== "tree");
+        canvas.toggleAttribute("inert", narrow && view === "tree");
+        documentPane.removeAttribute("inert");
+        tuiPane?.toggleAttribute("inert", Boolean(documentPane.querySelector(".goal-event-document.is-editing-goal")));
+        graph?.toggleAttribute("inert", canvas.dataset.expanded === "true");
+        return;
+      }
       const visiblePane = !narrow
         ? null
         : mode === "graph" && view !== "tree"
@@ -121,11 +131,13 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       return true;
     };
 
-    const { graphElement, loadGoalGraph, updateGraphVisibility, readMomentumState,
+    const { graphElement, loadGoalGraph, syncGoalWorkspace, updateGraphVisibility, readMomentumState,
       restoreMomentumState, rememberMomentumGoal, scheduleGoalGraphLayout, restoreGoalGraphViewport,
       handleMomentumNavigationClick, handleMomentumSelectionClick, handleMomentumZoomClick } =
       (${GOALS_MOMENTUM_CLIENT_FACTORY_SCRIPT})({
         workspace, treeSearch, documentCollection, route, translate: L,
+        projectId: state.project?.project_id || state.snapshot.board.board_id,
+        selectGoal: (...args) => selectGoal(...args),
         getSelected: () => selected, getSelectedStatuses: () => getSelectedStatuses(),
         queueSave: () => queueSave(), setWorkspaceMode: (...args) => setWorkspaceMode(...args),
         setNavigatorView: (...args) => setNavigatorView(...args),
@@ -142,6 +154,23 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
       workspace.dataset.navigatorView = navigatorView;
       workspace.dataset.workspaceMode = nextMode;
       workspace.classList.toggle("is-graph-view", nextMode === "graph");
+      const canvasActive = Boolean(workspace.querySelector("[data-goal-canvas-shell]")) && activeDesktopSurface === "goal";
+      if (canvasActive) {
+        documentPane.hidden = false;
+        if (tuiPane) tuiPane.hidden = false;
+        syncGoalWorkspace(nextMode, true);
+        immersiveNavigation?.syncGoalMode(nextMode);
+        document.querySelectorAll("button[data-navigator-view]").forEach((button) => {
+          const active = button.dataset.navigatorView === navigatorView;
+          button.classList.toggle("is-active", active);
+          button.setAttribute("aria-selected", String(active));
+        });
+        if (matchMedia("(max-width: 760px)").matches) setMobileView("document");
+        else applyMobilePanePresence();
+        if (persist) queueSave();
+        return;
+      }
+      syncGoalWorkspace(nextMode, false);
       documentPane.hidden = nextMode !== "focus";
       if (tuiPane) tuiPane.hidden = nextMode !== "runtime";
       document.querySelectorAll("button[data-navigator-view]").forEach((button) => {
@@ -156,7 +185,7 @@ export const CLIENT_EDITING_GRAPH_SCRIPT = `
         button.setAttribute("tabindex", active ? "0" : "-1");
       });
       if (graph) graph.hidden = nextMode !== "graph";
-      if (nextMode === "graph") {
+      if (nextMode === "graph" && !workspace.querySelector("[data-goal-canvas-shell]")) {
         if (graph?.dataset.loaded === "true") updateGraphVisibility();
         else void loadGoalGraph();
       }

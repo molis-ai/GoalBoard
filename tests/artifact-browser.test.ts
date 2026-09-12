@@ -48,18 +48,18 @@ async function fixture(t: test.TestContext) {
   const get = (path: string, lang = "zh") => fetch(origin + path, { headers: { "accept-language": lang } });
   // Allow the normal host's first-request initialization before taking the read-only baseline.
   await (await get("/health")).text();
-  return { store, coordinator, get };
+  return { store, coordinator, get, origin };
 }
 
 test("Artifact HTTP links exact versions, exports opaque records and preserves existing Goal/Evidence state", async (t) => {
-  const { store, coordinator, get } = await fixture(t);
+  const { store, coordinator, get, origin } = await fixture(t);
   const first = coordinator.artifacts.commands.registerVersion(registration()).artifact;
   const second = coordinator.artifacts.commands.registerVersion(registration({ version: 2,
     content: { kind: "inline", payload: { title: "Later report" } } })).artifact;
   const before = store.snapshot(DEMO_BOARD_ID);
   const versions = coordinator.artifacts.query.listArtifacts(DEMO_BOARD_ID);
   const root = await (await get("/")).text();
-  assert.match(root, /href="\/artifacts"/);
+  assert.match(root, /data-work-surface-open="artifacts"/);
   const index = await get("/artifacts");
   assert.equal(index.status, 200);
   const directory = await index.text();
@@ -80,6 +80,13 @@ test("Artifact HTTP links exact versions, exports opaque records and preserves e
     assert.equal(exported.headers.get("content-disposition"), `attachment; filename="artifact-v${record.version}.json"`);
     assert.deepEqual(await exported.json(), record);
   }
+  const fragment = await fetch(origin + exactPath(1), { headers: { "x-goalboard-fragment": "artifact-workbench" } });
+  const fragmentHtml = await fragment.text();
+  assert.equal(fragment.status, 200);
+  assert.match(fragmentHtml, /data-artifact-directory/);
+  assert.match(fragmentHtml, /data-artifact-detail/);
+  assert.match(fragmentHtml, /Original report/);
+  assert.doesNotMatch(fragmentHtml, /Later report|<!doctype|<script>attack/);
   const english = await (await get(exactPath(1), "en")).text();
   assert.match(english, /lang="en"/);
   assert.match(english, /No compatible plugin/);
@@ -164,7 +171,8 @@ test("Artifact navigation and export retain the selected catalog Project", async
   assert.ok(page.includes(`href="${prefix}/api${exactPath(1)}/export"`));
   assert.ok(page.includes(`href="${prefix}/"`));
   const root = await (await fetch(origin + prefix + "/")).text();
-  assert.ok(root.includes(`href="${prefix}/artifacts"`));
+  assert.ok(root.includes(`data-route-prefix="${prefix}"`));
+  assert.match(root, /data-work-surface-open="artifacts"/);
   const exported = await fetch(origin + prefix + `/api${exactPath(1)}/export`);
   assert.deepEqual(await exported.json(), original);
   const other = await fetch(origin + `/projects/${beta.project_id}` + exactPath(1));

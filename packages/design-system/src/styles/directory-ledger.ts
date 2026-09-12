@@ -29,23 +29,23 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     white-space: nowrap;
   }
 
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-row {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-row {
     min-height: 0;
     align-items: flex-start;
     border-radius: 0;
     background: transparent;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-row:hover,
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-row:has(.tree-node.is-selected) {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-row:hover,
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-row:has(.tree-node.is-selected) {
     background: transparent;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-toggle,
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-guide {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-toggle,
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-guide {
     width: 16px;
     height: 40px;
     flex: 0 0 16px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-entry {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-entry {
     min-width: 0;
     flex: 1 1 auto;
     display: grid;
@@ -53,19 +53,19 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     grid-template-rows: auto auto;
     align-items: center;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-entry:hover {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-entry:hover {
     color: var(--ink);
     background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-entry.is-selected {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-entry.is-selected {
     color: var(--ink);
     background: var(--paper);
     box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 28%, transparent);
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-entry:has(.tree-relations[open]) {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-entry:has(.tree-relations[open]) {
     grid-template-rows: auto auto;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-node {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-node {
     width: auto;
     min-height: 22px;
     padding: 5px 0 0 7px;
@@ -78,29 +78,29 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     grid-row: 1;
     align-items: center;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-node:hover,
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-node.is-selected {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-node:hover,
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-node.is-selected {
     color: inherit;
     background: transparent;
     box-shadow: none;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-node:focus-visible {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-node:focus-visible {
     outline: 2px solid color-mix(in srgb, var(--blue) 72%, transparent);
     outline-offset: -2px;
     box-shadow: none;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-copy {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-copy {
     min-width: 0;
     display: block;
     overflow: hidden;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-title-line,
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-meta-line {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-title-line,
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-meta-line {
     min-width: 0;
     display: flex;
     align-items: center;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-title-line strong {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-title-line strong {
     min-width: 0;
     overflow: hidden;
     color: inherit;
@@ -112,34 +112,34 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     text-overflow: clip;
     white-space: normal;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-toggle {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-toggle {
     height: 30px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-node {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-node {
     min-height: 30px;
     padding-block: 5px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-node .tree-title-line strong {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-node .tree-title-line strong {
     overflow-wrap: normal;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-meta-line > .tree-progress {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry > .tree-meta-line > .tree-progress {
     display: none;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) {
     grid-template-rows: auto;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) > .tree-meta-line {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) > .tree-meta-line {
     display: none;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) > .directory-row-state {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-item:not(.is-collapsed):has(> .tree-children) > .tree-row > .tree-entry:not(:has(> .tree-meta-line .tree-relations)) > .directory-row-state {
     grid-row: 1;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-entry.is-selected .tree-title-line strong {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-entry.is-selected .tree-title-line strong {
     font-weight: 690;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-meta-line {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-meta-line {
     min-width: 0;
     padding: 0 0 5px 7px;
     gap: 7px;
@@ -147,11 +147,11 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     grid-column: 1;
     grid-row: 2;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-meta-line:has(.tree-relations[open]) {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-meta-line:has(.tree-relations[open]) {
     padding-right: 7px;
     flex-wrap: wrap;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-meta-line > small {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-meta-line > small {
     min-width: 0;
     max-width: 92px;
     flex: 1 1 42px;
@@ -165,7 +165,7 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress {
     width: auto;
     margin: 0;
     color: var(--muted);
@@ -175,24 +175,24 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     font-size: 8.5px;
     font-variant-numeric: tabular-nums;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress > i {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress > i {
     width: 26px;
     height: 2px;
     display: block;
     overflow: hidden;
     background: var(--line-strong);
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress > i > b { background: var(--blue); }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress.is-blocked,
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress.is-blocked > span { color: var(--red); }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-progress.is-blocked > i > b { background: var(--red); }
-  body[data-desktop-shell="true"] .desktop-goal-directory .directory-row-state {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress > i > b { background: var(--blue); }
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress.is-blocked,
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress.is-blocked > span { color: var(--red); }
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-progress.is-blocked > i > b { background: var(--red); }
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .directory-row-state {
     margin-right: 7px;
     grid-column: 2;
     grid-row: 1 / 3;
     justify-self: end;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .directory-row-state > .goal-status {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .directory-row-state > .goal-status {
     width: auto;
     min-width: 0;
     min-height: 0;
@@ -202,7 +202,7 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     background: transparent;
     font-size: 9px;
   }
-  html[data-density="compact"] body[data-desktop-shell="true"][data-board-view]:not([data-board-view="decisions"]) .desktop-goal-directory .directory-row-state > .goal-status {
+  html[data-density="compact"] body[data-desktop-shell="true"][data-board-view]:not([data-board-view="decisions"]):where(:not(.immersive-workbench)) .desktop-goal-directory .directory-row-state > .goal-status {
     min-height: 0;
     padding: 0;
     border: 0;
@@ -210,25 +210,25 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     background: transparent;
     font-size: 9px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations {
     width: auto;
     min-width: 0;
     margin: 0;
     color: var(--muted);
     flex: 0 1 auto;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations > summary {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations > summary {
     max-width: 100%;
     min-height: 14px;
     padding: 0;
     border-radius: 4px;
     gap: 4px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations > summary:hover {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations > summary:hover {
     color: var(--ink-soft);
     background: transparent;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations > summary em {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations > summary em {
     min-height: 0;
     padding: 0;
     border: 0;
@@ -236,17 +236,17 @@ export const DIRECTORY_LEDGER_STYLES = `  /* Unified directory ledger: Goals est
     background: transparent;
     font-size: 8.5px;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations > summary strong {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations > summary strong {
     font-size: 8.5px;
     font-weight: 620;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations > summary .tree-relations-mark {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations > summary .tree-relations-mark {
     display: none;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-relations[open] {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-relations[open] {
     flex-basis: 100%;
   }
-  body[data-desktop-shell="true"] .desktop-goal-directory .tree-deps {
+  body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .tree-deps {
     width: min(206px, calc(100vw - 90px));
     margin: 3px 0 4px;
     padding: 3px 0 2px 7px;

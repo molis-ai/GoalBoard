@@ -265,8 +265,8 @@ export function eventDirectoryPresentation(state: GoalEventStateView, _goal?: Pi
       event_work: true,
       status: "execution_blocked",
       display_status: "blocked",
-      status_label: "可记录，尚不可完成",
-      main_action_label: "处理 Concern",
+      status_label: "受阻",
+      main_action_label: "处理问题",
       action_summary: blocking[0]!.title,
     };
   }
@@ -281,23 +281,13 @@ export function eventDirectoryPresentation(state: GoalEventStateView, _goal?: Pi
       action_summary: next,
     };
   }
-  if (!state.config.types.length) {
-    return {
-      event_work: true,
-      status: "execution_pending",
-      display_status: "continue",
-      status_label: "可记录",
-      main_action_label: "工作规划",
-      action_summary: "还没有登记记录方式。可以从空白开始，不必先采用模板。",
-    };
-  }
   return {
     event_work: true,
-    status: "executing",
-    display_status: "in_progress",
-    status_label: "正在推进",
-    main_action_label: "记录进展",
-    action_summary: state.progress_summary?.summary || "按当前约定记录事实。",
+    status: "execution_pending",
+    display_status: "continue",
+    status_label: state.latest_reports.length || state.progress_summary ? "待继续" : "待开始",
+    main_action_label: state.latest_reports.length || state.progress_summary ? "继续工作" : "开始工作",
+    action_summary: state.progress_summary?.summary || "打开终端开始工作，或添加一条记录。",
   };
 }
 

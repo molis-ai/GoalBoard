@@ -85,11 +85,11 @@ export function authorizeLocalWebRequest(
   }
   const prior = mutationKeys.get(idempotencyKey);
   if (prior === "in_flight") {
-    sendLocalWebJson(response, 409, { error: "这次操作正在提交", code: "request.in_flight" });
+    sendLocalWebJson(response, 409, { error: L("这次操作正在提交"), code: "request.in_flight" });
     return false;
   }
   if (prior === "complete" && !isEventCommandReplayPath(url.pathname)) {
-    sendLocalWebJson(response, 409, { error: "这次操作已经提交，不会重复执行" });
+    sendLocalWebJson(response, 409, { error: L("这次操作已经提交，不会重复执行") });
     return false;
   }
   mutationKeys.set(idempotencyKey, "in_flight");

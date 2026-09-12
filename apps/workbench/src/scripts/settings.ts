@@ -1,6 +1,7 @@
+import { PROJECT_SETTINGS_CLIENT_SCRIPT } from "./project-settings.js";
 import { WEB_SERVICE_SETTINGS_SCRIPT } from "./settings-web-service.js";
 
-export const SETTINGS_CLIENT_SCRIPT = WEB_SERVICE_SETTINGS_SCRIPT + `
+export const SETTINGS_CLIENT_SCRIPT = WEB_SERVICE_SETTINGS_SCRIPT + PROJECT_SETTINGS_CLIENT_SCRIPT + `
   (() => {
     const dialog = document.querySelector("[data-runtime-plan-dialog]");
     if (!dialog) return;
@@ -122,27 +123,6 @@ export const SETTINGS_CLIENT_SCRIPT = WEB_SERVICE_SETTINGS_SCRIPT + `
         error.hidden = false;
         submit.disabled = false;
       }
-    });
-    document.querySelectorAll("[data-project-rename]").forEach((form) => {
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const values = new FormData(form);
-        const error = form.querySelector(".settings-form-error");
-        const submit = form.querySelector("button[type=submit]");
-        submit.disabled = true;
-        error.hidden = true;
-        try {
-          const response = await fetch("/api/settings/projects/" + encodeURIComponent(form.dataset.projectRename) + "/rename", { method: "POST", headers: goalboardControlHeaders(), body: JSON.stringify({ display_name: String(values.get("display_name") || "").trim() }) });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || L("项目改名失败"));
-          showToast(L("项目已改名为“") + result.project.display_name + "”");
-          setTimeout(() => location.reload(), 450);
-        } catch (caught) {
-          error.textContent = caught.message || L("项目改名失败");
-          error.hidden = false;
-          submit.disabled = false;
-        }
-      });
     });
     document.querySelectorAll("[data-demo-action]").forEach((button) => {
       button.addEventListener("click", async () => {

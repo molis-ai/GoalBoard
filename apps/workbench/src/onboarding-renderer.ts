@@ -1,3 +1,4 @@
+import { THEME_BOOTSTRAP_SCRIPT, VISUAL_FOUNDATION_CLIENT_SCRIPT } from "@adeptify/goalboard-design-system";
 import { CONTROL_CLIENT_SCRIPT, ONBOARDING_CLIENT_SCRIPT } from "./browser-assets.js";
 import { ONBOARDING_INTENT_FRAMES } from "./onboarding-intent.js";
 
@@ -48,6 +49,7 @@ export function createWorkbenchOnboardingRenderer(primitives: OnboardingRenderPr
   ${controlTokenMeta(options.controlToken ?? "")}
   <title>${L("GoalBoard 已更新")}</title>
   <script>${NATIVE_DESKTOP_BOOTSTRAP_SCRIPT}</script>
+  <script>${THEME_BOOTSTRAP_SCRIPT}</script>
   <link rel="stylesheet" href="/assets/goalboard-onboarding.css">
 </head>
 <body class="onboarding-page onboarding-page--update"${desktopShell ? ' data-native-desktop="true"' : ""}>
@@ -69,6 +71,7 @@ export function createWorkbenchOnboardingRenderer(primitives: OnboardingRenderPr
     <p class="onboarding-error" data-onboarding-error role="alert" hidden></p>
   </main>
   <script>${clientI18nScript()}${CONTROL_CLIENT_SCRIPT}</script>
+  <script>${VISUAL_FOUNDATION_CLIENT_SCRIPT}</script>
   <script>${ONBOARDING_CLIENT_SCRIPT}</script>
 </body>
 </html>`;
@@ -104,6 +107,7 @@ export function createWorkbenchOnboardingRenderer(primitives: OnboardingRenderPr
   <meta name="viewport" content="width=device-width, initial-scale=1">
   ${controlTokenMeta(options.controlToken ?? "")}
   <title>${title}</title>
+  <script>${THEME_BOOTSTRAP_SCRIPT}</script>
   <link rel="stylesheet" href="/assets/goalboard-onboarding.css">
   <script>${NATIVE_DESKTOP_BOOTSTRAP_SCRIPT}</script>
 </head>
@@ -182,6 +186,7 @@ export function createWorkbenchOnboardingRenderer(primitives: OnboardingRenderPr
     </form>
   </main>
   <script>${clientI18nScript()}${CONTROL_CLIENT_SCRIPT}</script>
+  <script>${VISUAL_FOUNDATION_CLIENT_SCRIPT}</script>
   <script>${ONBOARDING_CLIENT_SCRIPT}</script>
 </body>
 </html>`;

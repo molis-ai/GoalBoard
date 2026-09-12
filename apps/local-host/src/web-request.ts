@@ -41,7 +41,14 @@ export async function handleGoalBoardWebRequest(
   const { PAGE_CSP, handleSessions, handleDesktopPanelApi, goalsReadHttp, planningHttp, desktopRuntimeAvailability, servePtyClient, workbenchRenderer, buildCapsuleSnapshot, handleArtifactNativePluginHttp, isDesktopShellRequest } = composition;
   const resolved = await resolveWebRequest(serverOptions, url.pathname, composition.withCatalog);
   if (resolved.kind === "catalog_index") {
-    await handleLocalCatalogWebRequest(request, response, url, serverOptions, runtimeIntegrations, webService, controlToken, feedSchedulers, localHost, resolved.projects, composition);
+    await handleLocalCatalogWebRequest(request, response, url, serverOptions, runtimeIntegrations, webService, controlToken, feedSchedulers, localHost, resolved.projects, composition, {
+      isPanelAlive: (panelId) => ptyHost.alive(panelId),
+      releaseProject: async (databasePath) => {
+        feedSchedulers.delete(databasePath);
+        webViewCache.delete(databasePath);
+        await localHost.closeProject(databasePath);
+      },
+    });
     return;
   }
       if (resolved.kind === "project_not_found") {

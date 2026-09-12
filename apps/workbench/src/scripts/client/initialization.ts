@@ -1,8 +1,31 @@
+import { PROJECT_HOME_FACTORY_SCRIPT } from "./project-home.js";
+import { PLUGIN_WORKBENCH_FACTORY_SCRIPT } from "./plugin-workbench.js";
+import { IMMERSIVE_NAVIGATION_FACTORY_SCRIPT } from "./immersive-navigation.js";
 /** AP3 Workbench client segment: initialization. */
 export const CLIENT_INITIALIZATION_SCRIPT = `    });
 
+    immersiveNavigation = (${IMMERSIVE_NAVIGATION_FACTORY_SCRIPT})({
+      workspace, treePane, documentPane, getSelected: () => selected, getState: () => state,
+      getSurface: () => activeDesktopSurface, translate: L,
+      setDirectory: (...args) => setDesktopDirectory(...args),
+      setWorkSurface: (...args) => setDesktopWorkSurface(...args),
+      setDirectoryCollapsed: (...args) => setDirectoryCollapsed(...args),
+      setWorkspaceMode: (...args) => setWorkspaceMode(...args),
+      setMobileView: (...args) => setMobileView(...args), queueSave: () => queueSave(),
+    });
+    pluginWorkbench = (${PLUGIN_WORKBENCH_FACTORY_SCRIPT})({
+      route, translate: L, projectId: state.project?.project_id,
+      setSurface: surface => { setDesktopDirectory("artifacts", false, false); setDesktopWorkSurface(surface); },
+      saveUiState, setMobileView,
+    });
+    projectHome = (${PROJECT_HOME_FACTORY_SCRIPT})({ getState: () => state, translate: L });
     bindGoalCreateEvents();
-    addEventListener("popstate", handleGoalPopState);
+    addEventListener("popstate", (event) => {
+      if (localPathname() === "/" && !decisionView && !collectionView) {
+        setDesktopDirectory("root", false, false);
+        setDesktopWorkSurface("home");
+      } else handleGoalPopState(event);
+    });
     addEventListener("hashchange", handleGoalHashChange);
     addEventListener("pagehide", saveUiState);
     addEventListener("keydown", (event) => {
@@ -47,7 +70,7 @@ export const CLIENT_INITIALIZATION_SCRIPT = `    });
       }
       desktopCompanionActive = nextCompanionActive;
       applyMobilePanePresence();
-      setTreeWidth(treePane.getBoundingClientRect().width, false);
+      setTreeWidth(parseFloat(workspace.style.getPropertyValue("--tree-width")) || treePane.getBoundingClientRect().width, false);
       scheduleGoalGraphLayout();
     });
 
@@ -76,12 +99,19 @@ export const CLIENT_INITIALIZATION_SCRIPT = `    });
       if (desktopDirectoryPanels.length) {
         setDesktopDirectory(decisionView ? "feed" : treePane?.dataset.desktopDirectory || "root", false, false);
       }
-      if (desktopWorkSurfaces.length) setDesktopWorkSurface(decisionView ? "feed" : "goal", false, false);
+      if (desktopWorkSurfaces.length) setDesktopWorkSurface(activeDesktopSurface, false, false);
     }
+    immersiveNavigation?.sync();
     const directGoalRequested = /^\\/(?:archive\\/|trash\\/)?goals\\/[^\\/]+\\/?$/.test(localPathname());
     const restoredNavigation = restoredUi && ["reload", "back_forward"].includes(
       performance.getEntriesByType("navigation")[0]?.type,
     );
+    if (!directGoalRequested && !restoredNavigation && !decisionView && !collectionView) {
+      goalWorkspaceMode = "graph";
+      setDesktopDirectory("root", false, false);
+      setDesktopWorkSurface("home", false, false);
+      saveUiState();
+    }
     if (directGoalRequested && selected && !restoredNavigation) {
       goalWorkspaceMode = "focus";
       setDesktopDirectory("goals", false, false);

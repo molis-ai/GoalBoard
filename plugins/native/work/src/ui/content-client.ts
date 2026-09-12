@@ -1,11 +1,11 @@
 /** Browser initializer: only the named ports cross this behavior boundary. */
 export const WORK_CONTENT_CLIENT = `
-({ route }) => {
+({ route, L }) => {
   const sourceLabel = (source) => source === "runtime_native"
-    ? "Runtime 原生"
+    ? L("Runtime 原生")
     : source === "goalboard_tui"
-      ? "GoalBoard TUI · 部分终端记录"
-      : "GoalBoard 记录";
+      ? L("GoalBoard TUI · 部分终端记录")
+      : L("GoalBoard 记录");
   const renderContentState = (detail, title, message, retry = false) => {
     const body = detail.querySelector(".session-content-body");
     body.replaceChildren();
@@ -22,7 +22,7 @@ export const WORK_CONTENT_CLIENT = `
       button.type = "button";
       button.className = "document-action";
       button.dataset.sessionRetry = "";
-      button.textContent = "重试读取";
+      button.textContent = L("重试读取");
       copy.append(button);
     }
     state.append(copy);
@@ -55,10 +55,12 @@ export const WORK_CONTENT_CLIENT = `
     return svg;
   };
   const formatSessionDay = (date) => {
-    if (Number.isNaN(date.getTime())) return { key: "unknown", label: "时间未知" };
+    if (Number.isNaN(date.getTime())) return { key: "unknown", label: L("时间未知") };
     const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-    const weekday = date.toLocaleDateString("zh-CN", { weekday: "long" });
-    return { key, label: (date.getMonth() + 1) + " 月 " + date.getDate() + " 日 · " + weekday };
+    const locale = document.documentElement.lang || "zh-CN";
+    const weekday = date.toLocaleDateString(locale, { weekday: "long" });
+    const monthDay = date.toLocaleDateString(locale, { month: "long", day: "numeric" });
+    return { key, label: monthDay + " · " + weekday };
   };
   const applySessionContentFilters = (detail) => {
     if (!detail) return;
@@ -84,10 +86,10 @@ export const WORK_CONTENT_CLIENT = `
       ? payload.events.filter((event) => String(event.content || "").replace(/[\s\u200B-\u200D\uFEFF]/g, "") || ["tool", "artifact", "terminal_output"].includes(event.kind))
       : [];
     if (!events.length) {
-      const title = payload.content_mode === "failed" ? "Runtime 内容读取失败" : "还没有可显示的执行内容";
+      const title = payload.content_mode === "failed" ? L("Runtime 内容读取失败") : L("还没有可显示的执行内容");
       const message = payload.native_error?.message || (payload.content_mode === "unavailable"
-        ? "这个 Runtime 没有内容读取能力，GoalBoard 也还没有持久化的 TUI 记录。"
-        : "Session 身份与关系已经保留，产生执行记录后会显示在这里。");
+        ? L("这个 Runtime 没有内容读取能力，GoalBoard 也还没有持久化的 TUI 记录。")
+        : L("Session 身份与关系已经保留，产生执行记录后会显示在这里。"));
       renderContentState(detail, title, message, payload.content_mode === "failed");
       return;
     }
@@ -107,8 +109,8 @@ export const WORK_CONTENT_CLIENT = `
       summary.setAttribute("role", "status");
       const count = Number(payload.native_history.turn_count || 0);
       summary.textContent = payload.native_history.has_earlier
-        ? "为保证稳定性，这里显示最近 " + count + " 轮的摘要；更早记录仍保留在原 Runtime。"
-        : "已安全读取这条 Session 的 " + count + " 轮摘要；大体积工具输出会由原 Runtime 收拢。";
+        ? L("为保证稳定性，这里显示最近 {count} 轮的摘要；更早记录仍保留在原 Runtime。", { count })
+        : L("已安全读取这条 Session 的 {count} 轮摘要；大体积工具输出会由原 Runtime 收拢。", { count });
       list.append(summary);
     }
     const dayGroups = new Map();
@@ -152,15 +154,15 @@ export const WORK_CONTENT_CLIENT = `
       const metaParts = [
         sourceLabel(event.source),
         metadata.duration_ms != null && Number.isFinite(Number(metadata.duration_ms)) ? Math.max(0, Math.round(Number(metadata.duration_ms))) + " ms" : "",
-        metadata.exit_code != null ? "退出码 " + metadata.exit_code : "",
+        metadata.exit_code != null ? L("退出码 {code}", { code: metadata.exit_code }) : "",
       ].filter(Boolean);
       const rawStatus = typeof metadata.status === "string" ? metadata.status : "";
       const statusText = rawStatus
-        ? ({ completed: "已完成", failed: "失败", running: "进行中", pending: "等待中", approved: "已批准", denied: "已拒绝" }[rawStatus] || rawStatus)
+        ? ({ completed: L("已完成"), failed: L("失败"), running: L("进行中"), pending: L("等待中"), approved: L("已批准"), denied: L("已拒绝") }[rawStatus] || rawStatus)
         : metadata.exit_code === 0
-          ? "已完成"
+          ? L("已完成")
           : metadata.exit_code != null
-            ? "已结束"
+            ? L("已结束")
             : "";
       const technical = ["tool", "artifact", "terminal_output"].includes(event.kind);
       const compact = ["status", "approval"].includes(event.kind);
@@ -171,7 +173,7 @@ export const WORK_CONTENT_CLIENT = `
         const summaryCopy = document.createElement("span");
         summaryCopy.className = "session-event-summary";
         const label = document.createElement("strong");
-        label.textContent = event.label || "执行事件";
+        label.textContent = event.label || L("执行事件");
         const meta = document.createElement("small");
         meta.textContent = metaParts.join(" · ");
         summaryCopy.append(label, meta);
@@ -187,14 +189,14 @@ export const WORK_CONTENT_CLIENT = `
         const disclosure = document.createElement("span");
         disclosure.className = "session-event-disclosure";
         disclosure.append(document.createTextNode(event.kind === "artifact"
-          ? "查看变更"
+          ? L("查看变更")
           : event.kind === "terminal_output"
-            ? "展开输出"
-            : "查看详情"), createTimelineIcon("disclosure"));
+            ? L("展开输出")
+            : L("查看详情")), createTimelineIcon("disclosure"));
         disclosure.querySelector("use")?.setAttribute("href", "#icon-chevron-down");
         summary.append(disclosure);
         const content = document.createElement("pre");
-        content.textContent = eventContent || "没有附加输出。";
+        content.textContent = eventContent || L("没有附加输出。");
         details.append(summary, content);
         card.append(details);
       } else {
@@ -203,7 +205,7 @@ export const WORK_CONTENT_CLIENT = `
         const identity = document.createElement("span");
         identity.className = "session-event-identity";
         const label = document.createElement("strong");
-        label.textContent = event.label || (event.kind === "runtime_message" ? "Runtime" : "执行事件");
+        label.textContent = event.label || (event.kind === "runtime_message" ? "Runtime" : L("执行事件"));
         const source = document.createElement("small");
         source.textContent = sourceLabel(event.source);
         identity.append(label, source);
@@ -222,7 +224,7 @@ export const WORK_CONTENT_CLIENT = `
     empty.className = "operation-search-empty";
     empty.dataset.sessionContentEmpty = "";
     empty.hidden = true;
-    empty.textContent = "当前内容中没有匹配结果。";
+    empty.textContent = L("当前内容中没有匹配结果。");
     body.append(list, empty);
     applySessionContentFilters(detail);
   };
@@ -230,19 +232,19 @@ export const WORK_CONTENT_CLIENT = `
     if (!detail?.dataset.detailId) return;
     if (!force && ["loading", "loaded"].includes(detail.dataset.contentState || "")) return;
     detail.dataset.contentState = "loading";
-    renderContentState(detail, "正在读取执行内容", "正在联系原 Runtime，并加载 GoalBoard 已保存的 TUI 记录。", false);
+    renderContentState(detail, L("正在读取执行内容"), L("正在联系原 Runtime，并加载 GoalBoard 已保存的 TUI 记录。"), false);
     try {
       const response = await fetch(route("/api/sessions/" + encodeURIComponent(detail.dataset.detailId) + "/content"), {
         cache: "no-store",
         headers: window.goalboardControlHeaders?.() || {},
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Session 内容读取失败");
+      if (!response.ok) throw new Error(payload.error || L("Session 内容读取失败"));
       detail.dataset.contentState = "loaded";
       renderSessionTimeline(detail, payload);
     } catch (error) {
       detail.dataset.contentState = "failed";
-      renderContentState(detail, "内容读取失败", error instanceof Error ? error.message : String(error), true);
+      renderContentState(detail, L("内容读取失败"), error instanceof Error ? error.message : String(error), true);
     }
   };
   document.addEventListener("input", (event) => {
@@ -260,7 +262,7 @@ export const WORK_CONTENT_CLIENT = `
     const status = button.closest("[data-operation-detail]").querySelector("[data-session-load-status]");
     status.hidden = false;
     status.classList.remove("is-error");
-    status.textContent = "正在请求原 Runtime 加载这条 Session...";
+    status.textContent = L("正在请求原 Runtime 加载这条 Session...");
     button.disabled = true;
     const detail = button.closest("[data-operation-detail]");
     fetch(route("/api/sessions/" + encodeURIComponent(detail.dataset.detailId) + "/resume"), {
@@ -269,11 +271,11 @@ export const WORK_CONTENT_CLIENT = `
       body: "{}",
     }).then(async (response) => {
       const payload = await response.json();
-      if (!response.ok) throw Object.assign(new Error(payload.message || payload.error || "Runtime 加载失败"), { nextAction: payload.next_action });
-      status.textContent = "原 Runtime 已加载这条 Session，可以继续执行。";
+      if (!response.ok) throw Object.assign(new Error(payload.message || payload.error || L("Runtime 加载失败")), { nextAction: payload.next_action });
+      status.textContent = L("原 Runtime 已加载这条 Session，可以继续执行。");
     }).catch((error) => {
       status.textContent = error.nextAction === "create_handoff"
-        ? error.message + " 可以使用上方“创建 Handoff”交给新的目标 Session。"
+        ? L("{message} 可以使用上方“创建 Handoff”交给新的目标 Session。", { message: error.message })
         : error.message;
       status.classList.toggle("is-error", !String(error.message || "").includes("无需重复加载"));
     }).finally(() => { button.disabled = false; });

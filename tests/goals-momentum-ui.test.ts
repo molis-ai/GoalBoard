@@ -16,52 +16,62 @@ const relation = (id: string, type: GoalRelationRecord["type"], from: string, to
   created_by: "user", created_at: "2026-09-05", deactivated_at: null });
 const view = (goals: GoalsMomentumItem[], relations: GoalRelationRecord[] = []): GoalsMomentumBoardView => ({ goals, archived_goals: [], trashed_goals: [], snapshot: { relations } });
 
-test("momentum contribution owns lazy placeholder and renders provider-to-consumer topology with escaped Goal content", () => {
+test("canvas renders provider-to-consumer edges, keeps parent membership separate, and escapes Goal content", () => {
   assert.ok(createWorkbenchUiHost().list().some(entry => entry.contribution_id === GOALS_MOMENTUM_UI_CONTRIBUTION_ID));
-  const placeholder = renderer.renderMomentumPlaceholder();
-  assert.match(placeholder, /data-goal-momentum data-loaded="false" hidden/);
-  assert.match(placeholder, /data-retry-goal-momentum hidden/);
-  assert.doesNotMatch(placeholder, /data-momentum-node/);
-  const consumer = item("APP", 'User "<title>'), provider = item("API");
+  const consumer = item("APP", 'User "<title>'), provider = item("API"), parent = item("ROOT", "Parent");
   const dependency = relation("app-api", "depends_on", "APP", "API");
-  consumer.relations = [dependency];
-  const model = view([consumer, provider], [dependency]);
+  const membership = relation("app-root", "part_of", "APP", "ROOT");
+  consumer.relations = [dependency, membership];
+  const model = view([consumer, provider, parent], [dependency, membership]);
   const html = renderer.renderGoalMomentum(model, "APP", model.goals);
-  assert.match(html, /data-edge-from="API" data-edge-to="APP" data-edge-type="depends_on"/);
+  assert.match(html, /data-edge-from="API" data-edge-to="APP"/);
+  assert.doesNotMatch(html, /data-edge-from="ROOT"|data-edge-to="ROOT"/);
+  assert.match(html, /属于：Parent/);
   assert.match(html, /API → User &quot;&lt;title&gt; · Provider &quot;result&quot; &lt;safe&gt;/);
-  assert.match(html, /data-momentum-detail="APP">/);
-  assert.match(html, /data-momentum-detail="API" hidden/);
-  assert.match(html, /data-momentum-period-panel="7">/);
-  assert.match(html, /data-momentum-period-panel="30" hidden/);
-  assert.match(html, /href="\/goals\/APP"/);
-  assert.match(html, /历史不足，不能判断是否停滞/);
+  assert.match(html, /展开 Goal：User &quot;&lt;title&gt;/);
+  const providerX = Number(html.match(/data-goal-id="API" data-node-x="(\d+)"/)?.[1]);
+  const consumerX = Number(html.match(/data-goal-id="APP" data-node-x="(\d+)"/)?.[1]);
+  assert.ok(providerX < consumerX, "the provider is placed before its consumer");
 });
 
-test("momentum retains completed nodes, blocker facts and dependency diagnostics without turning suggestions into execution", () => {
+test("canvas retains completed Goals and incomplete relationship diagnostics without action suggestions", () => {
   const done = item("DONE"), blocked = item("BLOCKED"), missing = relation("missing", "depends_on", "BLOCKED", "MISSING");
   done.goal.fulfillment_state = "satisfied";
   done.display_status = "completed";
   blocked.status = "execution_blocked";
   blocked.display_status = "blocked";
-  blocked.reasons = [{ code: "risk.blocked", severity: "blocker", message: 'Risk "<review>' }];
-  blocked.relations = [missing];
   const model = view([done, blocked], [missing]);
   const html = renderer.renderGoalMomentum(model, "BLOCKED", model.goals);
-  assert.match(html, /data-goal-id="DONE"[^>]*data-goal-completed="true"/);
-  assert.match(html, /发现 1 处关系完整性问题/);
-  assert.match(html, /Risk &quot;&lt;review&gt;/);
-  assert.doesNotMatch(html, /data-momentum-select="DONE" data-momentum-action-kind/);
-  assert.match(html, /data-momentum-select="BLOCKED" data-momentum-action-kind="waiting"/);
-  assert.doesNotMatch(html, /<form|data-run-start|data-claim/);
+  assert.match(html, /class="goal-canvas-node is-complete"[^>]*data-goal-id="DONE"/);
+  assert.match(html, /部分关系不完整/);
+  assert.match(html, /data-goal-id="BLOCKED"/);
+  assert.doesNotMatch(html, /data-edge-from="MISSING"|<form|data-run-start|data-claim|行动队列/);
 });
 
-test("momentum preserves no-data presentation and request-local translation without translating user titles", () => {
+test("canvas has an honest empty state and localizes controls without translating user titles", () => {
   const empty = view([]);
-  assert.match(renderer.renderGoalMomentum(empty, "", []), /还没有可分析的 Goal/);
-  const user = item("USER", "当前选择");
+  assert.match(renderer.renderGoalMomentum(empty, "", []), /还没有目标/);
+  assert.match(renderer.renderGoalMomentum(empty, "", []), /data-open-create/);
+  const user = item("USER", "目标关系");
   const model = view([user]);
   const html = runWithLocale("en", () => renderer.renderGoalMomentum(model, "USER", model.goals));
-  assert.match(html, /<h3>当前选择<\/h3>/);
-  assert.doesNotMatch(html, /<h1>先看推进是否流动/);
-  assert.match(renderer.renderGoalMomentum(model, "USER", model.goals), /<h1>先看推进是否流动/);
+  assert.match(html, /<strong>目标关系<\/strong>/);
+  assert.match(html, /<h1>Goal relationships<\/h1>/);
+  assert.match(renderer.renderGoalMomentum(model, "USER", model.goals), /<h1>目标关系<\/h1>/);
+});
+
+
+test("default canvas target prefers the highest-priority startable leaf and falls back honestly", () => {
+  const root = item("ROOT"), later = item("LATER"), next = item("NEXT"), active = item("ACTIVE");
+  root.goal.decomposition_state = "closed_compound";
+  root.goal.priority = 100;
+  next.goal.priority = 10;
+  active.display_status = "in_progress";
+  const model = view([root, later, active, next]);
+  assert.match(renderer.renderGoalMomentum(model, "LATER", model.goals), /data-default-goal="NEXT"/);
+  later.display_status = next.display_status = "blocked";
+  assert.match(renderer.renderGoalMomentum(model, "LATER", model.goals), /data-default-goal="ACTIVE"/);
+  active.display_status = "completed";
+  assert.match(renderer.renderGoalMomentum(model, "LATER", model.goals), /data-default-goal="LATER"/);
+  assert.match(renderer.renderGoalMomentum(view([]), "", []), /data-default-goal=""/);
 });

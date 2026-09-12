@@ -223,18 +223,22 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         }
         setDesktopDirectory(surface === "goal"
           ? "goals"
-          : surface === "feed" || surface === "sources" || surface === "sessions"
+          : surface === "feed" || surface === "sources" || surface === "sessions" || surface === "artifacts"
             ? surface
             : "root", true, true, surfaceOpen);
         setDesktopWorkSurface(surface, true, true);
+        if (surface === "home" && !decisionView && !collectionView && localPathname() !== "/") {
+          history.pushState({ workSurface: "home" }, "", route("/"));
+        }
         if (surface === "feed" && selectedFeedItem) selectFeedItem(selectedFeedItem, false, true);
-        if (matchMedia("(max-width: 760px)").matches) setMobileView("tree");
+        if (matchMedia("(max-width: 760px)").matches) setMobileView(surface === "home" || surface === "market" ? "document" : "tree");
         return;
       }
       const directoryOpen = target.closest("[data-directory-open]");
       if (directoryOpen && desktopDirectoryPanels.length) {
         if (directoryOpen.matches("[data-mobile-directory-root]")) setMobileView("tree");
         setDesktopDirectory(directoryOpen.dataset.directoryOpen || "root", true, true, directoryOpen);
+        if (directoryOpen.closest(".immersive-titlebar")) immersiveNavigation?.showDirectory();
         return;
       }
       if (target.closest("[data-directory-back]") && desktopDirectoryPanels.length) {
@@ -256,6 +260,7 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
         return;
       }
       if (target.closest("[data-directory-toggle]")) {
+        if (immersiveNavigation) { immersiveNavigation.hideDirectory(); return; }
         setDirectoryCollapsed(!workspace.classList.contains("is-directory-collapsed"));
         return;
       }
@@ -313,9 +318,9 @@ export const CLIENT_EVENTS_SECONDARY_SCRIPT = `        return;
       if (copy) {
         try {
           await navigator.clipboard.writeText(copy.dataset.copyValue);
-          showToast("引用已复制");
+          showToast(L("引用已复制"));
         } catch {
-          showToast("无法访问剪贴板，请手动复制", true);
+          showToast(L("无法访问剪贴板，请手动复制"), true);
         }
         return;
       }

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GoalBoard · 画布工作台设计</title>
+  <link rel="stylesheet" href="./workbench.css">
+  <link rel="stylesheet" href="./navigation.css">
+</head>
+<body>
+  <!--
+  THESIS: 当前项目的目录与工作保持连续，插件市场把能力安装到指定项目。
+  OWN-WORLD: 参考 Linear 的石墨灰阶、紧凑系统字体、细分隔、低饱和紫色选中态。
+  STORY: 选择项目，进入插件目录，在画布展开 Goal；需要新能力时从市场安装回项目。
+  FIRST VIEWPORT: 264px 两层目录，顶部项目弹层，进入插件后横向切换、下方浏览 item；右侧 Goal 画布与固定工作框。
+  FORM: code-led existing prototype extension; signature=directory-drill-in-and-project-install.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+  -->
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="5"/><path d="M8 12h8M12 8v8"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v7-9a1.5 1.5 0 0 1 3 0v9-7a1.5 1.5 0 0 1 3 0v8-4a1.5 1.5 0 0 1 3 0v7c0 4-3 6-6 6h-1c-2 0-4-1-5-3l-4-6a1.7 1.7 0 0 1 2.5-2Z"/></symbol>
+    <symbol id="i-cursor" viewBox="0 0 24 24"><path d="m4 3 16 9-7 2-3 7Z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M4 9h5V4M20 15h-5v5M9 9 3 3M15 15l6 6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H4l-1 1v-8.5A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8 9h8M8 13h5"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a6 6 0 0 1 8 8l-8 8"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M16 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h8l7-7V8"/><path d="M14 21v-7h7M8 8h5M8 12h3m7-9 3 3"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 11v2"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 12 8-12 8Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.8 13a9 9 0 1 1-9.8-9.8A7 7 0 0 0 20.8 13Z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3Z"/></symbol>
+    <symbol id="i-plugin" viewBox="0 0 24 24"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5Z"/></symbol>
+    <symbol id="i-feed" viewBox="0 0 24 24"><path d="M5 4h14v16H5Z M8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h15"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></symbol>
+  </svg>
+
+  <aside class="app-sidebar" id="app-sidebar" aria-label="应用目录">
+    <div class="sidebar-native-row"><button class="icon-button" id="hide-sidebar" aria-label="收起应用目录" title="收起目录"><svg><use href="#i-panel"/></svg></button></div>
+    <div class="sidebar-project-head">
+      <button class="project-trigger" id="project-trigger" popovertarget="project-menu" aria-label="切换项目"><span class="project-emblem">G</span><strong id="selected-project-name">GoalBoard</strong><svg><use href="#i-down"/></svg></button>
+      <button class="icon-button notifications-button" disabled aria-label="通知，暂不可用" title="通知暂不可用"><svg><use href="#i-bell"/></svg></button>
+      <button class="icon-button" data-plugin="settings" aria-label="打开当前项目设置" title="项目设置"><svg><use href="#i-settings"/></svg></button>
+    </div>
+    <div id="project-menu" class="project-menu" popover aria-label="切换项目"><div id="project-options"></div></div>
+    <header class="directory-heading" id="directory-heading" hidden>
+      <div class="directory-toolbar">
+        <button class="directory-return" id="directory-back" aria-label="返回上一级"><svg><use href="#i-back"/></svg><span>项目目录</span></button>
+        <div class="plugin-scroll-controls">
+          <button class="plugin-scroll-button" id="plugin-scroll-left" aria-label="向左滚动插件" hidden><svg><use href="#i-chevron"/></svg></button>
+          <button class="plugin-scroll-button" id="plugin-scroll-right" aria-label="向右滚动插件" hidden><svg><use href="#i-chevron"/></svg></button>
+        </div>
+      </div>
+      <div class="plugin-strip-frame" id="plugin-strip-frame">
+        <nav class="plugin-strip" id="plugin-strip" aria-label="当前项目的插件"></nav>
+      </div>
+    </header>
+    <div class="sidebar-scroll">
+      <nav class="project-plugins" id="project-plugins" aria-label="工作台目录"></nav>
+      <section id="goal-list" class="directory-goals" aria-label="Goal 列表" hidden>
+        <div class="directory-search"><svg><use href="#i-search"/></svg><input id="goal-search" placeholder="搜索目标…" aria-label="搜索 Goal"><kbd>⌘ K</kbd></div>
+        <div class="directory-tools"><span>目标树</span><button class="icon-button" id="directory-add-goal" aria-label="新建目标" title="新建目标"><svg><use href="#i-plus"/></svg></button><button class="icon-button" id="collapse-goals" aria-label="折叠全部" title="折叠全部"><svg><use href="#i-list"/></svg></button></div>
+        <div id="goal-list-items"></div><div class="directory-count" id="goal-count"></div>
+      </section>
+      <section id="plugin-items" hidden>
+        <label class="directory-search"><svg><use href="#i-search"/></svg><input id="plugin-item-search" aria-label="搜索当前插件的内容" placeholder="搜索内容…"></label>
+        <nav id="plugin-record-list" class="plugin-record-list" aria-label="插件内容目录"></nav>
+      </section>
+    </div>
+    <div class="sidebar-market"><button class="sidebar-row" data-plugin="plugins"><svg><use href="#i-plugin"/></svg><span>插件市场</span><svg><use href="#i-plus"/></svg></button></div>
+    <footer class="sidebar-footer"><span class="profile-avatar">Y</span><span><strong>一骏</strong><small>本地空间</small></span><button class="icon-button" data-plugin="settings" aria-label="打开全局设置"><svg><use href="#i-settings"/></svg></button></footer>
+  </aside>
+  <button class="sidebar-scrim" id="sidebar-scrim" aria-label="关闭应用目录" hidden></button>
+  <section class="app-main" id="app-main" aria-label="插件工作区">
+    <header class="app-header">
+      <button class="icon-button" id="show-sidebar" aria-label="展开应用目录" title="展开目录" hidden><svg><use href="#i-panel"/></svg></button>
+      <div class="app-breadcrumb"><span id="project-title">GoalBoard</span><i>/</i><strong id="plugin-title">Goals</strong></div>
+      <div class="goal-view-tools" id="goal-view-tools"><span>画布</span><button id="list-toggle" class="icon-button" aria-label="打开 Goal 列表" aria-expanded="false" title="Goal 列表 · ⌘K"><svg><use href="#i-list"/></svg></button></div>
+      <div class="app-header-end"><span class="prototype-badge">设计原型<span> · 演示数据</span></span><button class="icon-button" id="theme-toggle" aria-label="切换浅色外观" title="切换外观"><svg><use href="#i-sun"/></svg></button></div>
+    </header>
+    <div class="plugin-stage" id="plugin-stage">
+    <section class="plugin-surface" id="goals-plugin" aria-label="Goals 插件">
+    <div class="canvas-surface" id="canvas-surface">
+  <main class="canvas" id="canvas" tabindex="0" aria-label="Goal 画布。拖动空白处平移，按住 Command 或 Control 滚轮缩放，点击 Goal 开始工作。">
+    <div class="canvas-empty" id="canvas-empty" hidden><svg><use href="#i-target"/></svg><h2>从一个 Goal 开始</h2><p>把这个项目想做成的第一件事放上画布。</p><button class="primary-button" id="empty-add-goal">创建第一个 Goal</button></div>
+    <div class="world" id="world">
+      <svg class="connections" id="connections" viewBox="0 0 1600 1050" aria-hidden="true"></svg>
+      <div class="canvas-annotation" style="left:125px;top:110px"><span class="annotation-line"></span>把想法，变成真实的进展。</div>
+      <div class="canvas-group-label" style="left:146px;top:382px">让入口更清楚</div>
+      <div class="canvas-group-label" style="left:1130px;top:382px">让结果可信</div>
+      <div id="nodes"></div>
+    </div>
+  </main>
+
+
+  <div class="canvas-bottom">
+    <span class="canvas-hint"><span class="tiny-dot"></span>拖动画布探索 · 点击 Goal 展开</span>
+    <nav class="canvas-tools floating" aria-label="画布工具">
+      <button class="icon-button selected" id="select-tool" aria-label="选择与移动 Goal" aria-pressed="true" title="选择与移动 Goal"><svg><use href="#i-cursor"/></svg></button>
+      <button class="icon-button" id="hand-tool" aria-label="平移画布" aria-pressed="false" title="平移画布"><svg><use href="#i-hand"/></svg></button>
+      <i></i>
+      <button class="add-button" id="add-goal"><svg><use href="#i-plus"/></svg><span>新 Goal</span></button>
+    </nav>
+    <div class="zoom-tools floating">
+      <button class="icon-button" id="zoom-out" aria-label="缩小画布"><svg><use href="#i-minus"/></svg></button>
+      <output id="zoom-value">100%</output>
+      <button class="icon-button" id="zoom-in" aria-label="放大画布"><svg><use href="#i-plus"/></svg></button>
+      <i></i><button class="icon-button" id="fit-canvas" aria-label="适应全部 Goal" title="适应全部 Goal"><svg><use href="#i-fit"/></svg></button>
+    </div>
+  </div>
+
+    </div>
+    <div class="goal-backdrop" id="goal-backdrop" hidden></div>
+  <dialog id="goal-workspace" class="goal-workspace" aria-labelledby="workspace-title">
+    <header class="workspace-header">
+      <span class="workspace-goal-mark"><svg><use href="#i-target"/></svg></span>
+      <div class="workspace-title-wrap"><h1 id="workspace-title"></h1><span id="workspace-subtitle"></span></div>
+      <span class="workspace-status" id="workspace-status"></span>
+      <button class="icon-button" id="toggle-context" aria-label="收起 Goal 信息与时间线" aria-expanded="true" title="Goal 信息与时间线"><svg><use href="#i-panel"/></svg></button>
+      <button class="icon-button" id="close-workspace" aria-label="收起 Goal，返回画布" title="收起，返回画布 · Esc"><svg><use href="#i-collapse"/></svg></button>
+    </header>
+    <div class="workspace-body">
+      <section class="work-main" aria-label="Goal 工作区">
+        <div class="work-mode-bar">
+          <div class="mode-tabs" role="tablist" aria-label="工作方式">
+            <button id="conversation-tab" class="mode-tab active" role="tab" aria-selected="true" aria-controls="conversation-view"><svg><use href="#i-chat"/></svg>对话</button>
+            <button id="terminal-tab" class="mode-tab" role="tab" aria-selected="false" aria-controls="terminal-view"><svg><use href="#i-terminal"/></svg>终端</button>
+          </div>
+          <div class="runtime-label"><span class="runtime-avatar">C</span><span>Codex</span><span class="runtime-dot"></span><small id="runtime-state">等待你的反馈</small></div>
+        </div>
+        <div class="conversation-view" id="conversation-view" role="tabpanel" aria-labelledby="conversation-tab">
+          <div class="conversation" id="conversation"></div>
+        </div>
+        <div class="terminal-view" id="terminal-view" role="tabpanel" aria-labelledby="terminal-tab" hidden>
+          <div class="terminal-caption"><span><i></i> Goal 专属终端</span><small>模拟输出 · 未连接真实进程</small></div>
+          <pre id="terminal-output"></pre>
+          <form id="terminal-form" class="terminal-input"><label for="terminal-command">›</label><input id="terminal-command" spellcheck="false" autocomplete="off" placeholder="试试输入 help"><button type="submit" aria-label="运行模拟命令"><svg><use href="#i-arrow"/></svg></button></form>
+        </div>
+        <div class="composer-area" id="composer-area">
+          <div class="quick-actions" aria-label="Goal 快捷操作">
+            <button id="attach-action"><svg><use href="#i-clip"/></svg>补充资料</button>
+            <button id="note-action"><svg><use href="#i-note"/></svg>记一笔</button>
+            <button id="requirements-action"><svg><use href="#i-check"/></svg>完成要求</button>
+            <button id="pause-action" class="pause-action"><svg><use href="#i-pause"/></svg><span>暂停</span></button>
+          </div>
+          <div class="inline-tools" id="inline-tools" hidden></div>
+          <form class="composer" id="composer">
+            <div class="composer-context" id="composer-context" hidden></div>
+            <textarea id="message-input" rows="2" placeholder="继续这件事，或补充你的想法…" aria-label="给当前 Goal 的输入"></textarea>
+            <div class="composer-footer"><span id="composer-hint">当前 Goal、要求和资料已在上下文中</span><button type="submit" class="send-button" id="send-message" aria-label="发送演示消息"><svg><use href="#i-arrow"/></svg></button></div>
+          </form>
+          <div class="composer-bottom"><span id="draft-state">草稿保留在当前 Goal</span><span>⌘ Enter 发送</span></div>
+        </div>
+      </section>
+      <aside class="context-panel" id="context-panel" aria-label="Goal 信息与时间线">
+        <div class="context-overview">
+          <div class="context-heading"><h2>Goal 信息</h2><button id="edit-goal" class="text-button">编辑</button></div>
+          <p id="goal-outcome"></p>
+          <form id="goal-edit-form" hidden><label for="outcome-edit">希望得到什么结果</label><textarea id="outcome-edit" rows="3"></textarea><div><button type="button" id="cancel-goal-edit">取消</button><button class="small-primary" type="submit">保存</button></div></form>
+          <button class="requirement-summary" id="requirements-summary"><span>完成要求</span><span id="requirements-count"></span><svg><use href="#i-chevron"/></svg></button>
+          <div class="requirements-list" id="requirements-list" hidden></div>
+          <form id="requirements-edit-form" hidden><label for="requirements-edit">每行一条完成要求</label><textarea id="requirements-edit" rows="4" maxlength="1200" required></textarea><div><button type="button" id="cancel-requirements-edit">取消</button><button class="small-primary" type="submit">保存要求</button></div></form>
+          <div class="context-relations" id="context-relations"></div>
+        </div>
+        <div class="timeline-heading"><h2>时间线</h2><span>最新在前</span></div>
+        <div class="timeline" id="timeline"></div>
+        <div class="context-footer"><span class="tiny-dot"></span>每次变化，都留在这个 Goal 里</div>
+      </aside>
+    </div>
+  </dialog>
+
+    </section>
+    <section class="other-plugin" id="other-plugin" tabindex="-1" hidden></section>
+    </div>
+  </section>
+
+  <dialog id="create-dialog" class="create-dialog" aria-labelledby="create-title">
+    <form id="create-form"><header><h2 id="create-title">把一个想法放上画布</h2><button type="button" class="icon-button" id="cancel-create" aria-label="取消新 Goal"><svg><use href="#i-close"/></svg></button></header><label for="new-title">你想完成什么？</label><input id="new-title" required maxlength="70" placeholder="例如：让第一次连接 Runtime 更顺畅"><label for="new-outcome">什么结果值得期待？</label><textarea id="new-outcome" rows="3" placeholder="可以先写个大概，工作中继续补充。"></textarea><footer><span>仅保存在这份设计演示中</span><button class="primary-button" type="submit">放到画布上<svg><use href="#i-plus"/></svg></button></footer></form>
+  </dialog>
+  <dialog id="install-dialog" class="install-dialog" aria-labelledby="install-title">
+    <form id="install-form"><header><span class="install-icon" id="install-icon"></span><button class="icon-button" id="close-install" type="button" aria-label="关闭安装面板"><svg><use href="#i-close"/></svg></button></header><h2 id="install-title"></h2><p id="install-description"></p><label for="install-project">安装到哪个项目</label><select id="install-project" name="project"></select><p class="install-scope" id="install-scope"></p><div id="install-success" role="status" hidden></div><footer><span>仅演示安装流程</span><button type="submit" class="primary-button" id="confirm-install">安装到项目</button><button type="button" class="primary-button" id="visit-installed" hidden>前往项目</button></footer></form>
+  </dialog>
+  <div class="toast" role="status" id="toast" hidden></div>
+  <script src="./workbench.js"></script>
+  <script src="./navigation.js"></script>
+</body>
+</html>

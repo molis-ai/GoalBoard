@@ -1,3 +1,5 @@
+mod capsule_window;
+mod external_links;
 mod pty;
 mod runtime_env;
 mod web_service;
@@ -8,7 +10,7 @@ use pty::{drop_all_sessions, pty_kill, pty_resize, pty_spawn, pty_write, PtyStat
 use std::path::PathBuf;
 use std::sync::{atomic::Ordering, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -89,6 +91,8 @@ struct CapsuleStatusState {
     latest_path: Mutex<String>,
     visible: Mutex<bool>,
     last_tray_rect: Mutex<Option<tauri::Rect>>,
+    last_appkit_anchor: Mutex<Option<(f64, capsule_window::AppKitRect)>>,
+    ignore_focus_loss_until: Mutex<Option<Instant>>,
     locale: Mutex<CapsuleLocale>,
     menu_items: Mutex<Option<CapsuleTrayMenuItems>>,
 }
@@ -226,8 +230,13 @@ fn hide_capsule_window(app: &tauri::AppHandle, state: &CapsuleStatusState) -> Re
     let window = app
         .get_webview_window("capsule")
         .ok_or_else(|| "工作胶囊窗口不存在".to_string())?;
+    let _ = window.set_ignore_cursor_events(true);
     window.hide().map_err(|error| error.to_string())?;
     *state.visible.lock().map_err(|error| error.to_string())? = false;
+    *state
+        .ignore_focus_loss_until
+        .lock()
+        .map_err(|error| error.to_string())? = None;
     Ok(())
 }
 
@@ -347,11 +356,32 @@ fn position_capsule_below_tray(
     let window = app
         .get_webview_window("capsule")
         .ok_or_else(|| "工作胶囊窗口不存在".to_string())?;
+    let height = normalized_capsule_height(height);
+    #[cfg(target_os = "macos")]
+    {
+        let state = app.state::<CapsuleStatusState>();
+        let anchor = *state
+            .last_appkit_anchor
+            .lock()
+            .map_err(|error| error.to_string())?;
+        if let Some((anchor_x, visible)) = anchor {
+            let css_anchor = capsule_window::macos::position_capsule_on_screen(
+                &window,
+                anchor_x,
+                visible,
+                CAPSULE_WIDTH,
+                height,
+                CAPSULE_TRAY_GAP as f64,
+                CAPSULE_EDGE_MARGIN as f64,
+            )?;
+            let _ = window.eval(&format!(
+                "document.documentElement.style.setProperty('--capsule-anchor-x', '{css_anchor:.1}px')"
+            ));
+            return Ok(());
+        }
+    }
     window
-        .set_size(LogicalSize::new(
-            CAPSULE_WIDTH,
-            normalized_capsule_height(height),
-        ))
+        .set_size(LogicalSize::new(CAPSULE_WIDTH, height))
         .map_err(|error| error.to_string())?;
     let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
     let tray_position = rect.position.to_physical::<i32>(scale_factor);
@@ -407,10 +437,28 @@ fn toggle_capsule(
         .last_tray_rect
         .lock()
         .map_err(|error| error.to_string())? = Some(rect);
+    #[cfg(target_os = "macos")]
+    {
+        *state
+            .last_appkit_anchor
+            .lock()
+            .map_err(|error| error.to_string())? =
+            capsule_window::macos::clicked_screen_anchor().ok();
+    }
+    *state
+        .ignore_focus_loss_until
+        .lock()
+        .map_err(|error| error.to_string())? =
+        Some(Instant::now() + capsule_window::CAPSULE_FOCUS_LOSS_GRACE);
     position_capsule_below_tray(app, rect, CAPSULE_MAX_HEIGHT)?;
+    let _ = window.set_ignore_cursor_events(false);
     window.show().map_err(|error| error.to_string())?;
     window.unminimize().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        let _ = capsule_window::macos::reveal_capsule_native_window(&window);
+    }
     *state.visible.lock().map_err(|error| error.to_string())? = true;
     Ok(())
 }
@@ -573,10 +621,15 @@ fn main() {
       capsule_resize,
       capsule_update_menu_bar,
       capsule_set_locale,
-      capsule_open_main
+      capsule_open_main,
+      external_links::open_external_url
     ])
     .setup(|app| {
       install_goalboard_tray(app)?;
+      #[cfg(target_os = "macos")]
+      if let Some(capsule) = app.get_webview_window("capsule") {
+        let _ = capsule_window::macos::prepare_capsule_native_window(&capsule);
+      }
       let resource_dir = app.path().resource_dir().ok();
       let service_state = app.state::<WebServiceState>();
       let result = ensure_goalboard_web(resource_dir.as_deref(), service_state.inner());
@@ -624,7 +677,16 @@ fn main() {
       if window.label() == "capsule" && matches!(event, WindowEvent::Focused(false)) {
         let app = window.app_handle();
         let state = app.state::<CapsuleStatusState>();
-        let _ = hide_capsule_window(app, state.inner());
+        let ignore = state
+            .ignore_focus_loss_until
+            .lock()
+            .ok()
+            .is_some_and(|until| {
+                capsule_window::should_ignore_capsule_focus_loss(*until, Instant::now())
+            });
+        if !ignore {
+            let _ = hide_capsule_window(app, state.inner());
+        }
       }
       if should_keep_window_on_close(window.label()) {
         if let WindowEvent::CloseRequested { api, .. } = event {

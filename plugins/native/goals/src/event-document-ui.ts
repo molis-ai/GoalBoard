@@ -2,7 +2,7 @@ import type { GoalEventStateView } from "@adeptify/goalboard-contracts/modules/g
 import { formatEventTime, renderWorkEventBody as renderGoalWorkEventBody } from "./event-history-body.js";
 export { formatEventTime, renderGoalWorkEventBody };
 import type { GoalsDocumentContext, GoalsDocumentItem, GoalsDocumentUiPrimitives } from "./document-ui-model.js";
-import type { GoalEventDocumentView } from "./event-document-model.js";
+import { eventDirectoryPresentation, type GoalEventDocumentView } from "./event-document-model.js";
 import { createEventDocumentForms } from "./event-document-forms.js";
 import type { GoalHistoryIndexItem } from "./event-history-map.js";
 
@@ -25,74 +25,46 @@ export function renderGoalEventDocument(
     : state?.progress_summary
       ? `<span class="overview-timestamp">${formatDate(state.progress_summary.recorded_at)}</span>`
       : "";
-  const moreActions = `<details class="goal-more"><summary aria-label="${L("更多操作")}">${icon("more")}</summary><div>
+  const moreActions = `<details class="goal-more"><summary aria-label="${L("更多 Goal 操作")}">${icon("more")}</summary><div>
+    <button class="document-action" type="button" data-event-reader="planning">${icon("tune")}<span>${L("记录模板")}</span></button>
     ${goal.archived_at
       ? `<button class="document-action" type="button" data-goal-archive="false" data-goal-id="${goalId}">${icon("refresh")}<span>${L("恢复")}</span></button>`
       : item.display_status === "completed"
-        ? `<button class="document-action" type="button" data-goal-archive="true" data-goal-id="${goalId}">${icon("archive")}<span>${L("归档 Goal")}</span></button>`
-        : context.activeGoalId === goal.goal_id
-          ? `<span class="document-action document-action--current" role="status">${icon("target")}<span>${L("当前 Goal")}</span></span>`
-          : `<button class="document-action document-action--quiet" type="button" data-set-active-goal data-goal-id="${goalId}">${icon("target")}<span>${L("设为当前 Goal")}</span></button>`}
+        ? `<button class="document-action" type="button" data-goal-archive="true" data-goal-id="${goalId}">${icon("archive")}<span>${L("归档 Goal")}</span></button>` : ""}
     ${goal.archived_at ? "" : `<button class="document-action document-action--danger" type="button" data-open-goal-trash data-goal-id="${goalId}" data-goal-title="${escapeHtml(goal.title)}">${icon("archive")}<span>${L("移入回收站")}</span></button>`}
   </div></details>`;
-  const modeSwitch = !goal.archived_at && !goal.trashed_at
-    ? `<nav class="goal-mode-switch" role="tablist" aria-label="${L("Goal 工作模式")}"><button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="goal-document-pane" data-workbench-view="focus">${icon("target")}<span>${L("聚焦")}</span></button><button type="button" role="tab" aria-selected="false" aria-controls="goal-tui-pane" data-workbench-view="runtime">${icon("terminal")}<span>Runtime</span></button></nav>`
-    : "";
-  const timeline = renderTimeline(doc?.timeline.items ?? [], L, escapeHtml);
+  const recordMenu = owned ? `<details class="timeline-compose" data-record-menu><summary>${icon("plus")}<span>${L("记一笔")}</span></summary><div class="timeline-compose-options">
+    <button type="button" data-event-form-open="note"><strong>${L("随手备注")}</strong><small>${L("保存想法或补充事实，不发给 AI")}</small></button>
+    <button type="button" data-event-form-open="progress"><strong>${L("同步进展")}</strong><small>${L("更新做到哪了、下一步做什么")}</small></button>
+    <button type="button" data-event-form-open="concern"><strong>${L("问题与风险")}</strong><small>${L("记录或处理影响完成的问题")}</small></button>
+  </div></details>` : "";
+  const timeline = renderTimeline(doc?.timeline.items ?? [], L, escapeHtml, state);
   const selectedItem = doc?.timeline.items[0] ?? null;
-  return `<!--
-THESIS: 顶部掌握目标整体进展，左侧密集扫描时间点，右侧阅读选中事件；历史选择不改变当前整体事实。
-OWN-WORLD: GoalBoard 中性画布、系统中文字体和克制蓝色；紧凑事件索引与阅读面，无长内容卡片流。
-STORY: 先知道现状、已做结果、下一步和风险；沿时间线选择事件，核对产物和决定后回到下一条。
-FIRST VIEWPORT: 紧凑目标与整体进展占顶部，左侧密集时间线，右侧完整事件；两区独立滚动。
-FORM: 用户指定时间流；沿已批准第三版生产 GoalDetail。
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
---><article class="goal-event-document" data-goal-view="${goalId}" data-goal-event-document data-event-work="${doc?.state.owner ? "true" : "false"}" data-agreement-version="${state?.agreement.version ?? 0}" data-config-version="${state?.config.version ?? 0}" data-observed-cursor="${state?.observed_event_cursor ?? 0}" data-goal-event-cursor="${state?.goal_event_cursor ?? 0}"${selected ? "" : " hidden"}>
-    <section class="goal-header" aria-labelledby="goal-title-${goalId}">
-      <div class="title-row">
-        <div>
-          <div class="goal-title-heading"><h1 id="goal-title-${goalId}">${escapeHtml(goal.title)}</h1>${renderVisibleGoalStatus(item)}</div>
-          <p class="goal-outcome">${escapeHtml((state?.agreement.outcome || goal.outcome) || L("还没有写清预期结果。"))}</p>
+  return `<article class="goal-event-document" data-goal-view="${goalId}" data-goal-event-document data-event-work="${doc?.state.owner ? "true" : "false"}" data-agreement-version="${state?.agreement.version ?? 0}" data-config-version="${state?.config.version ?? 0}" data-observed-cursor="${state?.observed_event_cursor ?? 0}" data-goal-event-cursor="${state?.goal_event_cursor ?? 0}"${selected ? "" : " hidden"}>
+    <aside class="goal-workspace-hero" aria-label="${L("Goal 信息")}">
+      <details class="goal-info-popover" data-goal-info open>
+        <summary><span class="goal-info-label">${L("Goal 信息")}</span><span class="goal-info-collapsed-title">${escapeHtml(goal.title)}</span>${renderVisibleGoalStatus(item)}${icon("chevron-down")}</summary>
+        <div class="goal-info-body">
+          <h1 id="goal-title-${goalId}">${escapeHtml(goal.title)}</h1>
+          <p class="goal-info-outcome">${escapeHtml((state?.agreement.outcome || goal.outcome) || L("还没有写清预期结果。"))}</p>
+          <div class="goal-info-status" data-current-summary><p>${escapeHtml(judgment.lead)}</p>${stale}${state?.progress_summary?.next_step ? `<p>${L("下一步")}：${escapeHtml(state.progress_summary.next_step)}</p>` : ""}</div>
+          <button type="button" class="goal-info-requirements" data-event-reader="requirements" data-goal-requirement-progress><span>${L("完成要求")}</span><span>${state?.requirements.length ? L("{done}/{total} 已满足", { done: state.requirements.filter((requirement) => requirement.currently_satisfied).length, total: state.requirements.length }) : L("待明确")}</span>${icon("chevron-right")}</button>
+          ${state?.pending_decisions.length ? `<button type="button" class="goal-info-attention" data-event-form-open="decision">${L("{count} 项待你确认", { count: state.pending_decisions.length })}${icon("chevron-right")}</button>` : ""}
+          ${owned && (doc?.transfer.kind === "resume_cancelled" || doc?.transfer.kind === "reopen_event_completed") ? `<button type="button" class="button primary" data-event-form-open="resume">${L("继续此目标")}</button>` : ""}
+          <div class="goal-info-actions"><button type="button" class="text-button" data-event-reader="description">${L("目标与要求")}${icon("chevron-right")}</button>${moreActions}</div>
         </div>
-        <div class="header-actions">${modeSwitch}
-          <button type="button" class="button secondary" data-event-reader="planning">${L("工作规划")}</button>
-          <button type="button" class="button secondary" data-event-reader="description">${L("目标说明")}</button>
-          ${owned ? `<button type="button" class="button" data-event-form-open="note">${L("补充一条")}</button>` : ""}
-          ${owned && (doc?.transfer.kind === "resume_cancelled" || doc?.transfer.kind === "reopen_event_completed")
-            ? `<button type="button" class="button primary" data-event-form-open="resume">${doc.transfer.kind === "resume_cancelled" ? L("显式继续") : L("继续此目标")}</button>` : ""}
-          ${moreActions}
-        </div>
-      </div>
-    </section>
-    <section class="goal-overview" aria-label="${L("目标整体进展")}" data-current-summary>
-      <div class="overview-heading"><h2>${escapeHtml(judgment.title)}</h2><span class="state-pill${judgment.tone ? ` is-${judgment.tone}` : ""}">${escapeHtml(judgment.pill)}</span>${stale}
-        <div class="overview-tools">
-          <button type="button" class="text-button" data-event-reader="requirements">${L("完成要求")}</button>
-          <button type="button" class="text-button overview-toggle" data-overview-toggle>${L("展开当前结果")}</button>
-        </div>
-      </div>
-      <p class="overview-lead">${escapeHtml(judgment.lead)}</p>
-      <p class="overview-mobile-next">${escapeHtml(judgment.next)}<span class="owner"> · ${escapeHtml(judgment.owner || L("待接续"))}</span></p>
-      <div class="overview-grid">
-        <section><h3>${L("已经做成")}</h3><p>${escapeHtml(judgment.done)}</p></section>
-        <section><h3>${L("接下来做什么")}</h3><p>${escapeHtml(judgment.next)}<span class="owner"> · ${escapeHtml(judgment.owner || L("待接续"))}</span></p></section>
-        <section><h3>${L("风险与待决定")}</h3><p class="${judgment.tone === "amber" ? "risk-copy" : ""}">${escapeHtml(judgment.risk)}</p></section>
-      </div>
-    </section>
+      </details>
+    </aside>
     <div class="goal-layout" data-goal-layout>
       <section class="timeline-pane" aria-labelledby="stream-title-${goalId}">
         <div class="stream-toolbar"><h2 id="stream-title-${goalId}">${L("时间线")} <span data-event-count>${doc?.timeline.items.length ?? 0}</span></h2>
-          <div class="filters" role="group" aria-label="${L("筛选时间线")}">
-            <button type="button" data-timeline-filter="all" aria-pressed="true">${L("全部")}</button>
-            <button type="button" data-timeline-filter="result" aria-pressed="false">${L("成果")}</button>
-            <button type="button" data-timeline-filter="decision" aria-pressed="false">${L("决定")}</button>
-          </div>
+          ${recordMenu}
         </div>
-        <nav data-event-timeline aria-label="${L("按时间选择事件")}">${timeline}</nav>
+        <nav data-event-timeline data-pending-decision-events="${escapeHtml(JSON.stringify(state?.pending_decisions.map((request) => request.event_id) ?? []))}" aria-label="${L("按时间选择事件")}">${timeline}</nav>
         <div class="timeline-footer">${L("最新在前")} <button type="button" class="text-button" data-load-more-timeline${doc?.timeline.next_cursor == null ? " hidden" : ""} data-next-cursor="${doc?.timeline.next_cursor ?? ""}">${L("查看更早记录")}</button><span>${L("↑ ↓ 切换事件")}</span></div>
       </section>
       <section class="detail-pane" aria-label="${L("所选事件及内容")}">
-        <div class="detail-toolbar">
+        <div class="detail-toolbar"><button type="button" class="text-button" data-event-back>${L("返回工作区")}</button>
           <button type="button" class="text-button mobile-back" data-action="timeline">${L("返回时间线")}</button>
           <span data-detail-location>${L("事件内容")}</span>
           <div class="event-paging">
@@ -120,7 +92,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         ${owned && state ? forms.renderDecisionForm(state) : ""}
         ${owned && state ? forms.renderClosureForm(state) : ""}
         ${owned && doc ? forms.renderResumeForm(doc) : ""}
-        ${owned ? forms.renderNoteForm() : ""}
+        ${owned ? forms.renderNoteForm(doc) : ""}
         <p class="event-conflict" data-event-conflict hidden></p>
       </section>
     </div>
@@ -136,7 +108,7 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
       title: L("仍按原来源阅读"),
       pill: state.completion_effect ? L("已完成") : L("可阅读"),
       tone: state.completion_effect ? "green" : "amber",
-      lead: L("可以阅读全部历史。"),
+      lead: L("阅读原来的说明、要求和历史。这里不能写入。"),
       done: state.latest_reports[0]?.title || L("原结果和材料按原来源展示。"),
       next: L("阅读原来的说明、要求和历史。这里不能写入。"),
       owner: "",
@@ -158,6 +130,7 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
   if (state.work_status === "cancelled") {
     return { title: L("已取消"), pill: L("已取消"), tone: "amber", lead: L("不会被普通记录自动恢复。"), done: L("取消不需要伪造交付。"), next: L("显式继续后才能再写入。"), owner: "", risk: L("已取消，不会被普通记录自动恢复。") };
   }
+  const presentation = eventDirectoryPresentation(state)!;
   const pending = state.pending_decisions[0];
   const blocking = state.concerns.filter((item) => item.status === "open" && item.blocks_closure);
   const gaps = state.gaps;
@@ -175,7 +148,7 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
   const next = pending
     ? pending.question
     : state.progress_summary?.next_step
-      || (state.config.types.length ? L("按当前类型记录事实。") : L("可以从空白规划开始。"));
+      || L("打开终端开始工作，或添加一条记录。");
   const riskParts = [
     ...blocking.map((item) => item.title),
     ...gaps.map((item) => item.statement),
@@ -187,8 +160,8 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
   const unmet = state.closure && !state.closure.completion_applied ? state.closure.unmet_reasons : [];
   const blocked = Boolean(pending || blocking.length || gaps.length || needHuman.length || blockingRisks.length || deps.length || unmet.length);
   return {
-    title: pending ? L("需要你决定") : blocked ? L("部分受阻") : L("正在推进"),
-    pill: pending ? L("待决定") : blocked ? L("受阻") : L("进行中"),
+    title: L(presentation.status_label),
+    pill: state.progress_summary?.stale ? L("摘要待更新") : L(presentation.main_action_label),
     tone: pending || blocked ? "amber" : "",
     lead: state.progress_summary?.summary || (pending ? L("需要你作出决定。") : blocked ? L("有事项挡住完成。") : L("按当前约定继续。")),
     done,
@@ -198,21 +171,23 @@ function currentJudgment(state: GoalEventStateView | undefined, L: GoalsDocument
   };
 }
 
-function renderTimeline(items: readonly GoalHistoryIndexItem[], L: GoalsDocumentUiPrimitives["translate"], escapeHtml: GoalsDocumentUiPrimitives["escapeHtml"]): string {
+function renderTimeline(items: readonly GoalHistoryIndexItem[], L: GoalsDocumentUiPrimitives["translate"], escapeHtml: GoalsDocumentUiPrimitives["escapeHtml"], state?: GoalEventStateView): string {
   if (!items.length) return `<p class="no-results">${L("还没有时间点。保存意图或转交后会出现在这里。")}</p>`;
   const groups = new Map<string, GoalHistoryIndexItem[]>();
   for (const item of items) {
-    const day = item.received_at.slice(0, 10) || L("未标注日期");
+    const day = formatEventTime(item.received_at).slice(0, 10) || L("未标注日期");
     groups.set(day, [...(groups.get(day) ?? []), item]);
   }
   return [...groups.entries()].map(([day, rows]) => `<div class="day-label">${escapeHtml(day)}</div>${rows.map((item, index) => {
     const current = index === 0 && day === [...groups.keys()][0];
     const kind = item.lane && item.lane !== "other" ? item.lane : "";
     const time = formatClock(item.received_at);
-    return `<button type="button" class="timeline-entry${kind ? ` is-${kind}` : ""}" data-timeline-item="${escapeHtml(item.item_id)}" data-event-id="${escapeHtml(item.event_id ?? "")}" data-source="${escapeHtml(item.source)}" data-original-id="${escapeHtml(item.original_id)}" data-lane="${escapeHtml(item.lane)}" aria-current="${current ? "true" : "false"}">
+    const pending = item.type_label === "请求决定" ? state?.pending_decisions.find((request) => request.event_id === item.event_id) : undefined;
+    const statusLabel = item.type_label === "请求决定" && state ? pending ? L("待你决定") : L("已处理") : item.status_label;
+    return `<button type="button" class="timeline-entry${kind ? ` is-${kind}` : ""}" data-timeline-item="${escapeHtml(item.item_id)}" data-event-id="${escapeHtml(item.event_id ?? "")}" data-source="${escapeHtml(item.source)}" data-original-id="${escapeHtml(item.original_id)}" data-lane="${escapeHtml(item.lane)}" aria-current="${current ? "true" : "false"}" aria-expanded="${current ? "true" : "false"}">
       <time datetime="${escapeHtml(item.received_at)}">${escapeHtml(time)}</time>
       <span class="timeline-dot" aria-hidden="true"><i></i></span>
-      <span class="timeline-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.type_label)} · ${escapeHtml(item.actor_id)}</small></span>
+      <span class="timeline-copy"><strong>${escapeHtml(item.title)}</strong><small><b class="timeline-type">${escapeHtml(item.type_label)}</b> · ${escapeHtml(item.actor_id)}</small>${statusLabel ? `<em>${escapeHtml(statusLabel)}</em>` : ""}</span>
     </button>`;
   }).join("")}`).join("");
 }
@@ -307,6 +282,7 @@ function renderRequirements(
       const boundType = owned ? escapeHtml(requirement.bound_type_ids[0] ?? "") : "";
       return `<li><button type="button" class="text-button" data-locate-event="${escapeHtml(requirement.current_report?.event_id ?? "")}"${boundType ? ` data-bound-type="${boundType}"` : ""}>${escapeHtml(requirement.statement)}</button><small>${requirement.currently_satisfied ? L("当前满足") : L("尚未满足")}${source ? ` · ${source}` : ""}</small></li>`;
     }).join("")}</ul>` : `<p>${L("还没有完成要求。")}</p>`}
+    ${owned ? `<div class="event-actions"><button type="button" class="button secondary" data-event-form-open="requirement">${L("增加完成要求")}</button><button type="button" class="button secondary" data-event-form-open="agreement">${L("修改当前约定")}</button><button type="button" class="button" data-event-form-open="decision">${L("记录决定")}</button><button type="button" class="button" data-event-form-open="closure">${L("检查并收尾")}</button></div>` : ""}
     ${renderOriginalCriteria(original, L, escapeHtml)}
     ${context.artifactHtml}
   </div>`;

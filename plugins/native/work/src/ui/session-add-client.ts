@@ -1,6 +1,6 @@
 /** Browser initializer: only the named ports cross this behavior boundary. */
 export const WORK_SESSION_ADD_CLIENT = `
-({ route, parseActionResponse, showDialogStatus }) => {
+({ route, parseActionResponse, showDialogStatus, L }) => {
   const sessionAddDialog = document.querySelector("[data-session-add-dialog]");
   const sessionAddForm = sessionAddDialog?.querySelector("[data-session-add-form]");
   const sessionAddAction = sessionAddForm?.querySelector("[data-session-add-action]");
@@ -20,13 +20,13 @@ export const WORK_SESSION_ADD_CLIENT = `
   const initialSessionWorkspace = {
     id: sessionAddWorkspaceId?.defaultValue || "",
     path: sessionAddWorkspace?.defaultValue || "",
-    name: sessionAddWorkspaceName?.textContent || "不关联工作目录",
+    name: sessionAddWorkspaceName?.textContent || L("不关联工作目录"),
   };
-  const setSessionWorkspace = ({ id = "", path = "", name = "不关联工作目录", custom = false }) => {
+  const setSessionWorkspace = ({ id = "", path = "", name = L("不关联工作目录"), custom = false }) => {
     if (sessionAddWorkspaceId) sessionAddWorkspaceId.value = id;
     if (sessionAddWorkspace) sessionAddWorkspace.value = path;
     if (sessionAddWorkspaceName) sessionAddWorkspaceName.textContent = name;
-    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || (custom ? "请输入这台电脑上的绝对路径" : "运行时不绑定本地路径");
+    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || (custom ? L("请输入这台电脑上的绝对路径") : L("运行时不绑定本地路径"));
     if (sessionAddWorkspaceCustomPanel) sessionAddWorkspaceCustomPanel.hidden = !custom;
     if (sessionAddWorkspaceMenu) sessionAddWorkspaceMenu.open = false;
     if (custom) queueMicrotask(() => sessionAddWorkspaceCustomInput?.focus());
@@ -43,23 +43,23 @@ export const WORK_SESSION_ADD_CLIENT = `
     const mode = sessionAddForm?.querySelector("[data-session-add-mode]");
     const toggle = sessionAddForm?.querySelector("[data-session-add-toggle]");
     const confirmCopy = sessionAddForm?.querySelector("[data-session-add-confirm-copy]");
-    if (dialogTitle) dialogTitle.textContent = action === "create" ? "新建 Session" : "关联已有 Session";
-    if (dialogCopy) dialogCopy.textContent = action === "create" ? "从当前项目启动一条新的 Runtime Session。" : "把一条已存在的 Runtime Session 收入当前项目。";
-    if (mode) mode.textContent = action === "create" ? "创建新的 Runtime Session" : "关联已有 Runtime Session";
-    if (toggle) toggle.textContent = action === "create" ? "关联已有 Session" : "改为启动新 Session";
+    if (dialogTitle) dialogTitle.textContent = action === "create" ? L("新建 Session") : L("关联已有 Session");
+    if (dialogCopy) dialogCopy.textContent = action === "create" ? L("从当前项目启动一条新的 Runtime Session。") : L("把一条已存在的 Runtime Session 收入当前项目。");
+    if (mode) mode.textContent = action === "create" ? L("创建新的 Runtime Session") : L("关联已有 Runtime Session");
+    if (toggle) toggle.textContent = action === "create" ? L("关联已有 Session") : L("改为启动新 Session");
     if (confirmCopy) confirmCopy.textContent = action === "create"
-      ? "确认使用以上 Goal、Runtime 和工作目录启动新 Session。"
-      : "确认只为已有 Session 写入当前 Project、Goal 和工作目录关系。";
+      ? L("确认使用以上 Goal、Runtime 和工作目录启动新 Session。")
+      : L("确认只为已有 Session 写入当前 Project、Goal 和工作目录关系。");
     const capability = sessionAddForm?.querySelector("[data-session-add-capability]");
     if (capability) capability.textContent = action === "create"
       ? createMode === "native"
-        ? "会请求所选 Runtime 创建一条新的原生 Session；不会自动发送消息。"
-        : "这个 Runtime 没有原生创建接口，将建立 GoalBoard 托管记录，不伪装成已启动 Runtime。"
+        ? L("会请求所选 Runtime 创建一条新的原生 Session；不会自动发送消息。")
+        : L("这个 Runtime 没有原生创建接口，将建立 GoalBoard 托管记录，不伪装成已启动 Runtime。")
       : discoverMode === "native"
-        ? "可以先同步 Runtime 元数据；只有提交后才会关联当前 Project。"
-        : "这个 Runtime 不支持发现列表，请粘贴原生 Session ID；GoalBoard 不读取正文。";
+        ? L("可以先同步 Runtime 元数据；只有提交后才会关联当前 Project。")
+        : L("这个 Runtime 不支持发现列表，请粘贴原生 Session ID；GoalBoard 不读取正文。");
     if (sessionAddSubmit) {
-      sessionAddSubmit.textContent = action === "create" ? "启动 Session" : "关联 Session";
+      sessionAddSubmit.textContent = action === "create" ? L("启动 Session") : L("关联 Session");
       sessionAddSubmit.disabled = !sessionAddConfirm?.checked || (action === "link" && !sessionAddNativeInput?.value.trim());
     }
   };
@@ -77,18 +77,18 @@ export const WORK_SESSION_ADD_CLIENT = `
     updateSessionAddForm();
   });
   sessionAddForm?.querySelectorAll("[data-session-workspace-option]").forEach((button) => button.addEventListener("click", () => {
-    setSessionWorkspace({ id: button.dataset.workspaceId || "", path: button.dataset.workspacePath || "", name: button.dataset.workspaceName || "工作目录" });
+    setSessionWorkspace({ id: button.dataset.workspaceId || "", path: button.dataset.workspacePath || "", name: button.dataset.workspaceName || L("工作目录") });
   }));
   sessionAddForm?.querySelector("[data-session-workspace-none]")?.addEventListener("click", () => setSessionWorkspace({}));
   sessionAddForm?.querySelector("[data-session-workspace-custom]")?.addEventListener("click", () => setSessionWorkspace({
     path: sessionAddWorkspaceCustomInput?.value.trim() || "",
-    name: "其他目录",
+    name: L("其他目录"),
     custom: true,
   }));
   sessionAddWorkspaceCustomInput?.addEventListener("input", () => {
     const path = sessionAddWorkspaceCustomInput.value.trim();
     if (sessionAddWorkspace) sessionAddWorkspace.value = path;
-    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || "请输入这台电脑上的绝对路径";
+    if (sessionAddWorkspacePath) sessionAddWorkspacePath.textContent = path || L("请输入这台电脑上的绝对路径");
   });
   sessionAddRuntime?.addEventListener("change", updateSessionAddForm);
   sessionAddNativeInput?.addEventListener("input", updateSessionAddForm);
@@ -97,11 +97,11 @@ export const WORK_SESSION_ADD_CLIENT = `
     const button = event.currentTarget;
     const option = sessionAddRuntime?.selectedOptions?.[0];
     if (option?.dataset.discoverMode !== "native") {
-      showDialogStatus(sessionAddStatus, "这个 Runtime 不支持 Session 列表发现，请直接输入原生 Session ID。", true);
+      showDialogStatus(sessionAddStatus, L("这个 Runtime 不支持 Session 列表发现，请直接输入原生 Session ID。"), true);
       return;
     }
     button.disabled = true;
-    showDialogStatus(sessionAddStatus, "正在同步 Session 元数据；不会读取正文。", false);
+    showDialogStatus(sessionAddStatus, L("正在同步 Session 元数据；不会读取正文。"), false);
     try {
       const payload = await parseActionResponse(await fetch(route("/api/sessions/discover"), {
         method: "POST",
@@ -114,12 +114,12 @@ export const WORK_SESSION_ADD_CLIENT = `
         if (!record.native_runtime_session_id) return;
         const item = document.createElement("option");
         item.value = record.native_runtime_session_id;
-        item.label = (record.title || "未命名 Session") + (record.runtime_workspace_hint ? " · " + record.runtime_workspace_hint : "");
+        item.label = (record.title || L("未命名 Session")) + (record.runtime_workspace_hint ? " · " + record.runtime_workspace_hint : "");
         options.append(item);
       });
       showDialogStatus(sessionAddStatus, payload.records?.length
-        ? "已同步 " + payload.records.length + " 条元数据。选择或输入 Session ID 后再确认加入。"
-        : "Runtime 当前没有返回可发现的 Session。", false);
+        ? L("已同步 {count} 条元数据。选择或输入 Session ID 后再确认加入。", { count: payload.records.length })
+        : L("Runtime 当前没有返回可发现的 Session。"), false);
     } catch (error) {
       showDialogStatus(sessionAddStatus, error instanceof Error ? error.message : String(error), true);
     } finally {
@@ -130,7 +130,7 @@ export const WORK_SESSION_ADD_CLIENT = `
     event.preventDefault();
     if (!sessionAddConfirm?.checked) return;
     sessionAddSubmit.disabled = true;
-    showDialogStatus(sessionAddStatus, sessionAddAction.value === "create" ? "正在创建并登记 Session..." : "正在关联这条 Session...", false);
+    showDialogStatus(sessionAddStatus, sessionAddAction.value === "create" ? L("正在创建并登记 Session...") : L("正在关联这条 Session..."), false);
     try {
       await parseActionResponse(await fetch(route("/api/sessions"), {
         method: "POST",

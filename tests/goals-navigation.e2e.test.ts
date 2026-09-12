@@ -4,7 +4,7 @@ import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
 import { openGoalBrowser } from "./fixtures/goal-browser.js";
 import { insertHistoricalClaim, insertHistoricalEvidence, insertHistoricalRun } from "./historical-sql-fixture.js";
 
-test("Goal navigation preserves history, keyboard focus, failed selection recovery and open-tab limits without executing work", { timeout: 60_000 }, async t => {
+test("Goal navigation preserves history, keyboard focus, failed selection recovery and repeated selections without executing work", { timeout: 60_000 }, async t => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, before, origin, sessionId, command, evaluate, waitFor, click, navigate, reloadPage } = browser;
@@ -12,29 +12,26 @@ test("Goal navigation preserves history, keyboard focus, failed selection recove
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/V1?desktop=1" }, sessionId));
-  const selected = (id: string) => `document.querySelector('[data-goal-view="${id}"]') && document.querySelector('[data-work-tab="${id}"]')?.getAttribute('aria-selected') === 'true'`;
-  const tabs = () => evaluate<string[]>("[...document.querySelectorAll('[data-work-tab]')].map(tab => tab.dataset.workTab)");
+  const selected = (id: string) => `document.querySelector('[data-goal-view="${id}"]') && document.querySelector('[data-goal-node-workspace]')?.dataset.expandedGoal === "${id}"`;
   async function key(key: string, code: number) {
-    await command("Input.dispatchKeyEvent", { type: "rawKeyDown", key, windowsVirtualKeyCode: code }, sessionId);
+    await command("Input.dispatchKeyEvent", { type: "keyDown", key, windowsVirtualKeyCode: code, ...(key === "Enter" ? { text: "\r", unmodifiedText: "\r" } : {}) }, sessionId);
     await command("Input.dispatchKeyEvent", { type: "keyUp", key, windowsVirtualKeyCode: code }, sessionId);
   }
   await waitFor(selected("V1"));
   await click('.tree-node[data-select-goal="RELEASE"]');
   await waitFor(selected("RELEASE"));
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.tree-entry.is-selected .tree-node')].map(node => node.dataset.selectGoal)"), ["RELEASE"]);
   await evaluate("history.back()");
   await waitFor(selected("V1"));
   assert.equal(await evaluate("location.pathname"), "/goals/V1");
   await evaluate("history.forward()");
   await waitFor(selected("RELEASE"));
   assert.equal(await evaluate("location.pathname"), "/goals/RELEASE");
-  await click('[data-work-tab="RELEASE"]');
-  await waitFor("document.activeElement.dataset.workTab === 'RELEASE'");
-  await key("Home", 36);
-  await waitFor(selected("V1") + " && document.activeElement.dataset.workTab === 'V1'");
-  await key("End", 35);
-  await waitFor(selected("RELEASE") + " && document.activeElement.dataset.workTab === 'RELEASE'");
-  assert.equal(await evaluate("document.querySelector('#goal-document-pane').getAttribute('aria-labelledby')"),
-    await evaluate("document.querySelector('[data-work-tab=" + JSON.stringify("RELEASE") + "]').id"));
+  await evaluate("document.querySelector('.tree-node[data-select-goal=CORE]').focus()");
+  await key("Enter", 13);
+  await waitFor(selected("CORE"));
+  await click('.tree-node[data-select-goal="RELEASE"]');
+  await waitFor(selected("RELEASE"));
 
   await waitFor("document.querySelector('[data-goal-event-document]')?.dataset.goalView === 'RELEASE'");
   const timelineItem = "document.querySelector('[data-timeline-item]')";
@@ -50,23 +47,14 @@ test("Goal navigation preserves history, keyboard focus, failed selection recove
   await command("Network.setBlockedURLs", { urls: [] }, sessionId);
   await click('.tree-node[data-select-goal="CORE"]');
   await waitFor(selected("CORE"));
-  await click('[data-close-work-tab="RELEASE"]');
-  assert.deepEqual(await tabs(), ["V1", "CORE"]);
-  await click('[data-close-work-tab="CORE"]');
-  await waitFor(selected("V1") + " && document.activeElement.dataset.workTab === 'V1'");
-  await click('[data-close-work-tab="V1"]');
-  assert.deepEqual(await tabs(), ["V1"]);
-  assert.match(await evaluate<string>("document.querySelector('[data-toast]').textContent"), /至少保留一个/);
-
   const opened = ["PLATFORM", "WORKSPACE", "ADOPTION", "CORE", "INTERFACES", "WEB", "GRAPH", "DESKTOP"];
   for (const id of opened) {
     await click('.tree-node[data-select-goal="' + id + '"]');
     await waitFor(selected(id));
   }
-  assert.deepEqual(await tabs(), opened, "Ninth Goal evicts the oldest tab, not the selected Goal");
   await reloadPage();
   await waitFor(selected("DESKTOP"));
-  assert.deepEqual(await tabs(), opened, "Open Goals survive a real reload");
+  assert.equal(await evaluate("document.querySelector('[data-workspace-goal-title]').textContent"), before.goals.find(goal => goal.goal_id === "DESKTOP").title);
   const after = store.snapshot(DEMO_BOARD_ID);
   assert.deepEqual(after.goals, before.goals);
   assert.deepEqual(after.relations, before.relations);
@@ -75,7 +63,7 @@ test("Goal navigation preserves history, keyboard focus, failed selection recove
   assert.equal(after.board.active_goal_id, before.board.active_goal_id);
 });
 
-test("explicit current-Goal and archive actions recover from network failure, persist on reload and retain execution history", { timeout: 60_000 }, async t => {
+test("browsing does not set a current Goal; archive actions recover, persist on reload and retain execution history", { timeout: 60_000 }, async t => {
   const browser = await openGoalBrowser(t);
   if (!browser) return;
   const { store, before, origin, sessionId, command, evaluate, waitFor, click, navigate, reloadPage } = browser;
@@ -117,20 +105,13 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false }, sessionId);
   await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/WEB" }, sessionId));
-  await waitFor("document.querySelector('[data-set-active-goal]')");
-  assert.equal(store.snapshot(DEMO_BOARD_ID).board.active_goal_id, before.board.active_goal_id);
-  await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/WEB/active"] }, sessionId);
+  await waitFor("document.querySelector('[data-goal-view=WEB]')");
   await click('.goal-more > summary');
-  await click('[data-set-active-goal]');
-  await waitFor("!document.querySelector('[data-set-active-goal]').disabled && document.querySelector('[data-toast]').textContent.length > 0");
-  assert.equal(store.snapshot(DEMO_BOARD_ID).board.active_goal_id, before.board.active_goal_id);
-  await command("Network.setBlockedURLs", { urls: [] }, sessionId);
-  await click('[data-set-active-goal]');
-  await waitFor("document.querySelector('[data-toast]').textContent.includes('已设为当前 Goal')");
-  assert.equal(store.snapshot(DEMO_BOARD_ID).board.active_goal_id, "WEB");
-  await reloadPage();
-  await waitFor("document.querySelector('[data-goal-view=" + JSON.stringify("WEB") + "]')");
   assert.equal(await evaluate("Boolean(document.querySelector('[data-set-active-goal]'))"), false);
+  assert.equal(store.snapshot(DEMO_BOARD_ID).board.active_goal_id, before.board.active_goal_id);
+  await reloadPage();
+  await waitFor("document.querySelector('[data-goal-view=WEB]')");
+  assert.equal(store.snapshot(DEMO_BOARD_ID).board.active_goal_id, before.board.active_goal_id);
 
   await click('.tree-node[data-select-goal="CORE"]');
   await waitFor("document.querySelector('[data-goal-view=" + JSON.stringify("CORE") + "]')");
@@ -162,7 +143,7 @@ test("explicit current-Goal and archive actions recover from network failure, pe
   assert.equal(after.claims.find((item) => item.claim_id === "core-history-claim")?.release_reason, "historical CORE lifecycle record");
   assert.deepEqual(after.runs.find((item) => item.run_id === "core-history-run")?.output_refs, ["artifact://core-lifecycle-history"]);
   assert.equal(after.evidence.find((item) => item.evidence_id === "core-history-evidence")?.locator, "artifact://core-lifecycle-history");
-  assert.equal(after.board.active_goal_id, "WEB");
+  assert.equal(after.board.active_goal_id, before.board.active_goal_id);
   const historyId = await evaluate(`document.querySelector('[data-source="legacy_evidence"]')?.dataset.timelineItem || ""`) as string;
   assert.ok(historyId, "CORE must keep the original Evidence timeline item after archive and restore");
   await click(`[data-timeline-item="${historyId}"]`);
@@ -179,8 +160,8 @@ test("Sources mutation and Feed reload preserve utility state while fresh Goal l
   await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }, sessionId);
   await navigate(() => command("Page.navigate", { url: origin + "/goals/V1?desktop=1#goal-records-V1" }, sessionId));
   await waitFor("document.body.dataset.desktopSurface === 'goal'");
-  await click('[data-directory-panel="goals"] [data-directory-back]');
-  await click('[data-work-surface-open="sources"]');
+  await click('[data-plugin-strip] [data-plugin-id="feed"]');
+  await click('[data-feed-views] [data-work-surface-open="sources"]');
   await waitFor("document.body.dataset.desktopSurface === 'sources'");
   await click('[data-feed-sources-open]');
   await waitFor("document.querySelector('[data-feed-sources-dialog]')?.open");
@@ -192,8 +173,7 @@ test("Sources mutation and Feed reload preserve utility state while fresh Goal l
   assert.equal(response.status, 200);
   const snapshot = await response.json();
   assert.ok(snapshot.sources.some((source: { definition_id: string }) => source.definition_id === sourceDefinition));
-  await click('[data-directory-panel="sources"] [data-directory-back]');
-  await click('[data-work-surface-open="feed"][data-feed-preset="feed"]');
+  await click('[data-feed-views] [data-work-surface-open="feed"][data-feed-preset="feed"]');
   await waitFor("document.body.dataset.desktopSurface === 'feed'");
   await reloadPage();
   await waitFor("document.body.dataset.desktopSurface === 'feed'");

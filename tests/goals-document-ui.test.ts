@@ -52,7 +52,7 @@ test("document contribution keeps Goal facts in the timeline layout and escapes 
   assert.match(html, /data-current-summary/);
   assert.doesNotMatch(html, /data-goal-tab="overview"/);
   assert.doesNotMatch(html, /data-open-quick-record/);
-  assert.match(html, /data-set-active-goal/);
+  assert.doesNotMatch(html, /data-set-active-goal/);
   assert.doesNotMatch(render(value, { activeGoalId: "goal-a" }), /data-set-active-goal/);
   assert.match(renderer.renderGoalDocument(value, context, false), /data-goal-view="goal-a"[^>]* hidden/);
 });

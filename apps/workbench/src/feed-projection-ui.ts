@@ -55,7 +55,7 @@ function buildFeedNativePluginModel(
     source_catalog: (view.feed_source_catalog ?? []).map((source) => ({
       id: source.id,
       name: source.name,
-      category_label: source.category_label,
+      category_label: L(source.category_label),
     })),
     connector_auth: {
       github: view.feed_connector_auth?.github ?? { bound: false },
@@ -247,7 +247,7 @@ function demoFeedEntries(view: GoalBoardWebView): FeedUiEntry[] {
     item: itemModel(item),
     preset: item.item_type,
     provider: provider(item),
-    kind_label: item.item_type === "feed" ? "Feed Item · 演示" : "Inbox Entry · 演示",
+    kind_label: item.item_type === "feed" ? L("Feed Item · 演示") : L("Inbox Entry · 演示"),
     source_label: item.source_label,
     disposition: item.disposition,
     title: item.title,
@@ -360,7 +360,7 @@ function sourceModel(source: FeedSourceRecord, view: GoalBoardWebView): FeedUiSo
     schedule_label: source.schedule.mode === "manual"
       ? L("仅手动拉取")
       : source.schedule.enabled ? L("每 {count} 分钟", { count: source.schedule.interval_minutes }) : L("定时拉取已关闭"),
-    scope_label: scope,
+    scope_label: L(scope),
     scope_options: uiKind === "gmail" ? GMAIL_SCOPE_PRESETS.map((preset) => ({ value: preset.value, label: L(preset.label) })) : [],
     configured_endpoint: configuredEndpoint,
     protocol_status: rssHttp

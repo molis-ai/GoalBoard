@@ -1,46 +1,24 @@
-Scope and mode: GoalBoard V1 local Web application, Operate mode.
+Current workbench direction (2026-09-12): see `.impeccable/surfaces/immersive-workbench.md` and `specs/immersive-workbench-implementation/spec.md`. The older shell/Goal layout below is historical; retained feature ownership remains applicable.
 
-Audience and job: AI Runtime developers and product leads need to see the active
-outcome, understand which smallest Goals are executable, inspect blockers, and
-verify what still prevents completion. The primary action is to open the next
-Ready Goal; Candidate decisions remain clearly human-owned.
+Scope and mode: GoalBoard V1 local Web application, Operate mode. Goal canvas workspace, updated 2026-09-12.
 
-Direction: railway signal box. The Goal Spine behaves like a route diagram:
-Goals are stations, dependency edges are tracks, Ready/Blocked/Claimed states
-are signals, Impact conflicts occupy a section, and Candidate Goals wait at a
-switch. Use a cool mineral light surface, dark track lines, cobalt active route,
-amber blockers, signal red risk, and mint satisfied. Rectilinear controls and
-compact operational typography; no generic dashboard card wall.
+Audience and job: users need to see what each Goal produces, which Goal consumes it, and work on one Goal while keeping its current facts, terminal, and history together.
 
-First viewport: plain-language active outcome and next action on the left; the
-dominant Goal Spine route occupies the center; a narrow live-status rail on the
-right explains Ready, blocked, active Claim, risk, and user decisions. Mobile
-turns the route vertical and keeps status explanations adjacent.
+Direction: retain Calm Desktop and the single project/list directory. The accepted Goal surface is the user-pinned code-led evolution `seed=user-goal-canvas-workspace-2026-09-12`: neutral dotted canvas, existing system fonts and Lucide icons, semantic state colors with text. Earlier Goal railway/status-rail comps are superseded; no new comp round or demo edit is needed.
 
-Proof/content: canonical SQLite snapshot only. Demo content must be labeled
-“示例数据”. Business logic, acceptance, blockers, Evidence and Reviews are real
-fields, never invented capabilities.
+First viewport: the left project and Goal list remains. The main region shows the dependency canvas. Clicking a Goal node itself expands one fixed workspace with an 18px breathing frame and an upper-right 收起 action. Left default 70% is full-height Runtime; right 30% has collapsible Goal info above the latest-first timeline. The 6px separator supports pointer/keyboard adjustment and persists locally by project and Goal. At intermediate desktop widths Terminal remains in the grid.
 
-Constraints: accessible contrast and focus, keyboard navigation, responsive
-desktop/mobile, honest empty/error/loading states, no Runtime dispatch controls.
+The signature: compact nodes can move; the expanded workspace cannot. 收起 returns to the previous camera, zoom, and compact-node positions. Provider → consumer arrows represent dependencies; 属于 labels express parent membership. Completed nodes remain. Pan, zoom, fit, and local node placement never change business relations or dispatch work.
 
-Delegated comp decision: carry forward `.impeccable/mocks/goalboard-comp-a.png`.
-It makes the active outcome, Goal Spine, state signals, and selected Goal detail
-understandable in one scan. Do not literalize its invented counts, dates, Runtime
-names, or authentication example. Mobile turns the same route vertical.
+The collapsible Goal info popover shows the outcome, live progress, requirement support, and pending decisions. Record templates move into the more menu. The timeline exposes one Add entry disclosure, explaining note, progress update, and issue choices before opening existing forms. Set as current Goal is removed. Events retain inline bodies and real pagination/retry paths.
 
-Implementation inventory:
+Readers and forms temporarily cover the left Runtime area with 返回工作区. Covered controls are inert and focus enters the active content; the visible desktop timeline remains interactive. At ≤760px, the frame is 10px and foldable Goal info → Runtime → timeline stack with scrollable regions. The reader covers the whole work area and also makes Goal info and the timeline inert. Returning restores visible-trigger focus.
 
-| Visible ingredient | Implementation |
-| --- | --- |
-| Active outcome and primary next action | semantic HTML from Board facts |
-| Horizontal Goal Spine and branches | accessible HTML list plus CSS track geometry |
-| Ready/claimed/blocked/satisfied signals | status tokens and text labels, never color alone |
-| Right operational status rail | derived snapshot counts and blocker summaries |
-| Selected Goal detail | semantic tabs/panels for business logic, acceptance, evidence, reviews |
-| Candidate switch | human decision queue with explicit approve/reject actions |
-| Mobile route | CSS vertical reflow; no raster crop |
-| Generated comp | north-star reference only; not shipped as UI asset |
+Work retains separate Goal terminals. Opening, switching, expanding, or collapsing a Goal never starts a Runtime, sends input, destroys its process, or rebinds another Goal's terminal. Only explicit user actions open/start a terminal. An unopened Terminal shows its honest empty state.
+
+Proof/content: real Goal state and existing APIs; no second completion calculation or domain state. The current canvas delivery is Level 3, functional locally. Independent visual review disposition: ship after the intermediate-width Terminal and covered-panel focus fixes. Installation, packaging, and release were not validated. Acceptance and test evidence remain in `specs/goal-canvas-workspace/spec.md`.
+
+Visual evidence: `.impeccable/review/desktop.png`, `desktop-dark.png`, `mobile.png`, `canvas-overview.png`, `user-1024.png`, `user-1024-reader.png`, and `mobile-reader.png`. These are review screenshots, not shipped raster assets. Source authority is `apps/workbench/src/goals-page-renderer.ts`, `apps/workbench/src/styles/goal-canvas.ts`, and the Goals event-document / momentum UI and clients. Existing Feed, Settings, Sessions, and native-chrome directions remain unchanged.
 
 ## Information Stream Workbench direction — approved 2026-08-30
 
