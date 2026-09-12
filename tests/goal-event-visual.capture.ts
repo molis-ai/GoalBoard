@@ -56,7 +56,8 @@ test("capture isolated production Goal event document screenshots", { timeout: 9
   await waitFor("document.querySelector('[data-goal-event-document]')?.dataset.goalView === " + JSON.stringify(created.goal.goal_id));
   await waitFor("document.querySelector('[data-event-sheet] .event, [data-event-sheet] .no-results')");
   await capture("desktop");
-  await click('[data-goal-event-document]:not([hidden]) .header-actions > [data-event-reader="planning"]');
+  await click('[data-goal-event-document]:not([hidden]) .goal-more > summary');
+  await click('[data-goal-event-document]:not([hidden]) .goal-more [data-event-reader="planning"]');
   await waitFor("document.querySelector('[data-event-reader-root]') && !document.querySelector('[data-event-reader-root]').hidden");
   await capture("desktop-planning");
   await click('[data-goal-event-document]:not([hidden]) [data-event-panel="planning"] [data-event-reader="type"]');
@@ -105,7 +106,8 @@ test("capture isolated production Goal event document screenshots", { timeout: 9
   await click(`[data-goal-event-document]:not([hidden]) [data-timeline-item="${firstItem}"]`);
   await waitFor("document.querySelector('[data-goal-layout]')?.classList.contains('is-showing-detail')");
   await capture("mobile-390-detail");
-  await click('[data-goal-event-document]:not([hidden]) .header-actions > [data-event-reader="planning"]');
+  await click('[data-goal-event-document]:not([hidden]) .goal-more > summary');
+  await click('[data-goal-event-document]:not([hidden]) .goal-more [data-event-reader="planning"]');
   await waitFor("document.querySelector('[data-event-reader-root]') && !document.querySelector('[data-event-reader-root]').hidden");
   await click('[data-goal-event-document]:not([hidden]) [data-event-panel="planning"] [data-event-reader="type"]');
   await waitFor("document.querySelector('[data-event-form=type]') && document.querySelector('[data-event-form=type]').hidden === false");

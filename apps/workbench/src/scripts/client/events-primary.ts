@@ -17,7 +17,8 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
       }
     });
     treeResizer?.addEventListener("pointerdown", (event) => {
-      if (matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;
+      if (event.button !== 0) return;
+      if (document.body.classList.contains("immersive-workbench") ? matchMedia("(max-width: 600px)").matches : matchMedia("(max-width: 760px)").matches && !workspace.classList.contains("is-desktop-tui")) return;
       resizeStartX = event.clientX;
       resizeStartWidth = treePane.getBoundingClientRect().width;
       treeResizer.classList.add("is-dragging");
@@ -35,6 +36,7 @@ export const CLIENT_EVENTS_PRIMARY_SCRIPT = `        changed.removeAttribute("ar
     };
     treeResizer?.addEventListener("pointerup", finishTreeResize);
     treeResizer?.addEventListener("pointercancel", finishTreeResize);
+    treeResizer?.addEventListener("dblclick", () => setTreeWidth(innerWidth <= 1050 ? 236 : 264));
     treeResizer?.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();

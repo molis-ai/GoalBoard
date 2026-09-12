@@ -149,7 +149,9 @@ export const DESKTOP_TITLEBAR_STYLES = `  /* One Codex-style desktop titlebar co
     }
     body.project-index-page[data-desktop-shell="true"][data-native-desktop="true"] > .project-index,
     html[data-native-desktop="true"] body.project-index-page[data-desktop-shell="true"] > .project-index {
-      min-height: calc(100dvh - var(--desktop-titlebar-height));
+      min-height: 0;
+      overflow: hidden;
+      overscroll-behavior: contain;
     }
     body.settings-page[data-desktop-shell="true"][data-native-desktop="true"] > .topbar > *,
     html[data-native-desktop="true"] body.settings-page[data-desktop-shell="true"] > .topbar > *,

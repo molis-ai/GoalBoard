@@ -11,15 +11,15 @@ export const STYLES = `
     --font: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
-  html { width: 100%; height: 100%; }
-  body { width: 100%; height: 100dvh; min-height: 100%; margin: 0; overflow: hidden; background: var(--page); color: var(--ink); font: 14px/1.55 var(--font); }
+  html { width: 100%; height: 100%; height: 100dvh; overflow: hidden; overscroll-behavior: none; }
+  body { width: 100%; height: 100dvh; min-height: 0; margin: 0; overflow: hidden; overscroll-behavior: none; background: var(--page); color: var(--ink); font: 14px/1.55 var(--font); }
   button, input, textarea, select { font: inherit; }
   button { color: inherit; }
   button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid color-mix(in srgb, var(--blue), transparent 30%); outline-offset: 2px; }
   svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   [hidden] { display: none !important; }
   .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
-  .app { min-width: 0; width: 100%; height: 100dvh; min-height: 100%; overflow: hidden; display: grid; grid-template-rows: 58px minmax(0, 1fr); }
+  .app { min-width: 0; width: 100%; height: 100dvh; min-height: 0; overflow: hidden; display: grid; grid-template-rows: 58px minmax(0, 1fr); }
   .topbar { position: relative; min-width: 0; display: flex; align-items: center; border-bottom: 1px solid var(--line-strong); background: color-mix(in srgb, var(--rail) 82%, #fff); box-shadow: 0 1px 2px rgba(18, 28, 40, .06); z-index: 10; }
   .brand { min-width: 182px; height: 100%; padding: 0 28px; display: flex; align-items: center; gap: 11px; border-right: 1px solid var(--line); }
   .brand svg { color: var(--blue); font-size: 22px; stroke-width: 2.4; }

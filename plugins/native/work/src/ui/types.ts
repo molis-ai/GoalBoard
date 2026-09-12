@@ -72,4 +72,5 @@ export interface WorkUiModel {
   project: ProjectOperationsProject | null;
   data?: ProjectOperationsData;
   icon: (name: WorkUiIconName) => string;
+  text?: (value: string, vars?: Record<string, string | number>) => string;
 }

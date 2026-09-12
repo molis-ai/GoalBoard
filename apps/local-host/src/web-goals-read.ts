@@ -12,16 +12,30 @@ import { sendLocalWebJson as sendJson } from "./web-http.js";
 
 export function createLocalGoalsReadHttp(ports: {
   withCatalog: LocalWebCatalogRunner;
-  renderer: Pick<ReturnType<typeof createLocalHostWorkbenchRenderer>, "renderGoalBoardMomentumFragment" | "renderGoalBoardProjectGuidanceSettings" | "renderGoalBoardProjectSettings" | "renderGoalBoardRefreshFragment" | "renderGoalBoardWeb" | "renderGoalDocumentFragment">;
+  renderer: Pick<ReturnType<typeof createLocalHostWorkbenchRenderer>, "renderGoalBoardProjectGeneralSettings" | "renderGoalBoardMomentumFragment" | "renderGoalBoardProjectGuidanceSettings" | "renderGoalBoardProjectSettings" | "renderGoalBoardRefreshFragment" | "renderGoalBoardWeb" | "renderGoalDocumentFragment">;
   isDesktopShellRequest(request: IncomingMessage, url: URL): boolean;
   pageCsp: string;
   sessionProjectOperationsData: ReturnType<typeof createSessionProjectOperations>;
 }) {
   const { withCatalog: withGoalBoardProjectCatalog, isDesktopShellRequest, pageCsp: PAGE_CSP, sessionProjectOperationsData } = ports;
-  const { renderGoalBoardMomentumFragment, renderGoalBoardProjectGuidanceSettings, renderGoalBoardProjectSettings, renderGoalBoardRefreshFragment, renderGoalBoardWeb, renderGoalDocumentFragment } = ports.renderer;
+  const { renderGoalBoardProjectGeneralSettings, renderGoalBoardMomentumFragment, renderGoalBoardProjectGuidanceSettings, renderGoalBoardProjectSettings, renderGoalBoardRefreshFragment, renderGoalBoardWeb, renderGoalDocumentFragment } = ports.renderer;
   function settings(request: IncomingMessage, response: ServerResponse, url: URL, boardId: string,
     readWebView: () => GoalBoardWebView, coordinator: GoalProjectApplication, controlToken: string,
   ): boolean {
+    if (request.method === "GET" && url.pathname === "/settings/general") {
+      const view = readWebView();
+      if (!view.project) {
+        sendJson(response, 404, { error: "找不到这个 GoalBoard 项目" });
+        return true;
+      }
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-security-policy": PAGE_CSP,
+      });
+      response.end(renderGoalBoardProjectGeneralSettings(view.project, view.projects, controlToken, isDesktopShellRequest(request, url)));
+      return true;
+    }
     if (request.method === "GET" && url.pathname === "/settings/guidance") {
       response.writeHead(200, {
         "content-type": "text/html; charset=utf-8",
@@ -93,16 +107,18 @@ export function createLocalGoalsReadHttp(ports: {
       request.method, url.pathname, readWebView,
       async (view, { goalId: requestedGoalId, archiveView, trashView, decisionView }) => {
         const desktopShell = isDesktopShellRequest(request, url);
+        const projectConfiguration = options.project ? await withGoalBoardProjectCatalog({ homeDirectory }, catalog => ({
+          plugins: catalog.listProjectPlugins(options.project!.project_id),
+          workspaces: catalog.listWorkspaceDirectory(options.project!.project_id),
+        })) : null;
+        if (projectConfiguration) view = { ...view, enabled_plugins: projectConfiguration.plugins };
         const operations = options.project
           ? sessionProjectOperationsData(
               await sessionResources,
               options.project.project_id,
               view,
               options.projects,
-              await withGoalBoardProjectCatalog(
-                { homeDirectory: homeDirectory },
-                (catalog) => catalog.listWorkspaceDirectory(options.project!.project_id),
-              ),
+              projectConfiguration!.workspaces,
             )
           : { sessions: [], workspaces: [] };
         return renderGoalBoardWeb(

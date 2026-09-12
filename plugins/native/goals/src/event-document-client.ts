@@ -2,7 +2,8 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
     const { documentPane, route, translate: L, isAbortError, showError, showStatus, reloadDocument, controlHeaders } = host;
     let selectedRequest = 0;
     let moreRequest = 0;
-    const reading = { goal: "", item: "", filter: "all", reader: "", form: "" };
+    let returnFocusTarget = null;
+    const reading = { goal: "", item: "", filter: "all", reader: "", form: "", infoOpen: null };
     const escapeText = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
     const root = () => documentPane.querySelector("[data-goal-event-document]");
     const goalId = () => root()?.dataset.goalView || "";
@@ -13,6 +14,7 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       reader: reading.reader,
       filter: reading.filter || "all",
       form: reading.form,
+      infoOpen: root()?.querySelector("[data-goal-info]")?.open,
     });
     const resetReading = (nextGoal) => {
       selectedRequest += 1;
@@ -21,19 +23,38 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       reading.filter = "all";
       reading.reader = "";
       reading.form = "";
+      reading.infoOpen = null;
+      returnFocusTarget = null;
     };
     const applyLaneFilter = (node) => {
       const filter = reading.filter || "all";
       node.hidden = filter !== "all" && node.dataset.lane !== filter;
     };
 
-    const hidePanels = () => {
+    const syncPanelPresence = () => {
+      const article = root();
+      const editing = Boolean(article?.classList.contains("is-editing-goal"));
+      article?.querySelector(".goal-workspace-hero")?.toggleAttribute("inert", editing && matchMedia("(max-width: 760px)").matches);
+      const frame = article?.closest("[data-goal-node-workspace]");
+      if (frame?.querySelector("[data-goal-work-main]")) {
+        article.dispatchEvent(new CustomEvent("goalboard:goal-panel-presence", { bubbles: true }));
+      } else frame?.querySelector("[data-tui-pane]")?.toggleAttribute("inert", editing);
+      article?.querySelector(".timeline-pane")?.toggleAttribute("inert", editing && matchMedia("(max-width: 760px)").matches);
+    };
+    const hidePanels = (restoreFocus = false) => {
       const article = root();
       if (!article) return;
       article.querySelector("[data-event-reader-root]")?.setAttribute("hidden", "");
       article.querySelectorAll("[data-event-form]").forEach((form) => { form.hidden = true; });
       const sheet = article.querySelector("[data-event-sheet]");
       if (sheet) sheet.hidden = false;
+      article.classList.remove("is-editing-goal");
+      syncPanelPresence();
+      if (restoreFocus) requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (root() !== article || article.classList.contains("is-editing-goal")) return;
+        const target = returnFocusTarget?.isConnected ? returnFocusTarget : article.querySelector("[data-record-menu] > summary, [data-goal-info] > summary");
+        target?.focus({ preventScroll: true });
+      }));
     };
     const showDetail = (showing) => {
       root()?.querySelector("[data-goal-layout]")?.classList.toggle("is-showing-detail", showing);
@@ -60,6 +81,13 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         return;
       }
       root()?.querySelectorAll("[data-timeline-item]").forEach((node) => node.setAttribute("aria-current", String(node.dataset.timelineItem === itemId)));
+      root()?.querySelectorAll("[data-timeline-item]").forEach((node) => node.setAttribute("aria-expanded", String(node.dataset.timelineItem === itemId)));
+      const sheet = root()?.querySelector("[data-event-sheet]");
+      const anchor = root()?.querySelector('[data-timeline-item="' + CSS.escape(itemId || "") + '"]');
+      if (sheet) {
+        if (anchor) anchor.after(sheet);
+        else root()?.querySelector("[data-event-timeline]")?.prepend(sheet);
+      }
       showDetail(true);
       hidePanels();
       if (!itemId) return;
@@ -74,7 +102,7 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       } catch (error) {
         if (isAbortError?.(error) || requestId !== selectedRequest || goalId() !== currentGoal || reading.goal !== currentGoal) return;
         if (!explicit && (reading.form || reading.reader)) return;
-        renderEventHtml("<p class=\\"no-results\\" role=\\"alert\\">" + escapeText(error.message || L("无法读取事件")) + "</p>");
+        renderEventHtml("<p class=\\"no-results\\" role=\\"alert\\">" + escapeText(error.message || L("无法读取事件")) + "</p><button type=\\"button\\" class=\\"text-button\\" data-retry-event>" + escapeText(L("重试读取事件")) + "</button>");
       }
     };
 
@@ -91,9 +119,13 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       await loadEventBody(fake);
     };
 
-    const showForm = (name, typeId) => {
+    const showForm = (name, typeId, trigger) => {
       const article = root();
       if (!article) return;
+      const origin = trigger || document.activeElement;
+      const menu = origin?.closest?.("[data-record-menu], .goal-more");
+      if (trigger || !article.classList.contains("is-editing-goal")) returnFocusTarget = menu?.querySelector("summary") || origin;
+      if (menu) menu.open = false;
       const isReader = name === "planning" || name === "description" || name === "requirements";
       if (isReader) {
         reading.reader = name;
@@ -103,13 +135,19 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         reading.reader = "";
       }
       hidePanels();
+      article.classList.add("is-editing-goal");
+      syncPanelPresence();
       const sheet = article.querySelector("[data-event-sheet]");
       if (sheet) sheet.hidden = true;
       if (isReader) {
         article.querySelector("[data-event-reader-root]")?.removeAttribute("hidden");
         article.querySelectorAll("[data-event-panel]").forEach((panel) => { panel.hidden = panel.dataset.eventPanel !== name; });
         const title = article.querySelector("[data-reader-title]");
-        if (title) title.textContent = name === "planning" ? L("工作规划") : name === "description" ? L("目标说明") : L("完成要求");
+        if (title) {
+          title.textContent = name === "planning" ? L("记录模板") : name === "description" ? L("目标与要求") : L("完成要求");
+          title.tabIndex = -1;
+          title.focus({ preventScroll: true });
+        }
         showDetail(true);
         return;
       }
@@ -374,7 +412,7 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
           return;
         }
         showStatus?.(L("已保存。顶部已按当前权威状态更新。"));
-        hidePanels();
+        hidePanels(true);
       } catch (error) {
         if (status) { status.hidden = false; status.textContent = error.message || L("保存失败"); }
         showError?.(error.message || L("保存失败"));
@@ -387,8 +425,23 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       const nav = root()?.querySelector("[data-event-timeline]");
       if (!nav) return;
       const existing = new Set([...nav.querySelectorAll("[data-timeline-item]")].map((node) => node.dataset.timelineItem));
+      const pending = new Set(JSON.parse(nav.dataset.pendingDecisionEvents || "[]"));
+      let lastDay = [...nav.querySelectorAll(".day-label")].at(-1)?.textContent;
       items.forEach((item) => {
         if (existing.has(item.item_id)) return;
+        existing.add(item.item_id);
+        const received = item.received_at || "";
+        const date = new Date(received);
+        const validDate = !Number.isNaN(date.getTime());
+        const pad = (value) => String(value).padStart(2, "0");
+        const day = validDate ? date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) : L("未标注日期");
+        if (day !== lastDay) {
+          const heading = document.createElement("div");
+          heading.className = "day-label";
+          heading.textContent = day;
+          nav.append(heading);
+          lastDay = day;
+        }
         const button = document.createElement("button");
         button.type = "button";
         button.className = "timeline-entry";
@@ -399,10 +452,13 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         button.dataset.lane = item.lane || "other";
         if (item.lane && item.lane !== "other") button.classList.add("is-" + item.lane);
         button.setAttribute("aria-current", String(item.item_id === reading.item));
+        button.setAttribute("aria-expanded", "false");
         applyLaneFilter(button);
-        const received = item.received_at || "";
-        const time = received ? received.slice(11, 16) : "--:--";
-        button.innerHTML = "<time datetime=\\"" + escapeText(received) + "\\">" + escapeText(time) + "</time><span class=\\"timeline-dot\\" aria-hidden=\\"true\\"><i></i></span><span class=\\"timeline-copy\\"><strong>" + escapeText(item.title || "") + "</strong><small>" + escapeText((item.type_label || "") + " · " + (item.actor_id || "")) + "</small></span>";
+        const time = validDate ? pad(date.getHours()) + ":" + pad(date.getMinutes()) : "--:--";
+        const status = item.type_label === "请求决定" ? pending.has(item.event_id) ? L("待你决定") : L("已处理") : item.status_label;
+        button.innerHTML = "<time></time><span class=timeline-dot aria-hidden=true><i></i></span><span class=timeline-copy><strong>" + escapeText(item.title || "") + "</strong><small><b class=timeline-type>" + escapeText(item.type_label || "") + "</b> · " + escapeText(item.actor_id || "") + "</small>" + (status ? "<em>" + escapeText(status) + "</em>" : "") + "</span>";
+        button.querySelector("time").dateTime = received;
+        button.querySelector("time").textContent = time;
         nav.append(button);
       });
     };
@@ -411,15 +467,23 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       const article = event.target.closest?.("[data-goal-event-document]");
       if (!article || article !== root()) return;
       const item = event.target.closest("[data-timeline-item]");
-      if (item) { void loadEventBody(item, true); return; }
+      if (item) {
+        const sheet = article.querySelector("[data-event-sheet]");
+        if (item.getAttribute("aria-expanded") === "true" && sheet && !sheet.hidden && !reading.form && !reading.reader) {
+          selectedRequest += 1;
+          item.setAttribute("aria-expanded", "false");
+          sheet.hidden = true;
+        } else void loadEventBody(item, true);
+        return;
+      }
+      if (event.target.closest("[data-retry-event]")) { void locateHistory(reading.item); return; }
       if (event.target.closest("[data-action=timeline]")) { showDetail(false); return; }
       if (event.target.closest("[data-event-back]")) {
         reading.reader = "";
         reading.form = "";
-        hidePanels();
+        hidePanels(true);
         return;
       }
-      if (event.target.closest("[data-overview-toggle]")) { article.querySelector(".goal-overview")?.classList.toggle("is-expanded"); return; }
       if (event.target.closest("[data-previous-event]")) { stepEvent(-1); return; }
       if (event.target.closest("[data-next-event]")) { stepEvent(1); return; }
       const retryRead = event.target.closest("[data-retry-read]");
@@ -471,9 +535,12 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
             const response = await fetch(route("/api/goals/" + encodeURIComponent(currentGoal) + "/event-timeline?before_cursor=" + encodeURIComponent(more.dataset.nextCursor || "") + "&limit=40"), { cache: "no-store" });
             const body = await response.json().catch(() => ({}));
             if (requestId !== moreRequest || goalId() !== currentGoal) return;
+            if (!response.ok) throw new Error(body.error || L("无法读取更早记录，请重试。"));
             appendTimelineItems(body.items || []);
             if (!body.next_cursor) { more.hidden = true; more.dataset.nextCursor = ""; }
             else more.dataset.nextCursor = String(body.next_cursor);
+          } catch (error) {
+            if (requestId === moreRequest && goalId() === currentGoal) showError?.(error.message || L("无法读取更早记录，请重试。"));
           } finally { more.disabled = false; }
         })();
         return;
@@ -492,11 +559,11 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         return;
       }
       const reader = event.target.closest("[data-event-reader]");
-      if (reader) { showForm(reader.dataset.eventReader); return; }
+      if (reader) { showForm(reader.dataset.eventReader, undefined, reader); return; }
       const openForm = event.target.closest("[data-event-form-open]");
-      if (openForm) { showForm(openForm.dataset.eventFormOpen, openForm.dataset.typeId); return; }
+      if (openForm) { showForm(openForm.dataset.eventFormOpen, openForm.dataset.typeId, openForm); return; }
       const report = event.target.closest("[data-event-report]");
-      if (report) { showForm("report", report.dataset.eventReport); return; }
+      if (report) { showForm("report", report.dataset.eventReport, report); return; }
       const filter = event.target.closest("[data-timeline-filter]");
       if (filter) {
         reading.filter = filter.dataset.timelineFilter || "all";
@@ -542,7 +609,11 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       void submitForm(form);
     };
     const onKeydown = (event) => {
-      if (!root()?.contains(event.target)) return;
+      if (event.key === "Escape") {
+        const menu = event.target.closest?.("[data-record-menu][open], .goal-more[open]");
+        if (menu) { event.preventDefault(); menu.open = false; menu.querySelector("summary")?.focus(); return; }
+      }
+      if (!event.target.closest?.("[data-event-timeline]")) return;
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       if (event.target.matches?.("input, textarea, select")) return;
       const items = [...root().querySelectorAll("[data-timeline-item]")].filter((item) => !item.hidden);
@@ -557,10 +628,19 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
       if (row) row.hidden = !checkbox.checked;
     };
 
+    document.addEventListener("click", (event) => {
+      root()?.querySelectorAll("[data-record-menu][open], .goal-more[open]").forEach((menu) => {
+        if (!menu.contains(event.target)) menu.open = false;
+      });
+    });
     documentPane.addEventListener("click", onClick);
     documentPane.addEventListener("change", onChange);
     documentPane.addEventListener("submit", onSubmit);
     documentPane.addEventListener("keydown", onKeydown);
+    documentPane.addEventListener("toggle", (event) => {
+      if (event.target.matches?.("[data-goal-info]") && event.target.closest("[data-goal-event-document]") === root()) reading.infoOpen = event.target.open;
+    }, true);
+    window.addEventListener("resize", () => requestAnimationFrame(syncPanelPresence));
 
     return {
       openEventReader(name) { showForm(name); },
@@ -569,6 +649,11 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         const current = goalId();
         const restoreForGoal = restore && (!restore.goal || restore.goal === current) ? restore : null;
         if (reading.goal !== current) resetReading(current);
+        const info = article?.querySelector("[data-goal-info]");
+        if (info && !info.dataset.initialized) {
+          info.open = restoreForGoal?.infoOpen ?? reading.infoOpen ?? !matchMedia("(max-width: 760px)").matches;
+          info.dataset.initialized = "true";
+        }
         if (restoreForGoal?.item) reading.item = restoreForGoal.item;
         if (restoreForGoal?.filter) reading.filter = restoreForGoal.filter;
         if (restoreForGoal?.reader) reading.reader = restoreForGoal.reader;
@@ -580,10 +665,6 @@ export const GOALS_EVENT_DOCUMENT_CLIENT_FACTORY_SCRIPT = `(host) => {
         article?.querySelectorAll("[data-timeline-item]").forEach((node) => applyLaneFilter(node));
         const first = article?.querySelector("[data-timeline-item]");
         const width = article?.getBoundingClientRect().width || article?.clientWidth || 0;
-        if (width > 0 && width <= 680 && !reading.item && !reading.form && !reading.reader) {
-          showDetail(false);
-          return;
-        }
         if (reading.item) {
           article?.querySelectorAll("[data-timeline-item]").forEach((node) => node.setAttribute("aria-current", String(node.dataset.timelineItem === reading.item)));
         }

@@ -132,9 +132,12 @@ export const CLIENT_BOOTSTRAP_SCRIPT = `  (() => {
           : currentGoalUiStorageKey;
     const goalMoveReceiptKey = "goalboard-goal-move-receipt:" + (state.project?.project_id || state.snapshot.board.board_id);
     const workTabsStorageKey = "goalboard-work-tabs:" + (state.project?.project_id || state.snapshot.board.board_id);
-    const desktopNavigationStateVersion = 3;
+    const desktopNavigationStateVersion = 4;
+    let immersiveNavigation = null;
+    let projectHome = null;
+    let pluginWorkbench = null;
     let desktopDirectoryOrigin = null;
-    let activeDesktopSurface = decisionView ? "feed" : "goal";
+    let activeDesktopSurface = document.body.dataset.desktopSurface || (decisionView ? "feed" : "goal");
     let activeFeedPreset = feedDirectory?.dataset.feedPreset || "inbox_message";
     let selectedFeedItem = feedList?.querySelector("[data-feed-entry-id].is-selected")?.dataset.feedEntryId || "";
     let selectedSource = sourceList?.querySelector("[data-source-entry-id].is-selected")?.dataset.sourceEntryId || "";

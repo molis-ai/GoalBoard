@@ -194,6 +194,7 @@ ${GOALS_TREE_FILTER_SCRIPT}
       document.querySelectorAll(".tree-node[data-select-goal]").forEach((button) => {
         const active = button.dataset.selectGoal === goalId;
         button.classList.toggle("is-selected", active);
+        button.closest(".tree-entry")?.classList.toggle("is-selected", active);
         button.setAttribute("aria-pressed", String(active));
         if (active) expandAncestors(button);
       });

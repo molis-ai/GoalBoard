@@ -26,6 +26,15 @@ export interface ProjectSelection {
   display_name: string;
 }
 
+/** Bundled project navigation entries; activation does not grant API permissions. */
+export const BUILTIN_PROJECT_PLUGIN_IDS = ["goals", "sessions", "feed", "artifacts"] as const;
+export type BuiltinProjectPluginId = typeof BUILTIN_PROJECT_PLUGIN_IDS[number];
+export interface AddProjectPluginInput {
+  project_id: string;
+  plugin_id: BuiltinProjectPluginId;
+  actor_id: string;
+}
+
 export interface ProjectWorkspaceRef {
   workspace_id: string;
   canonical_path: string;
@@ -109,6 +118,7 @@ export interface MigrateProjectInput {
 }
 
 export interface ProjectsQueryApi {
+  listProjectPlugins(projectId: string): BuiltinProjectPluginId[];
   listProjects(): ProjectRecord[];
   getProject(projectId: string): ProjectRecord;
   selections(): ProjectSelection[];
@@ -120,6 +130,7 @@ export interface ProjectsQueryApi {
 }
 
 export interface ProjectsCommandApi {
+  addProjectPlugin(input: AddProjectPluginInput): BuiltinProjectPluginId[];
   renameProject(projectId: string, displayName: string, actorId: string): ProjectRecord;
   addWorkspaceProject(input: AddWorkspaceProjectInput): ProjectWorkspaceDirectoryRecord;
   repairWorkspaceProject(input: RepairWorkspaceProjectInput): ProjectWorkspaceDirectoryRecord;

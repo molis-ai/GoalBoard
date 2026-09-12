@@ -228,6 +228,7 @@ test("desktop shell uses one project directory, project tabs, and soft work surf
   assert.match(VISUAL_FOUNDATION_STYLES, /body\[data-desktop-shell="true"\]\[data-native-desktop="true"\] \.navigator-native-row,[\s\S]*\.desktop-workbench-bar \{[\s\S]*transform: translateY\(-2px\);/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.settings-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar,/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.project-index-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar,[\s\S]*height: var\(--desktop-titlebar-height\);/);
+  assert.match(VISUAL_FOUNDATION_STYLES, /body\.project-index-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.project-index,[\s\S]*min-height: 0;/);
   assert.match(VISUAL_FOUNDATION_STYLES, /body\.settings-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar > \*,[\s\S]*body\.project-index-page\[data-desktop-shell="true"\]\[data-native-desktop="true"\] > \.topbar > \*/);
   assert.match(VISUAL_FOUNDATION_STYLES, /grid-template-columns: var\(--tree-width, clamp\(286px, 26vw, 334px\)\) 8px minmax\(0, 1fr\)/);
   assert.match(VISUAL_FOUNDATION_STYLES, /\.tree-pane,[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto !important/);

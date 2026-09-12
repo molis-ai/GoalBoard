@@ -7,7 +7,7 @@ export interface WebProjectNavigation {
 
 export type WebSettingsSection = "appearance" | "runtimes" | "projects" | "diagnostics";
 type SettingsNavigationActive = WebSettingsSection | "planning";
-type ProjectSettingsNavigationActive = "guidance" | "rules" | "planning";
+type ProjectSettingsNavigationActive = "general" | "guidance" | "rules" | "planning";
 
 
 export interface SettingsNavigationPrimitives {
@@ -103,6 +103,7 @@ function renderProjectSettingsNavigation(
   return `<nav class="settings-navigation project-settings-navigation" aria-label="${L("项目设置")}">
     ${desktopProjectContext}<div class="settings-nav-body">
     <section class="settings-nav-group" aria-labelledby="settings-project-group"><div class="settings-nav-label" id="settings-project-group"><span>${L("项目设置")}</span><small>${escapeHtml(project.display_name)}</small></div>
+      <a href="${href(`${routePrefix}/settings/general`)}"${current("general")}>${icon("settings")}<span><strong>${L("基本信息")}</strong><small>${L("项目名称与删除")}</small></span></a>
       <a href="${href(`${routePrefix}/settings/guidance`)}"${current("guidance")}>${icon("book")}<span><strong>${L("项目说明")}</strong><small>${L("所有 Goal 共享的长期上下文")}</small></span></a>
       <a href="${href(`${routePrefix}/settings/rules`)}"${current("rules")}>${icon("shield")}<span><strong>${L("工作规则")}</strong><small>${L("执行和复核底线")}</small></span></a>
       <a href="${href(`${routePrefix}/settings/planning`)}"${current("planning")}>${icon("workflow")}<span><strong>${L("工作规划")}</strong><small>${L("选择和调整规划方法")}</small></span></a>

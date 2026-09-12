@@ -1,0 +1,37 @@
+2026-09-12 — 两层目录、按项目安装插件、Linear 风格确认
+范围：docs/design/immersive-workbench/ 静态设计原型，完成等级 2。
+预览：http://127.0.0.1:64520/；不连接生产数据、真实安装或 Runtime。
+
+参照：实际打开 /Applications/GoalBoard.app 的示例项目并点击 Goals，确认固定项目头部、插件根层、同栏进入/返回目录。视觉参照为 linear.app 的真实产品界面示例。
+
+浏览器操作：CUA 操作实际 Chrome 标签页与 Codex 内置预览；使用原生按钮、键盘 Enter、表单选择、输入和指针点击。状态从页面 DOM/可访问性树读回。未调用应用内部函数代替交互。
+尺寸：Chrome 桌面 1560×1027、手机 390×844；当前用户内置预览 529×936。第一批还检查过 619×936。全部视口覆盖已复位，用户预览保留最新市场。
+
+通过：
+- 项目根层显示已安装插件行；Goals 进入同一栏 Goal Tree，折叠父目标和搜索“下一步”正确显示匹配目标。
+- 从目录选择目标、输入草稿，再返回上一级：根层恢复，右侧 Goal 工作框保持打开，草稿不变。
+- 项目菜单通过 Enter 打开并选择项目；切换后回到目标项目插件根层。
+- 市场呈现四种内置插件卡片；当前项目已安装筛选在灵感项目只显示其三个已安装插件，搜索 Sessions 只显示该卡片。
+- GoalBoard 中 Goals 已安装按钮禁用；选择灵感收集后可安装，完成后可前往该项目；其他项目没有重复安装或内容串入。
+- 第一次为灵感项目安装 Goals 后是 0 目标空画布；点击“创建第一个 Goal”实际打开表单；创建后变为 1 个目标，第一栏计数同步。
+- 新 Goal 只显示“尚未开始”、本次创建事件和 0/1 完成要求，没有示例目标的既有成果与昨天历史。
+- GoalBoard 保留原 6 个目标、未发送对话草稿与终端命令；灵感项目恢复自己的新 Goal 和对话草稿。
+- 空白画布实际指针点击（700,400）后，Goal 目录继续显示，工作框保持关闭。
+- 手机中安装 Sessions 到灵感项目并前往项目；打开目录并返回根层后新增入口可见；点击 Goals 保持抽屉打开且底层 inert，点击具体目标后收起抽屉并恢复该 Goal 草稿。
+- 手机 390px 与当前 529px 页面无横向溢出；安装面板在手机完整可用。桌面、手机和用户当前宽度的截图已打开检查。
+- 默认石墨深色及浅色切换有效。浏览器 error/warn 日志为空。
+
+第一批发现的问题已一次修复，以上为确认批：空画布按钮被平移 pointer capture 捕获、空白点击误退目录、新建目标根层计数未更新、新建目标混入示例历史。修复分别位于画布 pointerdown/pointerup、syncDirectorySelection、fresh Goal 初始化与渲染。
+
+截图（均在本目录）：
+linear-desktop-canvas.png：桌面根层目录与画布。
+linear-desktop-expanded.png：根层目录与展开的对话工作框。
+linear-desktop-tree.png：Goal 树与终端工作框。
+linear-light-canvas.png：浅色 Goal 树与终端工作框（文件名沿用确认批）。
+linear-market.png / linear-install.png：市场全貌与选择目标项目。
+linear-empty-project.png / linear-fresh-goal.png：新项目空画布与创建后的初始工作状态。
+linear-project-menu.png：项目菜单打开状态。
+linear-mobile-market.png / linear-mobile-install.png / linear-mobile-directory.png：手机搜索结果、安装和 Goal 目录。
+linear-user-529-directory.png / linear-user-529-market.png：用户当前预览宽度。
+
+证据边界：内置浏览器视口模拟曾出现截图裁切/缩放异常，两次尝试后改用独立 Chrome 验证目标尺寸，没有为截图异常修改 CSS。部分即时截图出现旧帧，相关成品截图重新读取并检查。上述截图只证明设计原型，不证明生产业务接通。早期 project-switch-qa.txt 中 native select 的检查和旧截图已被本版项目 popover 与两层目录替代。

@@ -25,7 +25,7 @@ export interface ArtifactWorkbenchRequest extends ArtifactBrowserUiModel {
   readonly iconSpriteHtml: string;
 }
 
-const ARTIFACT_WORKBENCH_STYLES = `
+export const ARTIFACT_WORKBENCH_STYLES = `
   .artifact-page { margin:0; background:var(--page); color:var(--ink); font:13px/1.52 var(--font); }
   .artifact-shell { display:grid; grid-template-columns:minmax(230px,286px) minmax(0,1fr); min-height:100dvh; }
   .artifact-directory { background:var(--rail); padding:24px 16px; min-width:0; }
@@ -81,6 +81,7 @@ export function createArtifactWorkbenchRenderer(
     contribution: { contribution_id: ARTIFACT_BROWSER_UI_CONTRIBUTION_ID, surface, model },
   }).html;
   return {
+    fragments: (model: ArtifactBrowserUiModel): string => `<div data-artifact-directory>${mount("directory", model)}</div><div data-artifact-detail>${mount("detail", model)}</div>`,
     embed: (model: ArtifactBrowserUiModel): string => mount("embed", model),
     goalContext: (items: readonly GoalArtifactEmbed[], model: Omit<ArtifactBrowserUiModel, "view" | "relationship">): string =>
       items.map((item) => mount("embed", { ...model, view: item.view, relationship: item.relationship })).join(""),

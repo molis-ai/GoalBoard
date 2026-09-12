@@ -5,6 +5,7 @@ import type { GoalBoardWebView } from "./page-view.js";
 import { type WebProjectNavigation, type createWorkbenchSettingsNavigation } from "./settings-navigation.js";
 import { createWorkbenchGoalsPlanningRenderer } from "./ui-composition.js";
 import { CONTROL_CLIENT_SCRIPT, PROJECT_RULES_CLIENT_SCRIPT, PROJECT_GUIDANCE_CLIENT_SCRIPT } from "./browser-assets.js";
+import { PROJECT_SETTINGS_CLIENT_SCRIPT } from "./scripts/project-settings.js";
 
 export interface ProjectSettingsPagePorts {
   L(text: string, values?: Record<string, string | number>): string;
@@ -30,6 +31,45 @@ export function createWorkbenchProjectSettingsPages(ports: ProjectSettingsPagePo
   const { settingsContextHref, renderProjectSettingsNavigation, renderSettingsNavigation } = ports.navigation;
   const THEME_BOOTSTRAP_SCRIPT = ports.themeBootstrapScript;
   const VISUAL_FOUNDATION_CLIENT_SCRIPT = ports.visualFoundationClientScript;
+function renderGoalBoardProjectGeneralSettings(
+  project: WebProjectNavigation,
+  projects: readonly WebProjectNavigation[],
+  controlToken = "",
+  desktopShell = false,
+): string {
+  const routePrefix = `/projects/${encodeURIComponent(project.project_id)}`;
+  const projectReturnHref = desktopShell ? withDesktopQuery(`${routePrefix}/`) : `${routePrefix}/`;
+  return `<!doctype html>
+<html lang="${htmlLang()}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${controlTokenMeta(controlToken)}<title>${L("基本信息")} · ${escapeHtml(project.display_name)} · GoalBoard</title><script>${THEME_BOOTSTRAP_SCRIPT}</script><link rel="stylesheet" href="/assets/goalboard-settings.css"></head>
+<body class="settings-page project-general-page" data-route-prefix="${escapeHtml(routePrefix)}" data-desktop-shell="true"${desktopShell ? ' data-native-desktop="true"' : ""}>
+  ${renderIconSprite()}
+  <header class="topbar"><a class="brand" href="${projectReturnHref}" aria-label="${L("返回 Goal Tree")}">${icon("brand")}<strong>GoalBoard</strong></a><div class="project-context"${desktopShell ? " data-tauri-drag-region" : ""}><strong>${escapeHtml(project.display_name)}</strong><small>${L("项目设置")}</small></div><div class="top-spacer"${desktopShell ? " data-tauri-drag-region" : ""}></div><a class="top-action" href="${projectReturnHref}" aria-label="${L("关闭项目设置")}">${icon(desktopShell ? "x" : "tree")}<span>${L("Goal Tree")}</span></a></header>
+  <main class="settings-shell">
+    ${renderProjectSettingsNavigation("general", project, desktopShell, projects)}
+    <div class="settings-content"><section class="settings-document" aria-labelledby="settings-title">
+      <header class="settings-heading"><h1 id="settings-title">${L("基本信息")}</h1><p>${escapeHtml(project.display_name)}</p></header>
+      <div class="settings-body"><section class="settings-action-section" aria-labelledby="project-name-title">
+        <div><h2 id="project-name-title">${L("项目名称")}</h2><p>${L("名称会显示在项目目录和工作台中。")}</p></div>
+        <form class="inline-settings-form" data-project-rename="${escapeHtml(project.project_id)}"><label>${L("项目名称")}<input type="text" name="display_name" value="${escapeHtml(project.display_name)}" required maxlength="160"></label><button type="submit">${L("保存名称")}</button><p class="settings-form-error" role="alert" hidden></p></form>
+      </section>
+      <section class="settings-action-section project-delete-section" aria-labelledby="project-delete-title">
+        <div><h2 id="project-delete-title">${L("删除项目")}</h2><p>${L("永久删除这个项目在 GoalBoard 中的目标、记录和关联。关联工作目录中的代码和文件会保留。")}</p></div>
+        <button class="project-delete-button" type="button" data-project-delete-open>${L("删除项目")}</button>
+      </section></div>
+    </section></div>
+  </main>
+  <dialog class="runtime-plan-dialog project-delete-dialog" data-project-delete-dialog aria-labelledby="project-delete-dialog-title" aria-describedby="project-delete-description">
+    <form class="runtime-plan-shell" data-project-delete="${escapeHtml(project.project_id)}" data-project-directory-href="${desktopShell ? withDesktopQuery("/") : "/"}">
+      <header><div><h2 id="project-delete-dialog-title">${L("删除项目")}</h2><p>${escapeHtml(project.display_name)}</p></div></header>
+      <div class="runtime-plan-body"><p id="project-delete-description">${L("永久删除这个项目在 GoalBoard 中的目标、记录和关联。关联工作目录中的代码和文件会保留。")}</p><label class="runtime-plan-confirm"><input type="checkbox" name="delete_confirmed"><span>${L("我确认删除这个项目，且理解此操作无法撤销。")}</span></label><p class="settings-form-error" data-project-delete-error role="alert" hidden></p></div>
+      <footer><button type="button" data-project-delete-cancel autofocus>${L("取消")}</button><button class="project-delete-button" type="submit" disabled>${L("确认删除项目")}</button></footer>
+    </form>
+  </dialog>
+  <script>${clientI18nScript()}${CONTROL_CLIENT_SCRIPT}${PROJECT_SETTINGS_CLIENT_SCRIPT}${VISUAL_FOUNDATION_CLIENT_SCRIPT}</script>
+</body></html>`;
+}
+
 function renderGoalBoardProjectSettings(
   view: GoalBoardWebView,
   controlToken = "",
@@ -107,9 +147,9 @@ function renderGoalBoardProjectGuidanceSettings(
     ${project ? renderProjectSettingsNavigation("guidance", project, desktopShell, view.projects) : renderSettingsNavigation("projects", null, desktopShell, view.projects)}
     <div class="settings-content"><section class="guidance-document" aria-labelledby="guidance-title">
       <header class="guidance-page-header"><div><h1 id="guidance-title">${L("项目说明")}</h1><p>${L("这是一份所有 Goal 和未来会话共享的长期说明。这里只显示已经生效的内容；你可以直接维护它，并随时查看每次改动。")}</p></div><button class="guidance-primary-action" type="button" data-guidance-new>${icon("plus")}${L("新增说明")}</button></header>
-      <p class="project-rules-receipt" data-guidance-receipt role="status" aria-live="polite" hidden></p>
+      <div class="settings-body"><p class="project-rules-receipt" data-guidance-receipt role="status" aria-live="polite" hidden></p>
       <section class="guidance-editor" data-guidance-editor hidden aria-labelledby="guidance-editor-title"><header><div><h2 id="guidance-editor-title" data-guidance-editor-title></h2><p data-guidance-editor-description></p></div><button class="guidance-text-action" type="button" data-guidance-editor-close>${L("取消")}</button></header><form data-guidance-form><input type="hidden" name="action"><input type="hidden" name="guidance_id"><div class="guidance-editor-fields" data-guidance-editor-fields><label>${L("分类")}<select name="kind"><option value="context">${L("项目背景")}</option><option value="requirement">${L("共同要求")}</option><option value="constraint">${L("硬约束")}</option><option value="convention">${L("协作约定")}</option><option value="workflow">${L("工作方式")}</option><option value="quality_bar">${L("质量标准")}</option></select></label><label>${L("说明原文")}<textarea name="content" maxlength="4000" rows="5" placeholder="${L("写成未来 Runtime 可以直接理解和遵守的完整说明")}"></textarea></label></div><p class="guidance-editor-preview" data-guidance-editor-preview hidden></p><label>${L("为什么要做这次变更")}<textarea name="reason" rows="3" required placeholder="${L("这条原因会进入版本记录，方便以后理解当时为什么修改")}"></textarea></label><p class="guidance-editor-error" data-guidance-editor-error role="alert" hidden></p><footer><button class="guidance-secondary-action" type="button" data-guidance-editor-close>${L("取消")}</button><button class="guidance-primary-action" type="submit">${L("保存说明")}</button></footer></form></section>
-      <div class="guidance-layout"><div class="guidance-content">${empty}${sections}<details class="guidance-history"><summary>${L("版本记录")}<span>${L("共 {count} 次变更", { count: guidance.revisions.length })}</span></summary><div class="guidance-history-list">${historyRows || `<p class="guidance-empty">${L("还没有版本记录。")}</p>`}</div></details></div><aside class="guidance-aside" aria-label="${L("项目说明状态")}"><section><h2>${L("Runtime 如何使用")}</h2><p>${L("只发送当前生效版本，并放在当前 Goal 和外部内容之前。修改或停用会在下一次 Prompt 中生效。")}</p><dl><div><dt>${L("生效说明")}</dt><dd>${guidance.entries.length}</dd></div><div><dt>${L("已停用")}</dt><dd>${guidance.inactive_entries.length}</dd></div><div><dt>${L("历史版本")}</dt><dd>${guidance.revisions.length}</dd></div></dl></section><section><h2>${L("Runtime 发现新内容时")}</h2><p>${L("它会在当前对话展示精确原文并征求同意；你确认后直接写入这里，不会绑定 Goal，也不会占用 Goal 的决策队列。")}</p></section><section><h2>${L("已停用的说明")}</h2>${inactiveItems}</section></aside></div>
+      <div class="guidance-layout"><div class="guidance-content">${empty}${sections}<details class="guidance-history"><summary>${L("版本记录")}<span>${L("共 {count} 次变更", { count: guidance.revisions.length })}</span></summary><div class="guidance-history-list">${historyRows || `<p class="guidance-empty">${L("还没有版本记录。")}</p>`}</div></details></div><aside class="guidance-aside" aria-label="${L("项目说明状态")}"><section><h2>${L("Runtime 如何使用")}</h2><p>${L("只发送当前生效版本，并放在当前 Goal 和外部内容之前。修改或停用会在下一次 Prompt 中生效。")}</p><dl><div><dt>${L("生效说明")}</dt><dd>${guidance.entries.length}</dd></div><div><dt>${L("已停用")}</dt><dd>${guidance.inactive_entries.length}</dd></div><div><dt>${L("历史版本")}</dt><dd>${guidance.revisions.length}</dd></div></dl></section><section><h2>${L("Runtime 发现新内容时")}</h2><p>${L("它会在当前对话展示精确原文并征求同意；你确认后直接写入这里，不会绑定 Goal，也不会占用 Goal 的决策队列。")}</p></section><section><h2>${L("已停用的说明")}</h2>${inactiveItems}</section></aside></div></div>
     </section></div>
   </main>
   <script id="project-guidance-data" type="application/json">${guidanceData}</script>
@@ -140,5 +180,5 @@ function renderGoalBoardPlanningSettings(view: GoalBoardWebView, methods: readon
   return planningRenderer(controlToken, desktopShell, navigation).renderProject(view, methods, composition, desktopShell);
 }
 
-  return { renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings };
+  return { renderGoalBoardProjectGeneralSettings, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings };
 }

@@ -1,10 +1,13 @@
 import path from "node:path";
 
 import type {
+  AddProjectPluginInput,
+  BuiltinProjectPluginId,
   ProjectDeletionRecord,
   ProjectRecord,
   ProjectSelection,
 } from "@adeptify/goalboard-contracts/modules/projects";
+import { BUILTIN_PROJECT_PLUGIN_IDS } from "@adeptify/goalboard-contracts/modules/projects";
 
 import { ProjectsRepository, type StoredProjectDeletion } from "./repository.js";
 
@@ -66,6 +69,9 @@ export class ProjectService {
   register(record: ProjectRecord, eventType: string, actorId: string): void {
     this.repository.transaction(() => {
       this.repository.insertProject(record);
+      // Imported projects retain their existing entry points; new projects start with Goals.
+      const plugins = record.source === "migrated" ? BUILTIN_PROJECT_PLUGIN_IDS : ["goals"] as const;
+      for (const plugin of plugins) this.repository.addProjectPlugin(record.project_id, plugin, record.created_at);
       this.appendEvent(record.project_id, eventType, this.requiredActorId(actorId), {
         board_id: record.board_id,
         database_path: record.database_path,
@@ -77,6 +83,24 @@ export class ProjectService {
 
   rollbackRegistration(projectId: string): void {
     this.repository.removeProject(this.requiredProjectId(projectId));
+  }
+
+  listPlugins(projectId: string): BuiltinProjectPluginId[] {
+    return this.repository.listProjectPlugins(this.get(projectId).project_id);
+  }
+
+  addPlugin(input: AddProjectPluginInput): BuiltinProjectPluginId[] {
+    const project = this.get(input.project_id);
+    const actor = this.requiredActorId(input.actor_id);
+    if (!BUILTIN_PROJECT_PLUGIN_IDS.includes(input.plugin_id)) {
+      throw this.error("catalog.plugin_not_found", "找不到这个内置插件");
+    }
+    return this.repository.transaction(() => {
+      if (this.repository.addProjectPlugin(project.project_id, input.plugin_id, this.now())) {
+        this.appendEvent(project.project_id, "project.plugin_added", actor, { plugin_id: input.plugin_id });
+      }
+      return this.listPlugins(project.project_id);
+    });
   }
 
   rename(projectId: string, displayName: string, actorId: string): ProjectRecord {

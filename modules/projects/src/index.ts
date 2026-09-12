@@ -91,6 +91,7 @@ export class ProjectsModule implements ProjectsApplicationApi {
     this.records = new ProjectService(this.repository, options.errorFactory, now, id);
     this.workspaces = new ProjectWorkspaceService(this.repository, options.errorFactory, now, id);
     this.query = {
+      listProjectPlugins: (projectId) => this.records.listPlugins(projectId),
       listProjects: () => this.records.list(),
       getProject: (projectId) => this.records.get(projectId),
       selections: () => this.records.selections(),
@@ -101,6 +102,7 @@ export class ProjectsModule implements ProjectsApplicationApi {
       listProjectDeletions: () => this.records.listDeletions(),
     };
     this.commands = {
+      addProjectPlugin: (input) => this.records.addPlugin(input),
       renameProject: (projectId, displayName, actorId) => this.records.rename(projectId, displayName, actorId),
       addWorkspaceProject: (input) => this.workspaces.add(input),
       repairWorkspaceProject: (input) => this.workspaces.repair(input),

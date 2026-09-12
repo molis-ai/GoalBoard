@@ -14,7 +14,7 @@ import { createGoalBoardWebServer } from "../../apps/desktop/launchers/web/serve
 
 
 /** One isolated project and Chrome profile; no user services or Runtime bindings. */
-export async function openGoalBrowser(t: TestContext, catalogMode = false, seed = seedDemoBoard) {
+export async function openGoalBrowser(t: TestContext, catalogMode: boolean | "empty" | "migrated" = false, seed = seedDemoBoard) {
   const chrome = [process.env.GOALBOARD_TEST_CHROME, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"]
     .find((path): path is string => Boolean(path && existsSync(path)));
@@ -22,10 +22,13 @@ export async function openGoalBrowser(t: TestContext, catalogMode = false, seed 
   const directory = await mkdtemp(join(tmpdir(), "goalboard-goals-browser-"));
   let databasePath = join(directory, "fixture.db");
   let projectId: string | null = null;
-  if (catalogMode) {
+  if (catalogMode === true || catalogMode === "migrated") {
     const catalog = await openGoalBoardProjectCatalog({ homeDirectory: directory });
     try {
-      const { project } = await catalog.ensureDemoProject({ actor_id: "browser-test", user_confirmed: true });
+      if (catalogMode === "migrated") seed(databasePath);
+      const project = catalogMode === "migrated"
+        ? await catalog.migrateLegacyDatabase({ legacy_database_path: databasePath, display_name: "目录交互验证", actor_id: "browser-test", user_confirmed: true })
+        : (await catalog.ensureDemoProject({ actor_id: "browser-test", user_confirmed: true })).project;
       databasePath = project.database_path;
       projectId = project.project_id;
     } finally { catalog.close(); }
@@ -99,9 +102,9 @@ export async function openGoalBrowser(t: TestContext, catalogMode = false, seed 
     assert.equal(result.exceptionDetails, undefined, JSON.stringify(result.exceptionDetails));
     return result.result.value;
   }
-  async function waitFor(expression: string): Promise<void> {
+  async function waitFor(expression: string, timeoutMs = 4000): Promise<void> {
     await evaluate(`new Promise((resolve, reject) => {
-      const deadline = Date.now() + 4000;
+      const deadline = Date.now() + ${timeoutMs};
       const check = () => { if (${expression}) resolve(true); else if (Date.now() >= deadline) reject(new Error('DOM condition timeout; toast=' + document.querySelector('[data-toast]')?.textContent + '; focused=' + document.activeElement?.outerHTML.slice(0,500))); else requestAnimationFrame(check); }; check();
     })`);
   }
@@ -136,5 +139,5 @@ export async function openGoalBrowser(t: TestContext, catalogMode = false, seed 
     }
   }
   const reloadPage = () => navigate(() => command("Page.reload", { ignoreCache: true }, sessionId));
-  return { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage, navigate, projectId };
+  return { store, origin, before, sessionId, command, evaluate, waitFor, click, reloadPage, navigate, projectId, homeDirectory: directory };
 }

@@ -1,0 +1,20 @@
+2026-09-12 — 插件目录中的横向插件栏
+范围：静态设计原型，完成等级 2。仅修改 index.html、navigation.css、navigation.js 及说明文档。
+
+布局：固定项目头；根层保持原插件行；进入插件后固定返回行和横向插件条，item 区独立纵向滚动。当前插件选中，所属项目决定插件集合。Goals 保留搜索树，其他插件可搜索自己的示例内容。
+
+浏览器验证通过（CUA 实际点击/输入/Enter，DOM 只读检查）：
+- 当前宽度 657×936：Sessions 根层入口打开横向条和 2 条 item。点击向右按钮，scrollLeft 从 0 增加；选择 Artifacts 后条内选中态、右侧标题及下方 item 一致，焦点保留在插件按钮。点击向左按钮滚动位置减少。
+- Artifacts 搜索 Runtime 后仅显示匹配 item；切换 Sessions 后搜索清空并恢复其 2 条 item，Enter 选择有效。
+- 桌面 1560×1083：Goals 选择目标并留草稿，横向切到 Sessions 再回 Goals，工作框与原草稿恢复。返回项目目录后，根层显示、插件条隐藏，右侧工作和草稿继续保留。
+- 切到灵感项目并进入 Feed，插件条只显示 Feed、Artifacts，无横滚溢出时左右按钮隐藏。选择 Artifacts 的灵感摘记 item，右侧显示对应内容。
+- 手机 390×844：切换插件保持目录抽屉，底层 inert，焦点留在条内；选择具体 item 后关闭抽屉，右侧仅展示该记录，无页面横向溢出。移动端切换按钮增加到 44px 高。
+- 修复并确认：首次从根层直接进入末尾 Artifacts，滚动按钮出现后曾挤窄可视区域，选中标签未完整显示。现在先计算按钮与实际宽度再定位，在视口变化后同样重新定位。桌面与缩窄后，选中标签均完整位于横向视区，末端右按钮禁用。
+- 深色与浅色截图已查看；浅色首次截图处于过渡中，已用稳定画面覆盖。无浏览器 error/warn。最终用户预览停在新版 Goals 目录；临时浏览器视口已恢复。
+
+静态检查：node --check navigation.js、git diff --check 通过。
+布局检测器做过一次限定 HTML/CSS 扫描，无报告项，但工具缺少 HTML/CSS parser，使用 regex 降级，不能视为完整结构检查。布局判断以源码和截图为准。
+
+截图：plugin-strip-user-657.png、plugin-strip-desktop-goals.png、plugin-strip-mobile.png、plugin-strip-desktop-last.png、plugin-strip-mobile-last.png、plugin-strip-user-light.png。均已打开检查；前两者说明主要结构，末尾插件截图为修复后的确认画面。
+
+完成边界：真实插件安装、Runtime、持久化未接；本次未改变市场安装或 Goal 工作框业务，不重跑完整生产套件。旧的 Goal 叶项高亮 P2 保留在 README/spec，未扩大本次范围。

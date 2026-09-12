@@ -152,7 +152,7 @@ test("opening a future catalog fails without rewriting its schema or project fac
     const databasePath = join(home, "projects", "catalog.db");
     const future = new Database(databasePath);
     try {
-      future.prepare("UPDATE catalog_meta SET value = '11' WHERE key = 'schema_version'").run();
+      future.prepare("UPDATE catalog_meta SET value = '12' WHERE key = 'schema_version'").run();
     } finally {
       future.close();
     }
@@ -162,15 +162,15 @@ test("opening a future catalog fails without rewriting its schema or project fac
       (error: unknown) =>
         error instanceof GoalBoardProjectCatalogError
         && error.code === "catalog.reader_too_old"
-        && error.details.actual_schema_version === 11
-        && error.details.supported_schema_max === 10,
+        && error.details.actual_schema_version === 12
+        && error.details.supported_schema_max === 11,
     );
 
     const preserved = new Database(databasePath, { readonly: true });
     try {
       assert.equal(
         preserved.prepare("SELECT value FROM catalog_meta WHERE key = 'schema_version'").pluck().get(),
-        "11",
+        "12",
       );
       assert.equal(
         preserved.prepare("SELECT display_name FROM projects WHERE project_id = ?").pluck().get(project.project_id),

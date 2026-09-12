@@ -48,12 +48,30 @@ test("every static renderer label has an English translation", () => {
     "../apps/workbench/src/settings-navigation.ts", "../apps/workbench/src/settings-renderer.ts",
     "../apps/workbench/src/human-review-renderer.ts",
     "../apps/workbench/src/focus-sections.ts", "../apps/workbench/src/project-settings-pages.ts",
+    "../apps/workbench/src/immersive-shell.ts", "../apps/workbench/src/project-home.ts",
+    "../apps/workbench/src/feed-projection-ui.ts",
+    "../apps/workbench/src/scripts/client/plugin-workbench.ts",
+    "../apps/workbench/src/scripts/client/immersive-navigation.ts",
+    "../apps/workbench/src/scripts/client/project-home-shortcuts.ts",
+    "../apps/workbench/src/scripts/client/events-secondary.ts",
     "../plugins/native/goals/src/event-document-ui.ts",
+    "../plugins/native/goals/src/event-document-forms.ts",
+    "../plugins/native/goals/src/event-document-client.ts",
+    "../plugins/native/goals/src/event-history-body.ts",
     "../plugins/native/goals/src/risk-decision-ui.ts", "../plugins/native/goals/src/decision-common-ui.ts",
     "../plugins/native/goals/src/tree-ui.ts", "../plugins/native/goals/src/policy-ui.ts",
-    "../plugins/native/goals/src/project-policy-client.ts"]
+    "../plugins/native/goals/src/project-policy-client.ts",
+    "../plugins/native/work/src/ui/render.ts",
+    "../plugins/native/work/src/ui/session-add-client.ts",
+    "../plugins/native/work/src/ui/associations-client.ts",
+    "../plugins/native/work/src/ui/handoff-client.ts",
+    "../plugins/native/work/src/ui/content-client.ts",
+    "../plugins/native/work/src/ui/browser.ts",
+    "../plugins/native/feed/src/ui.ts",
+    "../plugins/native/artifacts/src/browser-ui.ts",
+    "../plugins/native/artifacts/src/reference-ui.ts"]
     .map(path => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
-  const labels = [...source.matchAll(/\bL\("((?:[^"\\]|\\.)*)"/g)]
+  const labels = [...source.matchAll(/\b(?:L|p\.text)\("((?:[^"\\]|\\.)*)"/g)]
     .map((match) => JSON.parse(`"${match[1]}"`) as string);
   const missing = [...new Set(labels.filter((label) => EN[label] == null))];
   assert.deepEqual(missing, []);

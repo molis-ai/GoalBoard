@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { openGoalBoardProjectCatalog } from "@adeptify/goalboard-app-desktop";
+import { openGoalBrowser } from "./fixtures/goal-browser.js";
+
+const scrollProbe = (chromeSelector: string, scrollerSelector: string) => `(() => {
+  const chrome = document.querySelector(${JSON.stringify(chromeSelector)});
+  const scroller = document.querySelector(${JSON.stringify(scrollerSelector)});
+  if (!chrome || !scroller) throw new Error("missing " + ${JSON.stringify(chromeSelector)} + " or " + ${JSON.stringify(scrollerSelector)});
+  document.querySelector("[data-scroll-pad]")?.remove();
+  const pad = document.createElement("div");
+  pad.dataset.scrollPad = "1";
+  pad.style.cssText = "height:2400px;flex:none;width:100%;pointer-events:none;";
+  scroller.append(pad);
+  if (scroller.scrollHeight <= scroller.clientHeight) scroller.style.maxHeight = "360px";
+  const before = chrome.getBoundingClientRect();
+  scroller.scrollTop = 900;
+  const after = chrome.getBoundingClientRect();
+  return {
+    chromeTopBefore: Math.round(before.top),
+    chromeTopAfter: Math.round(after.top),
+    chromeHeight: Math.round(before.height),
+    htmlScroll: document.documentElement.scrollTop,
+    bodyScroll: document.body.scrollTop,
+    bodyOverflow: getComputedStyle(document.body).overflowY,
+    scrollerOverflow: getComputedStyle(scroller).overflowY,
+    scrollerTop: scroller.scrollTop,
+  };
+})()`;
+
+test("Window chrome stays put while project index, settings, Feed, Sessions and Goals scroll inside their containers", { timeout: 90_000 }, async t => {
+  const browser = await openGoalBrowser(t, "migrated");
+  if (!browser) return;
+  const { command, sessionId, evaluate, waitFor, navigate, click, origin, projectId, homeDirectory } = browser;
+  const catalog = await openGoalBoardProjectCatalog({ homeDirectory });
+  for (const plugin_id of ["feed", "sessions", "artifacts"] as const) catalog.addProjectPlugin({ project_id: projectId!, plugin_id, actor_id: "scroll-test" });
+  catalog.close();
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+  const expectContained = async (chrome: string, scroller: string) => {
+    const result = await evaluate<{
+      chromeTopBefore: number; chromeTopAfter: number; chromeHeight: number; htmlScroll: number; bodyScroll: number;
+      bodyOverflow: string; scrollerOverflow: string; scrollerTop: number;
+    }>(scrollProbe(chrome, scroller));
+    assert.equal(result.htmlScroll, 0, JSON.stringify({ chrome, scroller, ...result }));
+    assert.equal(result.bodyScroll, 0, JSON.stringify({ chrome, scroller, ...result }));
+    assert.equal(result.chromeTopAfter, result.chromeTopBefore, JSON.stringify({ chrome, scroller, ...result }));
+    assert.ok(result.chromeHeight > 8, JSON.stringify({ chrome, scroller, ...result }));
+    assert.equal(result.bodyOverflow, "hidden", JSON.stringify({ chrome, scroller, ...result }));
+    assert.match(result.scrollerOverflow, /auto|scroll|overlay/, JSON.stringify({ chrome, scroller, ...result }));
+    assert.ok(result.scrollerTop > 200, JSON.stringify({ chrome, scroller, ...result }));
+    await evaluate(`(() => {
+      const pad = document.querySelector("[data-scroll-pad]");
+      const scroller = pad?.parentElement;
+      pad?.remove();
+      if (scroller instanceof HTMLElement) scroller.style.maxHeight = "";
+    })()`);
+  };
+
+  await navigate(() => command("Page.navigate", { url: origin + "/?desktop=1" }, sessionId));
+  await waitFor("document.body.classList.contains('project-index-page')");
+  await expectContained(".project-directory-topbar", ".project-index-body");
+  await expectContained(".project-index-heading", ".project-index-body");
+  await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true }, sessionId);
+  await expectContained(".project-directory-topbar", ".project-index-body");
+  await expectContained(".project-index-heading", ".project-index-body");
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+
+  await navigate(() => command("Page.navigate", { url: origin + "/settings/appearance?desktop=1" }, sessionId));
+  await waitFor("document.body.classList.contains('settings-page')");
+  await expectContained(".topbar", ".settings-body");
+  await expectContained(".settings-heading", ".settings-body");
+
+  await navigate(() => command("Page.navigate", { url: origin + "/settings/projects?desktop=1" }, sessionId));
+  await waitFor("document.body.classList.contains('settings-page')");
+  await expectContained(".topbar", ".settings-body");
+  await expectContained(".settings-heading", ".settings-body");
+
+  await navigate(() => command("Page.navigate", { url: origin + "/projects/" + projectId + "/?desktop=1" }, sessionId));
+  await waitFor("document.body.classList.contains('immersive-workbench') && document.body.dataset.desktopSurface === 'home'");
+  await expectContained(".immersive-titlebar", "[data-work-surface=home]");
+  await expectContained(".navigator-project", "[data-directory-panel=root]");
+
+  await click('[data-directory-panel="root"] [data-directory-open="feed"]');
+  await waitFor("document.querySelector('[data-work-surface=feed]:not([hidden])') && document.querySelector('[data-directory-panel=feed]:not([hidden])') && document.querySelector('[data-feed-views]:not([hidden])')");
+  await expectContained(".immersive-titlebar", "[data-work-surface=feed]");
+  await expectContained(".navigator-project", "[data-feed-list]");
+  await expectContained(".feed-directory-tools", "[data-feed-list]");
+
+  await click('[data-feed-views] [data-work-surface-open="sources"]');
+  await waitFor("document.querySelector('[data-directory-panel=sources]:not([hidden])') && document.querySelector('[data-source-list]')");
+  await expectContained(".immersive-titlebar", "[data-work-surface=sources]");
+  await expectContained(".source-directory-tools", "[data-source-list]");
+
+  await click('[data-plugin-strip] [data-plugin-id="sessions"]');
+  await waitFor("document.querySelector('[data-work-surface=sessions]:not([hidden])') && document.querySelector('[data-directory-panel=sessions]:not([hidden])')");
+  await expectContained(".immersive-titlebar", "[data-work-surface=sessions]");
+  await expectContained(".navigator-project", "[data-operation-list=sessions]");
+  await expectContained(".project-record-tools", "[data-operation-list=sessions]");
+
+  await click('[data-plugin-strip] [data-plugin-id="artifacts"]');
+  await waitFor("document.querySelector('[data-work-surface=artifacts]:not([hidden])') && document.querySelector('[data-directory-panel=artifacts]:not([hidden])')");
+  await expectContained(".immersive-titlebar", "[data-work-surface=artifacts]");
+  await expectContained(".navigator-project", "[data-artifact-directory]");
+
+  await click('[data-plugin-strip] [data-plugin-id="goals"]');
+  await waitFor("document.querySelector('[data-directory-panel=goals]:not([hidden])') && document.querySelector('[data-tree-scroll]')");
+  await expectContained(".immersive-titlebar", "[data-tree-scroll]");
+  await expectContained(".navigator-project", "[data-tree-scroll]");
+  await expectContained(".tree-chrome", "[data-tree-scroll]");
+
+  await click('[data-work-surface-open="market"]');
+  await waitFor("document.querySelector('[data-work-surface=market]:not([hidden])')");
+  await expectContained(".plugin-market-heading", ".plugin-market-body");
+  await expectContained(".plugin-market-controls", ".plugin-market-body");
+});

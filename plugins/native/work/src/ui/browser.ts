@@ -9,6 +9,11 @@ export const PROJECT_OPERATIONS_CLIENT_SCRIPT = `
   const toast = document.querySelector("[data-toast]");
   const routePrefix = document.body.dataset.routePrefix || "";
   const route = (pathname) => routePrefix + pathname;
+  const L = globalThis.L || ((text, vars) => {
+    let value = text;
+    if (vars) for (const key of Object.keys(vars)) value = value.split("{" + key + "}").join(String(vars[key]));
+    return value;
+  });
   const showToast = (message) => {
     if (!toast) return;
     toast.textContent = message;
@@ -18,7 +23,7 @@ export const PROJECT_OPERATIONS_CLIENT_SCRIPT = `
   };
   const parseActionResponse = async (response) => {
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || payload.message || "Session 操作失败，请重试");
+    if (!response.ok) throw new Error(payload.error || payload.message || L("Session 操作失败，请重试"));
     return payload;
   };
   const showDialogStatus = (element, message, error = false) => {
@@ -28,7 +33,7 @@ export const PROJECT_OPERATIONS_CLIENT_SCRIPT = `
     element.classList.toggle("is-error", error);
   };
 
-  const shared = { route, parseActionResponse, showDialogStatus, showToast };
+  const shared = { route, parseActionResponse, showDialogStatus, showToast, L };
   const { loadSessionContent } = (${WORK_CONTENT_CLIENT})(shared);
   (${WORK_DIRECTORY_CLIENT})({ loadSessionContent });
   (${WORK_SESSION_ADD_CLIENT})(shared);

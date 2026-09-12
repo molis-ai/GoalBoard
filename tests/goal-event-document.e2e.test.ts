@@ -30,14 +30,26 @@ test("event document writes planning, report, concern, decision and closure thro
   const visibleDoc = "[data-goal-event-document]:not([hidden])";
   async function openPlanning() {
     await waitIdle();
-    await click(`${visibleDoc} .header-actions > [data-event-reader="planning"]`);
+    await click(`${visibleDoc} .goal-more > summary`);
+    await click(`${visibleDoc} .goal-more [data-event-reader="planning"]`);
     await waitDom(`document.querySelector('${visibleDoc} [data-event-reader-root]') && !document.querySelector('${visibleDoc} [data-event-reader-root]').hasAttribute('hidden')`);
   }
   async function openNamedForm(name: string) {
-    await openPlanning();
-    await waitDom(`document.querySelector('${visibleDoc} [data-event-panel="planning"] [data-event-form-open=${JSON.stringify(name)}]')?.getBoundingClientRect().width > 8`);
-    await click(`${visibleDoc} [data-event-panel="planning"] [data-event-form-open=${JSON.stringify(name)}]`);
-    await waitDom(`document.querySelector('${visibleDoc} [data-event-form=${JSON.stringify(name)}]') && document.querySelector('${visibleDoc} [data-event-form=${JSON.stringify(name)}]').hidden === false`);
+    await waitIdle();
+    // Types/planning are configuration; progress/problems and completion are Goal actions.
+    if (name === "note" || name === "progress" || name === "concern") {
+      await click(`${visibleDoc} [data-record-menu] > summary`);
+      await click(`${visibleDoc} [data-record-menu] [data-event-form-open=${JSON.stringify(name)}]`);
+    } else if (name === "adopt") {
+      await openPlanning();
+      await click(`${visibleDoc} [data-event-panel="planning"] [data-event-form-open="adopt"]`);
+    } else {
+      const back = await evaluate(`Boolean(document.querySelector('${visibleDoc}.is-editing-goal'))`);
+      if (back) await click(`${visibleDoc} .detail-toolbar [data-event-back]`);
+      await click(`${visibleDoc} [data-event-reader="requirements"]`);
+      await click(`${visibleDoc} [data-event-panel="requirements"] [data-event-form-open=${JSON.stringify(name)}]`);
+    }
+    await waitDom(`document.querySelector('${visibleDoc} [data-event-form=${JSON.stringify(name)}]')?.hidden === false`);
   }
   async function waitIdle() {
     await waitDom("document.querySelector('[data-document-pane]')?.getAttribute('aria-busy') !== 'true'");
@@ -64,7 +76,7 @@ test("event document writes planning, report, concern, decision and closure thro
   await navigate(() => command("Page.navigate", { url: origin + "/goals/" + encodeURIComponent(goalId) }, sessionId));
   await waitDom(`document.querySelector('[data-goal-event-document]')?.dataset.goalView === ${JSON.stringify(goalId)}`);
   const headerBeforeHistory = await evaluate("document.querySelector('[data-current-summary]')?.textContent");
-  await click("[data-goal-event-document]:not([hidden]) .goal-header [data-event-reader='planning']");
+  await openPlanning();
   await waitDom("document.querySelector('[data-event-reader-root]') && !document.querySelector('[data-event-reader-root]').hasAttribute('hidden')");
   assert.match(await evaluate("document.querySelector('[data-event-panel=planning]')?.textContent || ''"), /未采用模板|空白起点/);
   await click("[data-goal-event-document]:not([hidden]) [data-event-panel='planning'] [data-event-reader='type']");
@@ -133,6 +145,18 @@ test("event document writes planning, report, concern, decision and closure thro
     await evaluate("new Promise((resolve) => setTimeout(resolve, 250))");
   }
   assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, goalId).latest_reports[0]?.title, "时间线已经接到真实写入");
+  await openNamedForm("progress");
+  await fillField('[data-event-form="progress"] [name="summary"]', "主流程已跑通，正在核对问题");
+  await fillField('[data-event-form="progress"] [name="next_step"]', "验证异常恢复");
+  await submitSuccess('[data-event-form="progress"] button[type="submit"]');
+  assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, goalId).progress_summary?.summary, "主流程已跑通，正在核对问题");
+  assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, goalId).progress_summary?.next_step, "验证异常恢复");
+  assert.match(await evaluate("document.querySelector('[data-current-summary]').textContent"), /主流程已跑通/);
+  await openNamedForm("note");
+  await fillField('[data-event-form="note"] [name="note"]', "备注只留在时间线，下一次试用时核对");
+  await submitSuccess('[data-event-form="note"] button[type="submit"]');
+  await waitDom("document.querySelector('[data-event-timeline]').textContent.includes('备注只留在时间线')");
+  assert.equal(app.goalEvents.readState(DEMO_BOARD_ID, goalId).progress_summary?.summary, "主流程已跑通，正在核对问题");
   await openNamedForm("concern");
   await evaluate(`(() => {
     const form = document.querySelector('[data-event-form="concern"]');
@@ -291,7 +315,7 @@ test("legacy unfinished Goal history remains readable without writing owner or a
   assert.doesNotMatch(page, /data-open-goal-edit|data-event-form-open="note"|data-event-form="note"|data-event-form="type"|data-event-form="agreement"|data-event-form="closure"|data-event-form="continue"|data-event-form-open="resume"/);
   assert.match(page, /阅读原来的说明、要求和历史/);
   assert.equal(await evaluate(`document.querySelector('[data-event-form="continue"], [data-event-form-open="note"]')`), null);
-  await click("[data-goal-event-document]:not([hidden]) .header-actions > [data-event-reader='description']");
+  await click("[data-goal-event-document]:not([hidden]) .goal-info-actions > [data-event-reader='description']");
   await waitFor("document.querySelector('[data-event-reader-root]') && !document.querySelector('[data-event-reader-root]').hasAttribute('hidden')");
   const description = await evaluate("document.querySelector('[data-event-panel=description]')?.textContent || ''") as string;
   assert.match(description, new RegExp(originalWhy));
@@ -319,4 +343,40 @@ test("legacy unfinished Goal history remains readable without writing owner or a
   assert.equal(afterEvidence.locator, beforeEvidence.locator);
   assert.deepEqual(after.evidence.filter((item) => item.goal_id === goalId), before.evidence.filter((item) => item.goal_id === goalId));
   assert.equal(await evaluate(`document.querySelector('[data-event-form-open="note"], [data-open-goal-edit], [data-event-form="continue"]')`), null);
+});
+
+test("timeline pagination retries in place and preserves dates, type markers and readable historical results", { timeout: 60_000 }, async t => {
+  const browser = await openGoalBrowser(t);
+  if (!browser) return;
+  const { store, origin, sessionId, command, evaluate, waitFor, click, navigate } = browser;
+  const app = new GoalProjectApplication(store);
+  const { goal } = app.goalEvents.createIntent({ board_id: DEMO_BOARD_ID, title: "验证跨日时间线", outcome: "更早的结果仍然可以阅读", actor_id: "web-user", actor_kind: "user", idempotency_key: "paged-goal" });
+  for (let index = 0; index < 42; index += 1) {
+    app.goalEvents.recordNote({ board_id: DEMO_BOARD_ID, goal_id: goal.goal_id, actor_id: "web-user", actor_kind: "user", idempotency_key: "paged-note-" + index, body: "最近的工作记录 " + index });
+  }
+  insertHistoricalEvidence(store.db, { evidence_id: "paged-historical-result", board_id: DEMO_BOARD_ID, goal_id: goal.goal_id, producer_actor_id: "history-runtime", locator: "artifact://pagination-original", result: "passed", captured_at: "2026-09-01T16:40:00.000Z" });
+  const before = store.snapshot(DEMO_BOARD_ID);
+  await command("Network.enable", {}, sessionId);
+  await command("Emulation.setTimezoneOverride", { timezoneId: "Asia/Shanghai" }, sessionId);
+  await navigate(() => command("Page.navigate", { url: origin + "/goals/" + encodeURIComponent(goal.goal_id) }, sessionId));
+  if (await evaluate("document.querySelector('[data-document-pane]').hidden")) await click("[data-goal-details-toggle]");
+  await waitFor("document.querySelector('[data-load-more-timeline]') && !document.querySelector('[data-load-more-timeline]').hidden");
+  await command("Network.setBlockedURLs", { urls: [origin + "/api/goals/" + goal.goal_id + "/event-timeline*"] }, sessionId);
+  await click("[data-load-more-timeline]");
+  await waitFor("!document.querySelector('[data-load-more-timeline]').disabled && document.querySelector('[data-toast]').textContent.length > 0");
+  assert.equal(await evaluate("document.querySelectorAll('[data-timeline-item]').length"), 40);
+  await command("Network.setBlockedURLs", { urls: [] }, sessionId);
+  await click("[data-load-more-timeline]");
+  const older = '[data-timeline-item][data-original-id="paged-historical-result"]';
+  await waitFor("document.querySelector(" + JSON.stringify(older) + ")");
+  assert.equal(await evaluate("document.querySelector(" + JSON.stringify(older) + ").querySelector('time').textContent"), "00:40");
+  assert.equal(await evaluate("[...document.querySelectorAll('[data-event-timeline] .day-label')].at(-1).textContent"), "2026-09-02");
+  assert.equal(await evaluate("document.querySelector(" + JSON.stringify(older) + ").getAttribute('aria-expanded')"), "false");
+  assert.match(await evaluate<string>("document.querySelector(" + JSON.stringify(older) + ").querySelector('.timeline-type').textContent"), /完成依据/);
+  await click(older);
+  await waitFor("document.querySelector('[data-event-sheet]').textContent.includes('artifact://pagination-original')");
+  assert.equal(await evaluate("document.querySelector('[data-event-sheet]').previousElementSibling.dataset.originalId"), "paged-historical-result");
+  const ids = await evaluate<string[]>("[...document.querySelectorAll('[data-timeline-item]')].map(node=>node.dataset.timelineItem)");
+  assert.equal(ids.length, new Set(ids).size);
+  assert.deepEqual(store.snapshot(DEMO_BOARD_ID), before, "reading and retrying history must not write facts");
 });

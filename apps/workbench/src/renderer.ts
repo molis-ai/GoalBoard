@@ -16,7 +16,7 @@ import { type GoalsDecisionGroup } from "@adeptify/goalboard-plugin-goals";
 import { createWorkbenchGoalsFragmentRenderer } from "./goals-fragment-renderer.js";
 import { createWorkbenchGoalsPageRenderer } from "./goals-page-renderer.js";
 import { buildGoalsNavigationItems } from "@adeptify/goalboard-plugin-goals";
-import { ARTIFACT_EMBED_STYLES } from "./artifact-ui.js";
+import { ARTIFACT_EMBED_STYLES, ARTIFACT_WORKBENCH_STYLES } from "./artifact-ui.js";
 import { icon, renderIconSprite } from "@adeptify/goalboard-design-system";
 import { createWorkbenchOnboardingRenderer } from "./onboarding-renderer.js";
 import { TRASH_GOAL_STYLES } from "@adeptify/goalboard-plugin-goals";
@@ -28,6 +28,10 @@ import {
 } from "@adeptify/goalboard-design-system";
 import { CLIENT_SCRIPT } from "./browser-assets.js";
 import { CONTROL_CLIENT_SCRIPT } from "./browser-assets.js";
+import { IMMERSIVE_NAVIGATION_STYLES } from "./styles/immersive-navigation.js";
+import { PROJECT_HOME_STYLES } from "./styles/project-home.js";
+import { IMMERSIVE_DIRECTORY_STYLES } from "./styles/immersive-directory.js";
+import { GOAL_CANVAS_STYLES } from "./styles/goal-canvas.js";
 import { MORE_STYLES } from "./browser-assets.js";
 import { PROJECT_GUIDANCE_SETTINGS_STYLES } from "./browser-assets.js";
 import { PROJECT_INDEX_STYLES } from "./browser-assets.js";
@@ -390,7 +394,7 @@ function renderTuiPane(
   });
 }
 
-const { renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings } = createWorkbenchProjectSettingsPages({
+const { renderGoalBoardProjectGeneralSettings, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings } = createWorkbenchProjectSettingsPages({
   L, escapeHtml, formatDate, icon, htmlLang, listJoin, controlTokenMeta, clientI18nScript, renderIconSprite, withDesktopQuery,
   themeBootstrapScript: THEME_BOOTSTRAP_SCRIPT, visualFoundationClientScript: VISUAL_FOUNDATION_CLIENT_SCRIPT,
   navigation: { settingsContextHref, renderProjectSettingsNavigation, renderSettingsNavigation }, renderProjectPolicyDocument, composePlanningMethodPacks,
@@ -410,7 +414,7 @@ function prefixLocalLinks(html: string, routePrefix: string, desktopShell = fals
 
 /** Shared workbench presentation. Kept outside project HTML so the browser can reuse it. */
 function renderGoalBoardWorkbenchStylesheet(): string {
-  return `${STYLES}${MORE_STYLES}${RESPONSIVE_STYLES}${VISUAL_FOUNDATION_STYLES}${TRASH_GOAL_STYLES}${PROJECT_OPERATIONS_STYLES}${ARTIFACT_EMBED_STYLES}.document-pane.is-syncing .goal-document { animation: none; }`;
+  return `${STYLES}${MORE_STYLES}${RESPONSIVE_STYLES}${VISUAL_FOUNDATION_STYLES}${TRASH_GOAL_STYLES}${PROJECT_OPERATIONS_STYLES}${ARTIFACT_EMBED_STYLES}${ARTIFACT_WORKBENCH_STYLES}${IMMERSIVE_NAVIGATION_STYLES}${IMMERSIVE_DIRECTORY_STYLES}${PROJECT_HOME_STYLES}${GOAL_CANVAS_STYLES}.document-pane.is-syncing .goal-document { animation: none; }`;
 }
 
 /** Full-screen first-run and update journey. */
@@ -439,11 +443,11 @@ const { renderGoalBoardWeb, renderGoalBoardRefreshFragment } =
     renderIconSprite, clientI18nScript, dataJson, prefixLocalLinks, renderWorkbenchDocument,
     renderGoalDocument, renderTrashGoalDocument, goalsDocumentRenderer, goalsTreeRenderer,
     renderCreateDialog, renderGoalTrashDialog, renderMomentumPlaceholder, renderTuiPane,
-    renderProjectOperations: (project, data) => renderProjectOperations(project, data, icon),
+    renderProjectOperations: (project, data) => renderProjectOperations(project, data, icon, L),
     renderDesktopProjectChrome, renderProjectSwitcher,
     feedNativePluginSupplementalEntries, renderFeedNativePluginSurface,
   });
-  return { renderGoalBoardProjectIndex, renderGoalBoardSettings, renderDecisionCenter, renderPersistedFeedItemDetail, renderFeedWorkbenchFragment, renderGoalDocumentFragment, renderGoalBoardMomentumFragment, renderGoalBoardOnboarding, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings, renderGoalBoardWorkbenchStylesheet, renderGoalBoardOnboardingStylesheet, renderGoalBoardProjectIndexStylesheet, renderGoalBoardSettingsStylesheet, renderGoalBoardWorkbenchClientScript, renderGoalBoardWeb, renderGoalBoardRefreshFragment };
+  return { renderGoalBoardProjectIndex, renderGoalBoardSettings, renderDecisionCenter, renderPersistedFeedItemDetail, renderFeedWorkbenchFragment, renderGoalDocumentFragment, renderGoalBoardMomentumFragment, renderGoalBoardOnboarding, renderGoalBoardProjectGeneralSettings, renderGoalBoardProjectSettings, renderGoalBoardProjectGuidanceSettings, renderGoalBoardPlanningLibrary, renderGoalBoardPlanningMethodPage, renderGoalBoardPlanningSettings, renderGoalBoardWorkbenchStylesheet, renderGoalBoardOnboardingStylesheet, renderGoalBoardProjectIndexStylesheet, renderGoalBoardSettingsStylesheet, renderGoalBoardWorkbenchClientScript, renderGoalBoardWeb, renderGoalBoardRefreshFragment };
 }
 
 export type WorkbenchRenderer = ReturnType<typeof createWorkbenchRenderer>;

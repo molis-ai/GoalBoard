@@ -10,6 +10,7 @@ function bootstrap(native: boolean, initialFullscreen = false) {
   const properties = new Map<string, string>();
   const warnings: unknown[] = [];
   const navigations: string[] = [];
+  const invocations: { command: string; url: string }[] = [];
   const context = {
     URL,
     console: { warn: (...args: unknown[]) => warnings.push(args) },
@@ -18,13 +19,14 @@ function bootstrap(native: boolean, initialFullscreen = false) {
     } } },
     location: { href: "http://localhost:4173/projects/test", origin: "http://localhost:4173",
       replace: (url: string) => navigations.push(url) },
-    ...(native ? { __TAURI__: { window: { getCurrentWindow: () => ({
+    ...(native ? { __TAURI__: { core: { invoke: async (command: string, args: { url: string }) => { invocations.push({ command, url: args.url }); } }, window: { getCurrentWindow: () => ({
       isFullscreen: async () => fullscreen,
       onResized: async (handler: () => Promise<void>) => { resized = handler; return () => {}; },
     }) } } } : {}),
   };
   runInNewContext(NATIVE_DESKTOP_BOOTSTRAP_SCRIPT, context);
-  return { dataset, properties, warnings, navigations,
+  return { dataset, properties, warnings, navigations, invocations,
+    openExternal: (context as typeof context & { goalboardOpenExternalUrl?: (url: string) => Promise<void> }).goalboardOpenExternalUrl,
     resize: async (value: boolean) => { fullscreen = value; await resized(); } };
 }
 
@@ -51,4 +53,11 @@ test("ordinary Web does not activate native layout or rewrite navigation", () =>
   assert.deepEqual(page.dataset, {});
   assert.equal(page.properties.size, 0);
   assert.deepEqual(page.navigations, []);
+  assert.equal(page.openExternal, undefined);
+});
+
+test("native external links invoke the scoped host command with the complete URL", async () => {
+  const page = bootstrap(true);
+  await page.openExternal!("https://example.com/docs?q=1#section");
+  assert.deepEqual(page.invocations, [{ command: "open_external_url", url: "https://example.com/docs?q=1#section" }]);
 });

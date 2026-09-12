@@ -1,0 +1,74 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdir, writeFile } from "node:fs/promises";
+import { DEMO_BOARD_ID } from "@adeptify/goalboard-app-local-host";
+import { openGoalBrowser } from "./fixtures/goal-browser.js";
+
+const captures = new URL("../.impeccable/review/home/", import.meta.url);
+
+test("Graph separates lineage selection from opening and starts centered at 100 percent", { timeout: 90_000 }, async t => {
+  const browser = await openGoalBrowser(t);
+  if (!browser) return;
+  const { command, sessionId, evaluate, waitFor, navigate, click, origin, reloadPage, store } = browser;
+  const before = store.snapshot(DEMO_BOARD_ID);
+  await command("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }, sessionId);
+  await navigate(() => command("Page.navigate", { url: origin + "/" }, sessionId));
+  await waitFor("document.body.dataset.desktopSurface === 'home'");
+  await reloadPage();
+  await waitFor("!document.querySelector('[data-work-surface=home]').hidden");
+  await click('[data-directory-panel="root"] [data-directory-open="goals"]');
+  await waitFor("document.querySelector('[data-goal-momentum]')?.dataset.loaded === 'true'");
+  const state = await evaluate<any>("JSON.parse(document.querySelector('#goalboard-data').textContent)");
+  const eligible = state.goals.filter((g: any) => g.status === "continue" && !g.is_compound_parent).map((g: any) => ({ goal: before.goals.find(goal => goal.goal_id === g.goal.goal_id)! }));
+  assert.ok(eligible.length > 0, "fixture contains genuinely startable Goals");
+  const highestPriority = Math.max(...eligible.map((g: any) => g.goal.priority));
+  const expected = eligible.filter((g: any) => g.goal.priority === highestPriority).sort((a: any, b: any) => a.goal.created_at.localeCompare(b.goal.created_at))[0].goal.goal_id;
+  await waitFor("document.querySelector('[data-graph-node].is-selected')?.dataset.goalId === " + JSON.stringify(expected));
+  assert.equal(await evaluate("document.querySelector('[data-graph-zoom-value]').textContent"), "100%");
+  const center = await evaluate<any>("(()=>{let n=document.querySelector('[data-graph-node].is-selected').getBoundingClientRect(),v=document.querySelector('[data-graph-viewport]').getBoundingClientRect();return {dx:n.x+n.width/2-v.x-v.width/2,dy:n.y+n.height/2-v.y-v.height/2}})()");
+  assert.ok(Math.abs(center.dx) < 2 && Math.abs(center.dy - 16) < 2, JSON.stringify(center));
+  const status = await evaluate<any>("(()=>{const x=document.querySelector('.directory-row-state .goal-status > span'),r=x.getBoundingClientRect();return {text:x.textContent,w:r.width,h:r.height,clip:getComputedStyle(x).clipPath};})()");
+  assert.ok(status.text.trim() && status.w > 20 && status.h > 10 && status.clip === "none");
+  await click('[data-graph-zoom="fit"]');
+  const targetId = await evaluate<string>("document.querySelector('[data-graph-edge]').dataset.edgeTo");
+  const node = '[data-graph-node][data-goal-id="' + targetId + '"]';
+  await evaluate("window.__documentFetches=[];window.__goalChanges=[];const f=window.fetch;window.fetch=(...a)=>{if(String(a[0]).includes('/goals/'))window.__documentFetches.push(String(a[0]));return f(...a)};document.addEventListener('goalboard:goal-changed',e=>window.__goalChanges.push(e.detail.goalId));");
+  await click(node);
+  await waitFor("document.querySelector(" + JSON.stringify(node) + ").classList.contains('is-selected')");
+  assert.equal(await evaluate("document.querySelector('[data-goal-node-workspace]').hidden"), true);
+  assert.ok(await evaluate<number>("document.querySelectorAll('[data-graph-edge].is-selected-path').length") > 0);
+  assert.deepEqual(await evaluate("window.__documentFetches"), []);
+  assert.deepEqual(await evaluate("window.__goalChanges"), []);
+  const camera = await evaluate("document.querySelector('[data-graph-stage]').getAttribute('style')");
+  await mkdir(captures, { recursive: true });
+  const shot = await command<{ data: string }>("Page.captureScreenshot", { format: "png" }, sessionId);
+  await writeFile(new URL("graph.png", captures), Buffer.from(shot.data, "base64"));
+  await click(node + ' [data-graph-open]');
+  await waitFor("document.querySelector('[data-goal-node-workspace]').dataset.expandedGoal === " + JSON.stringify(targetId));
+  await click('[data-goal-collapse]');
+  assert.equal(await evaluate("document.querySelector('[data-graph-stage]').getAttribute('style')"), camera);
+  const rect = await evaluate<any>("(()=>{let r=document.querySelector(" + JSON.stringify(node) + ").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()");
+  for (const clickCount of [1, 2]) {
+    await command("Input.dispatchMouseEvent", { type: "mousePressed", ...rect, button: "left", clickCount }, sessionId);
+    await command("Input.dispatchMouseEvent", { type: "mouseReleased", ...rect, button: "left", clickCount }, sessionId);
+  }
+  await waitFor("!document.querySelector('[data-goal-node-workspace]').hidden");
+  await click('[data-goal-collapse]');
+  await command("Input.dispatchMouseEvent", { type: "mousePressed", ...rect, button: "left", clickCount: 1 }, sessionId);
+  await command("Input.dispatchMouseEvent", { type: "mouseMoved", x: rect.x + 60, y: rect.y + 40, button: "left", buttons: 1 }, sessionId);
+  await command("Input.dispatchMouseEvent", { type: "mouseReleased", x: rect.x + 60, y: rect.y + 40, button: "left", clickCount: 1 }, sessionId);
+  assert.equal(await evaluate("document.querySelector('[data-goal-node-workspace]').hidden"), true);
+  await click('[data-graph-zoom="in"]');
+  const manual = await evaluate("document.querySelector('[data-graph-stage]').getAttribute('style')");
+  // Pagehide persists the camera even when the debounce has not elapsed.
+  await reloadPage();
+  await waitFor("document.querySelector('[data-goal-momentum]')?.dataset.loaded === 'true'");
+  assert.equal(await evaluate("document.querySelector('[data-graph-stage]').getAttribute('style')"), manual);
+  await evaluate("document.querySelector(" + JSON.stringify(node) + ").focus()");
+  await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  await waitFor("!document.querySelector('[data-goal-node-workspace]').hidden");
+  assert.deepEqual(store.snapshot(DEMO_BOARD_ID).goals, before.goals);
+  assert.deepEqual(store.snapshot(DEMO_BOARD_ID).runs, before.runs);
+});
+

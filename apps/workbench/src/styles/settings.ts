@@ -1,13 +1,15 @@
 export const SETTINGS_STYLES = `
-  body.settings-page { min-height: 100%; overflow: hidden; background: var(--page); }
-  .settings-page > .topbar { height: 58px; }
+  html:has(> body.settings-page), body.settings-page { height: 100dvh; max-height: 100dvh; min-height: 0; overflow: hidden; overscroll-behavior: none; background: var(--page); }
+  body.settings-page { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  body.settings-page[data-desktop-shell="true"] > .topbar { display: flex; }
+  .settings-page > .topbar { height: 58px; min-height: 58px; }
   .settings-page .brand { color: inherit; text-decoration: none; }
   body.settings-page[data-desktop-shell="true"] .project-context strong { display: block; }
   body.settings-page[data-desktop-shell="true"] .project-context small { display: none; }
-  .settings-shell { height: calc(100dvh - 58px); min-width: 0; overflow: hidden; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+  .settings-shell { min-width: 0; min-height: 0; height: 100%; overflow: hidden; display: grid; grid-template-columns: 232px minmax(0, 1fr); }
   .settings-shell--standalone { grid-template-columns: minmax(0, 1fr); }
   .settings-shell--standalone .settings-document { margin-inline: auto; }
-  .settings-navigation { min-height: 0; overflow-y: auto; padding: 18px 10px; border-right: 1px solid var(--line-strong); background: var(--rail); display: flex; flex-direction: column; gap: 3px; }
+  .settings-navigation { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 10px; border-right: 1px solid var(--line-strong); background: var(--rail); display: flex; flex-direction: column; gap: 3px; }
   .settings-nav-group { min-width: 0; display: grid; gap: 3px; }
   .settings-nav-group + .settings-nav-group { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .settings-nav-label { min-width: 0; padding: 0 10px 5px; display: grid; gap: 2px; color: var(--faint); }
@@ -23,8 +25,11 @@ export const SETTINGS_STYLES = `
   .project-settings-back { min-height: 38px !important; margin-bottom: 12px; color: var(--muted) !important; }
   .project-settings-back svg { transform: rotate(180deg); }
   .project-settings-navigation .settings-nav-label { padding-top: 4px; }
-  .settings-content { min-width: 0; min-height: 0; overflow: auto; background: var(--paper); }
-  .settings-document { width: min(100%, 980px); min-height: 100%; padding: 38px 42px 80px; }
+  .settings-content { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--paper); }
+  .settings-content > :is(.settings-document, .guidance-document, .planning-catalog, .planning-detail, .planning-edit, .work-planning) { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .settings-document { width: min(100%, 980px); min-height: 0; padding: 38px 42px 0; }
+  .settings-heading, .guidance-page-header, .planning-page-header, .planning-detail-header, .planning-library-tools, .planning-back { flex: none; }
+  .settings-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 80px; }
   .settings-heading { max-width: 72ch; padding-bottom: 25px; border-bottom: 1px solid var(--line-strong); }
   .settings-heading h1 { margin: 0; font-size: clamp(24px, 2.1vw, 30px); line-height: 1.25; letter-spacing: -.03em; }
   .settings-heading p { margin: 8px 0 0; color: var(--muted); }
@@ -119,6 +124,16 @@ export const SETTINGS_STYLES = `
   .inline-settings-form .inline-confirm { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; cursor: pointer; }
   .inline-settings-form .settings-form-error { grid-column: 1 / -1; }
   .settings-form-error { margin: 0; color: var(--red); font-size: 12px; }
+  .project-general-page .settings-action-section { padding: 24px; margin-bottom: 12px; }
+  .project-delete-section > button { justify-self: start; }
+  .settings-page.project-general-page .project-delete-button { color: var(--red); border-color: var(--red); background: var(--paper); }
+  .settings-page.project-general-page .project-delete-button:hover { background: var(--red-soft); }
+  .settings-page .project-delete-button:disabled { opacity: .5; cursor: not-allowed; }
+  .settings-page .project-delete-dialog { width: min(560px, calc(100vw - 28px)); height: fit-content; max-height: calc(100dvh - 28px); margin: auto; border-radius: 8px; }
+  .project-delete-dialog .runtime-plan-shell { height: auto; max-height: calc(100dvh - 28px); }
+  .project-delete-dialog .runtime-plan-body > p:first-child { margin: 0; }
+  .project-delete-dialog .settings-form-error { margin-top: 12px; }
+  .project-delete-dialog header p { overflow-wrap: anywhere; }
   .project-record-tools { margin: -8px 0 16px 46px; display: flex; gap: 8px; }
   .project-record-tools details { min-width: min(100%, 280px); }
   .project-record-tools summary { min-height: 32px; padding: 0 7px; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 650; cursor: pointer; list-style: none; }
@@ -193,11 +208,11 @@ export const SETTINGS_STYLES = `
   .runtime-plan-shell > footer .runtime-plan-apply:disabled { opacity: .55; cursor: not-allowed; }
   .settings-page .toast { position: fixed; right: 22px; bottom: 22px; z-index: 30; }
   @media (max-width: 760px) {
-    .settings-page > .topbar { height: 52px; }
+    .settings-page > .topbar { height: 52px; min-height: 52px; }
     .settings-page .top-action { margin-right: 8px; padding-inline: 8px; }
     .settings-page .top-action span { display: none; }
     .settings-page .project-context small { display: none; }
-    .settings-shell { height: calc(100dvh - 52px); grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    .settings-shell { min-height: 0; height: 100%; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
     .settings-navigation { overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--line-strong); flex-direction: row; }
     .settings-desktop-project,
     .settings-desktop-heading,
@@ -207,7 +222,7 @@ export const SETTINGS_STYLES = `
     .settings-nav-label { display: none; }
     .settings-navigation a { min-width: max-content; min-height: 40px; grid-template-columns: 18px auto; }
     .settings-navigation small { display: none; }
-    .settings-document { padding: 25px 18px 60px; }
+    .settings-document { padding: 25px 18px 0; }
     .preference-section { grid-template-columns: 1fr; gap: 14px; }
     .preference-options--theme { grid-template-columns: 1fr; }
     .preference-options--language { grid-template-columns: 1fr; }
@@ -241,7 +256,7 @@ export const SETTINGS_STYLES = `
 
 export const PROJECT_GUIDANCE_SETTINGS_STYLES = `
   .project-guidance-page .settings-content { max-width: none; }
-  .guidance-document { width: min(100%, 1100px); margin: 0 auto; padding: 38px 42px 64px; }
+  .guidance-document { width: min(100%, 1100px); margin: 0 auto; padding: 38px 42px 0; }
   .guidance-page-header { padding-bottom: 28px; border-bottom: 1px solid var(--line-strong); display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; }
   .guidance-page-header h1 { margin: 0; color: var(--ink); font-size: 30px; letter-spacing: -.026em; }
   .guidance-page-header p { max-width: 68ch; margin: 9px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
@@ -330,7 +345,7 @@ export const PROJECT_GUIDANCE_SETTINGS_STYLES = `
     .guidance-aside { position: static; padding-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
   }
   @media (max-width: 760px) {
-    .guidance-document { padding: 25px 18px 48px; }
+    .guidance-document { padding: 25px 18px 0; }
     .guidance-page-header { align-items: stretch; flex-direction: column; gap: 18px; }
     .guidance-page-header h1 { font-size: 26px; }
     .guidance-primary-action { align-self: flex-start; }

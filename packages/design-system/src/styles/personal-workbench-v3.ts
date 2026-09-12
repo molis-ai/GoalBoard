@@ -201,7 +201,8 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
     body[data-desktop-shell="true"] .desktop-directory-root,
     body[data-desktop-shell="true"] .desktop-directory-secondary {
       padding: 4px 2px 10px;
-      overflow-y: auto;
+      overflow: auto;
+      overscroll-behavior: contain;
     }
     body[data-desktop-shell="true"] .desktop-module-list { display: grid; gap: 1px; }
     body[data-desktop-shell="true"] .desktop-module-item {
@@ -1276,19 +1277,26 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
       padding: 0 14px 24px 10px;
       grid-column: 2;
       grid-row: 2;
-      overflow-y: auto;
+      overflow: hidden;
+      overscroll-behavior: contain;
       background: var(--page);
     }
     body.settings-page[data-desktop-shell="true"] .settings-document,
+    body.settings-page[data-desktop-shell="true"] .guidance-document,
     body.settings-page[data-desktop-shell="true"] .planning-catalog,
     body.settings-page[data-desktop-shell="true"] .planning-detail,
     body.settings-page[data-desktop-shell="true"] .planning-edit,
     body.settings-page[data-desktop-shell="true"] .work-planning {
       width: min(100%, 1060px);
+      min-height: 0;
       margin: 0 auto;
-      padding: 18px 18px 48px;
+      padding: 18px 18px 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       background: transparent;
     }
+    body.settings-page[data-desktop-shell="true"] .settings-body { padding-bottom: 48px; }
     body.settings-page[data-desktop-shell="true"] .settings-heading { margin-bottom: 18px; padding: 0 2px; border: 0; }
     body.settings-page[data-desktop-shell="true"] .settings-heading h1 { font-size: clamp(23px, 2vw, 30px); letter-spacing: -.025em; }
     body.settings-page[data-desktop-shell="true"] .settings-heading p { max-width: 72ch; color: var(--muted); }
@@ -1342,25 +1350,25 @@ export const PERSONAL_WORKBENCH_V3_STYLES = `  /* Personal workbench v3: one dir
   @media (max-width: 760px) {
     body:not([data-desktop-shell="true"]) .topbar .brand { flex: 0 0 auto; padding-right: 6px; }
     body:not([data-desktop-shell="true"]) .topbar .brand strong { display: none; }
-    body[data-desktop-shell="true"] .navigator-project,
-    body[data-desktop-shell="true"] .personal-sidebar-footer,
-    body[data-desktop-shell="true"] .desktop-directory-secondary,
-    body[data-desktop-shell="true"] .desktop-goal-directory .desktop-directory-heading,
-    body[data-desktop-shell="true"] .feed-directory .desktop-directory-heading { display: none !important; }
-    body[data-desktop-shell="true"] .desktop-directory-root,
-    body[data-desktop-shell="true"] .desktop-goal-directory,
-    body[data-desktop-shell="true"] .feed-directory { display: none !important; }
-    body[data-desktop-shell="true"] .tree-pane[data-desktop-directory="root"] .desktop-directory-root {
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .navigator-project,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .personal-sidebar-footer,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-directory-secondary,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory .desktop-directory-heading,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .feed-directory .desktop-directory-heading { display: none !important; }
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-directory-root,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .desktop-goal-directory,
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .feed-directory { display: none !important; }
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .tree-pane[data-desktop-directory="root"] .desktop-directory-root {
       grid-row: 1;
       display: block !important;
       padding: 10px 7px 14px;
     }
-    body[data-desktop-shell="true"] .tree-pane[data-desktop-directory="goals"] .desktop-goal-directory {
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .tree-pane[data-desktop-directory="goals"] .desktop-goal-directory {
       min-height: 0;
       display: grid !important;
       grid-template-rows: auto minmax(0, 1fr) 42px;
     }
-    body[data-desktop-shell="true"] .tree-pane[data-desktop-directory="feed"] .feed-directory {
+    body[data-desktop-shell="true"]:where(:not(.immersive-workbench)) .tree-pane[data-desktop-directory="feed"] .feed-directory {
       min-height: 0;
       display: grid !important;
       grid-template-rows: auto minmax(0, 1fr) 42px;

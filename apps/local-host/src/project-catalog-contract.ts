@@ -1,4 +1,4 @@
-export const CATALOG_SCHEMA_VERSION = 10;
+export const CATALOG_SCHEMA_VERSION = 11;
 export const CATALOG_OWNER = "goalboard-project-catalog-v1";
 
 export interface GoalBoardProjectCatalogErrorDetails {
